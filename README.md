@@ -14,7 +14,7 @@ rtl/
 │   ├── delay_line.vhd      # Sample delay line (shift register)
 │   ├── mac.vhd             # Multiply-accumulate unit
 │   ├── fir_branch.vhd      # Single polyphase branch (delay_line + mac)
-│   ├── polyphase_filterbank.vhd  # All branches (TODO)
+│   ├── polyphase_filterbank.vhd  # All N branches + sample distribution
 │   ├── fft_4pt.vhd         # 4-point FFT for MDT (TODO)
 │   ├── fft_64pt.vhd        # 64-point FFT for Haifuraiya (TODO)
 │   └── polyphase_channelizer_top.vhd  # Top level (TODO)
@@ -241,7 +241,7 @@ This implementation processes taps one at a time (resource-efficient for iCE40):
 4. Read `result`, then start next computation
 
 ```
-        ____      ____           ____      ____
+        ____      ____             ____      ____
  clk   |    |____|    |__ ••• __|    |____|    |
        
        ─────┐                            ┌─────
@@ -301,8 +301,7 @@ The FIR branch combines a delay line and MAC into a complete single-branch FIR f
                     |                        ▼    ▼       │
                     └─────────────────────────────────────┘
                         result ◄─────────────┘    |
-                        result_valid ◄────────────┘      
-```
+                        result_valid ◄────────────┘
 
 ### Operation
 
@@ -328,3 +327,62 @@ Coefficients are provided as an input port, not stored internally. This allows:
 - Parent module (polyphase_filterbank) handles addressing
 
 Coefficients must remain stable during MAC computation (M cycles).
+
+---
+
+## How the Polyphase Filterbank Works
+
+The filterbank instantiates N fir_branches and manages sample distribution:
+
+```
+                 ┌────────────────────────────────────────────────────┐
+                 │              polyphase_filterbank                  │
+                 │                                                    │
+sample_in ──────►│──┬─► [fir_branch 0] ──► branch_out(0)             │
+                 │  ├─► [fir_branch 1] ──► branch_out(1)             │
+sample_valid ───►│  ├─► [fir_branch 2] ──► branch_out(2)             │
+                 │  └─► [fir_branch 3] ──► branch_out(3)             │
+                 │           ▲                                        │
+                 │           │ coeffs from ROM                        │
+                 │                                                    │
+                 │                        outputs_valid ─────────────►│
+                 │                        branch_outputs ────────────►│
+                 └────────────────────────────────────────────────────┘
+```
+
+### Sample Distribution (Commutator)
+
+Input samples are distributed round-robin:
+
+```
+Sample #:   0    1    2    3    4    5    6    7    ...
+Branch:     0    1    2    3    0    1    2    3    ...
+```
+
+### Timing
+
+For N=4 channels, M=16 taps:
+
+1. **Coefficient loading:** N×M cycles at startup (one-time)
+2. **Sample distribution:** N cycles (one sample per branch)
+3. **Computation:** M cycles (MAC processes all taps)
+4. **Output:** `outputs_valid` asserts, all branch results ready for FFT
+
+### Interface
+
+| Port | Dir | Description |
+|------|-----|-------------|
+| sample_in | in | Input sample |
+| sample_valid | in | New sample arrived |
+| coeff_addr | out | Address to coefficient ROM |
+| coeff_data | in | Coefficient from ROM |
+| coeff_load | out | High during coefficient loading |
+| branch_outputs | out | All N results packed |
+| outputs_valid | out | All branches complete |
+
+### Resource Usage
+
+| Config | Branches | FFs | Multipliers |
+|--------|----------|-----|-------------|
+| MDT | 4 | ~1,024 | 4 |
+| Haifuraiya | 64 | ~24,576 | 64 |
