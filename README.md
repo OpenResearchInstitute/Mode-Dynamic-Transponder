@@ -241,7 +241,7 @@ This implementation processes taps one at a time (resource-efficient for iCE40):
 4. Read `result`, then start next computation
 
 ```
-        ____      ____             ____      ____
+        ____      ____           ____      ____
  clk   |    |____|    |__ ••• __|    |____|    |
        
        ─────┐                            ┌─────
