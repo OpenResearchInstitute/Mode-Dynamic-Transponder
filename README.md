@@ -15,9 +15,9 @@ rtl/
 │   ├── mac.vhd             # Multiply-accumulate unit
 │   ├── fir_branch.vhd      # Single polyphase branch (delay_line + mac)
 │   ├── polyphase_filterbank.vhd  # All N branches + sample distribution
-│   ├── fft_4pt.vhd         # 4-point FFT for MDT (TODO)
-│   ├── fft_64pt.vhd        # 64-point FFT for Haifuraiya (TODO)
-│   └── polyphase_channelizer_top.vhd  # Top level (TODO)
+│   ├── fft_4pt.vhd         # 4-point FFT for MDT
+│   ├── fft_64pt.vhd        # 64-point FFT for Haifuraiya
+│   └── polyphase_channelizer_top.vhd  # Top level integration
 │
 └── coeffs/                 # Coefficient files
     ├── mdt_coeffs.hex      # MDT: 64 coefficients (4 ch × 16 taps)
@@ -386,3 +386,61 @@ For N=4 channels, M=16 taps:
 |--------|----------|-----|-------------|
 | MDT | 4 | ~1,024 | 4 |
 | Haifuraiya | 64 | ~24,576 | 64 |
+
+---
+
+## How the FFT Works
+
+The FFT converts N time-domain samples (filterbank outputs) into N frequency channels.
+
+### 4-Point FFT (MDT)
+
+Uses radix-2 DIT structure with 2 stages. Key advantage: twiddle factors are all ±1 or ±j, so **no multipliers needed** - just additions, subtractions, and real/imag swaps.
+
+```
+Twiddle factors:
+  W4^0 = 1   = ( 1,  0)
+  W4^1 = -j  = ( 0, -1)  →  multiply by -j: swap and negate
+  W4^2 = -1  = (-1,  0)
+  W4^3 = j   = ( 0,  1)
+```
+
+Latency: 1 clock cycle (combinatorial with output register)
+
+### 64-Point FFT (Haifuraiya)
+
+Uses iterative radix-2 DIF with 6 stages. Time-multiplexed single butterfly for resource efficiency.
+
+- Twiddle factors stored in ROM (32 unique values, Q1.14 format)
+- Ping-pong buffers for intermediate results
+- Latency: ~384 cycles
+
+For production, consider vendor FFT IP (Xilinx FFT) for better optimization.
+
+---
+
+## Top-Level Integration
+
+The `polyphase_channelizer_top` connects all components:
+
+```
+sample_in ──► [coeff_rom] ──► [polyphase_filterbank] ──► [FFT] ──► channel_out
+              (coefficients)   (N FIR branches)         (4/64pt)
+```
+
+### Operation Sequence
+
+1. **Reset:** Coefficients load from ROM into filterbank
+2. **Ready:** `ready` signal asserts when coefficient loading complete
+3. **Processing:** Input samples arrive, distributed to branches
+4. **Output:** Every N samples, `channel_valid` asserts with N frequency outputs
+
+### Interface
+
+| Port | Dir | Description |
+|------|-----|-------------|
+| sample_re/im | in | Complex input sample |
+| sample_valid | in | Input sample valid |
+| channel_out | out | N complex frequency channels |
+| channel_valid | out | Output channels valid |
+| ready | out | Ready to accept samples |
