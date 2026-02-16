@@ -205,8 +205,6 @@ This project is open source, using CERN OHL 2.0 and other OSI approved licenses
 - AMSAT-UK community for FunCube documentation, participation, and leadership
 - Contributors to the Opulent Voice and Haifuraiya projects
 
-
-
 ---
 
-*Open Research Institute - Advancing open source space communi
+*Open Research Institute - Advancing open source digital radio for space and terrestrial use*
