@@ -241,7 +241,7 @@ This implementation processes taps one at a time (resource-efficient for iCE40):
 4. Read `result`, then start next computation
 
 ```
-        ____      ____             ____      ____
+        ____      ____           ____      ____
  clk   |    |____|    |__ ••• __|    |____|    |
        
        ─────┐                            ┌─────
@@ -302,7 +302,7 @@ The FIR branch combines a delay line and MAC into a complete single-branch FIR f
                     └─────────────────────────────────────┘
                         result ◄─────────────┘    |
                         result_valid ◄────────────┘
-
+```
 ### Operation
 
 1. New sample arrives (`sample_valid=1`)
@@ -335,19 +335,19 @@ Coefficients must remain stable during MAC computation (M cycles).
 The filterbank instantiates N fir_branches and manages sample distribution:
 
 ```
-                 ┌────────────────────────────────────────────────────┐
-                 │              polyphase_filterbank                  │
-                 │                                                    │
-sample_in ──────►│──┬─► [fir_branch 0] ──► branch_out(0)             │
-                 │  ├─► [fir_branch 1] ──► branch_out(1)             │
-sample_valid ───►│  ├─► [fir_branch 2] ──► branch_out(2)             │
-                 │  └─► [fir_branch 3] ──► branch_out(3)             │
-                 │           ▲                                        │
-                 │           │ coeffs from ROM                        │
-                 │                                                    │
-                 │                        outputs_valid ─────────────►│
-                 │                        branch_outputs ────────────►│
-                 └────────────────────────────────────────────────────┘
+                   ┌───────────────────────────────────────────────┐
+                   │              polyphase_filterbank             │
+                   │                                               │
+    sample_in ─--─►│──┬─► [fir_branch 0] ──► branch_out(0)         │
+                   │  ├─► [fir_branch 1] ──► branch_out(1)         │
+    sample_valid ─►│  ├─► [fir_branch 2] ──► branch_out(2)         │
+                   │  └─► [fir_branch 3] ──► branch_out(3)         │
+                   │           ▲                                   │
+                   │           │ coeffs from ROM                   │
+                   │                                               │
+                   │                   outputs_valid ─────────────►│
+                   │                   branch_outputs ────────────►│
+                   └───────────────────────────────────────────────┘
 ```
 
 ### Sample Distribution (Commutator)
