@@ -290,18 +290,18 @@ The FIR branch combines a delay line and MAC into a complete single-branch FIR f
                     ┌─────────────────────────────────────┐
                     │           fir_branch                │
                     │                                     │
- sample_in ────────►│    ┌────────────┐                  │
-                    │    │ delay_line │──taps──┐         │
- sample_valid ─────►│    └────────────┘        │         │
-                    │                          ▼         │
- coeffs ───────────►│                   ┌────────────┐   │
-                    │                   │    mac     │   │
-                    │                   └─────┬──────┘   │
-                    │                         │          │
-                    │                         ▼          │
-                    │    result ◄─────────────┘          │
-                    │    result_valid ◄──────────────────│
+ sample_in ────────►│    ┌────────────┐                   │
+                    │    │ delay_line │──taps──┐          │
+ sample_valid ─────►│    └────────────┘        │          │
+                    │                          ▼          │
+ coeffs ───────────►│                  ┌────────────┐     │
+                    │                  │    mac     │     │
+                    │                  └─────┬────┬─┘     │
+                    │                        │    |       │
+                    |                        ▼    ▼       │
                     └─────────────────────────────────────┘
+                        result ◄─────────────┘    |
+                        result_valid ◄────────────┘      
 ```
 
 ### Operation
