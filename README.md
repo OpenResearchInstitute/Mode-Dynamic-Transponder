@@ -24,11 +24,11 @@ This is computationally efficient compared to running N separate bandpass filter
                     ┌─────────────────────────────────────────────┐
                     │         Polyphase Channelizer               │
                     │                                             │
- Wideband   ───────►│  ┌────────────┐      ┌─────┐               │
- Input              │  │ Polyphase  │      │     │  Channel 0 ──►│
-                    │  │ Filterbank │─────►│ FFT │  Channel 1 ──►│
+ Wideband   ───────►│  ┌────────-────┐      ┌─────┐               │
+ Input              │  │ Polyphase   │      │     │  Channel 0 ──►│
+                    │  │ Filterbank  │─────►│ FFT │  Channel 1 ──►│
                     │  │ (N branches)│      │     │  Channel 2 ──►│
-                    │  └────────────┘      └─────┘     ...    ──►│
+                    │  └───────────-─┘      └─────┘     ...    ──►│
                     │                                             │
                     └─────────────────────────────────────────────┘
 ```
