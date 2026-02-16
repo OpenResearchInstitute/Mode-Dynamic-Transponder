@@ -13,7 +13,7 @@ rtl/
 │   ├── coeff_rom.vhd       # Coefficient ROM
 │   ├── delay_line.vhd      # Sample delay line (shift register)
 │   ├── mac.vhd             # Multiply-accumulate unit
-│   ├── fir_branch.vhd      # Single polyphase branch (TODO)
+│   ├── fir_branch.vhd      # Single polyphase branch (delay_line + mac)
 │   ├── polyphase_filterbank.vhd  # All branches (TODO)
 │   ├── fft_4pt.vhd         # 4-point FFT for MDT (TODO)
 │   ├── fft_64pt.vhd        # 64-point FFT for Haifuraiya (TODO)
@@ -279,3 +279,52 @@ Sequential mode uses minimal resources:
 - 1 multiplier (infers DSP block if available)
 - 1 accumulator register
 - Small control FSM
+
+---
+
+## How the FIR Branch Works
+
+The FIR branch combines a delay line and MAC into a complete single-branch FIR filter:
+
+```
+                    ┌─────────────────────────────────────┐
+                    │           fir_branch                │
+                    │                                     │
+ sample_in ────────►│    ┌────────────┐                  │
+                    │    │ delay_line │──taps──┐         │
+ sample_valid ─────►│    └────────────┘        │         │
+                    │                          ▼         │
+ coeffs ───────────►│                   ┌────────────┐   │
+                    │                   │    mac     │   │
+                    │                   └─────┬──────┘   │
+                    │                         │          │
+                    │                         ▼          │
+                    │    result ◄─────────────┘          │
+                    │    result_valid ◄──────────────────│
+                    └─────────────────────────────────────┘
+```
+
+### Operation
+
+1. New sample arrives (`sample_valid=1`)
+2. Sample shifts into delay line
+3. MAC automatically starts computing
+4. After M cycles, `result_valid` asserts with filter output
+
+### Interface
+
+| Port | Dir | Description |
+|------|-----|-------------|
+| sample_in | in | New sample (DATA_WIDTH bits) |
+| sample_valid | in | Assert one cycle when sample arrives |
+| coeffs | in | All M coefficients packed (from ROM) |
+| result | out | Filter output (ACCUM_WIDTH bits) |
+| result_valid | out | Asserts when result is ready |
+
+### Coefficient Handling
+
+Coefficients are provided as an input port, not stored internally. This allows:
+- Sharing one coefficient ROM across all N branches
+- Parent module (polyphase_filterbank) handles addressing
+
+Coefficients must remain stable during MAC computation (M cycles).
