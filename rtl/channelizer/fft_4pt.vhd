@@ -229,8 +229,9 @@ begin
     -- Stage 2: Butterflies on results with twiddle W4^1 = -j on second pair
     ---------------------------------------------------------------------------
     process(x_samples)
-        variable t0, t1, t2, t3 : complex_t;
+        variable t3 : complex_t;
         variable s1_0, s1_1, s1_2, s1_3 : complex_t;
+        variable out0, out1, out2, out3 : complex_t;
     begin
         -- Stage 1: 2-point DFTs
         -- Butterfly on (x[0], x[2])
@@ -245,11 +246,17 @@ begin
         -- X[2] = s1_0 - s1_1 (twiddle = W4^0 = 1, but subtract)
         -- X[3] = s1_2 - s1_3 * W4^1 = s1_2 - s1_3 * (-j)
         
-        butterfly(s1_0, s1_1, X_bins(0), X_bins(2));
+        butterfly(s1_0, s1_1, out0, out2);
         
         -- For X[1] and X[3], apply -j twiddle to s1_3 first
         t3 := mult_neg_j(s1_3);
-        butterfly(s1_2, t3, X_bins(1), X_bins(3));
+        butterfly(s1_2, t3, out1, out3);
+        
+        -- Assign to signals
+        X_bins(0) <= out0;
+        X_bins(1) <= out1;
+        X_bins(2) <= out2;
+        X_bins(3) <= out3;
     end process;
 
     ---------------------------------------------------------------------------

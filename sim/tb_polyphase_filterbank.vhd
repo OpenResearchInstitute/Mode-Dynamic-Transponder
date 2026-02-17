@@ -99,7 +99,8 @@ begin
             TAPS_PER_BRANCH => TAPS_PER_BRANCH,
             DATA_WIDTH      => DATA_WIDTH,
             COEFF_WIDTH     => COEFF_WIDTH,
-            ACCUM_WIDTH     => ACCUM_WIDTH
+            ACCUM_WIDTH     => ACCUM_WIDTH,
+            COEFF_ADDR_WIDTH => COEFF_ADDR_WIDTH
         )
         port map (
             clk            => clk,

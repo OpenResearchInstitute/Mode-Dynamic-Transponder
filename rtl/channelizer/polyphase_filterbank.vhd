@@ -119,7 +119,12 @@ entity polyphase_filterbank is
         -- Data widths
         DATA_WIDTH      : positive := 16;
         COEFF_WIDTH     : positive := 16;
-        ACCUM_WIDTH     : positive := 36
+        ACCUM_WIDTH     : positive := 36;
+        
+        -- Address width for coefficient ROM
+        -- Must be ceil(log2(N_CHANNELS * TAPS_PER_BRANCH))
+        -- MDT: ceil(log2(64)) = 6, Haifuraiya: ceil(log2(1536)) = 11
+        COEFF_ADDR_WIDTH : positive := 6
     );
     port (
         -- Clock and reset
@@ -132,7 +137,7 @@ entity polyphase_filterbank is
         
         -- Coefficient ROM interface
         -- Active during coefficient loading phase
-        coeff_addr      : out std_logic_vector(clog2(N_CHANNELS * TAPS_PER_BRANCH) - 1 downto 0);
+        coeff_addr      : out std_logic_vector(COEFF_ADDR_WIDTH - 1 downto 0);
         coeff_data      : in  std_logic_vector(COEFF_WIDTH - 1 downto 0);
         coeff_load      : out std_logic;  -- High during coefficient loading
         
@@ -142,7 +147,13 @@ entity polyphase_filterbank is
         outputs_valid   : out std_logic
     );
     
-    -- Function to calculate address width
+end entity polyphase_filterbank;
+
+architecture rtl of polyphase_filterbank is
+
+    ---------------------------------------------------------------------------
+    -- Functions
+    ---------------------------------------------------------------------------
     function clog2(n : positive) return positive is
         variable result : positive := 1;
         variable value  : positive := 2;
@@ -153,15 +164,10 @@ entity polyphase_filterbank is
         end loop;
         return result;
     end function;
-    
-end entity polyphase_filterbank;
-
-architecture rtl of polyphase_filterbank is
 
     ---------------------------------------------------------------------------
     -- Constants
     ---------------------------------------------------------------------------
-    constant COEFF_ADDR_WIDTH : positive := clog2(N_CHANNELS * TAPS_PER_BRANCH);
     constant BRANCH_IDX_WIDTH : positive := clog2(N_CHANNELS);
 
     ---------------------------------------------------------------------------

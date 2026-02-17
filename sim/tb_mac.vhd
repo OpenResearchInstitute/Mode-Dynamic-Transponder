@@ -44,22 +44,6 @@ architecture sim of tb_mac is
     signal result  : std_logic_vector(ACCUM_WIDTH - 1 downto 0);
     
     signal running : boolean := true;
-    
-    ---------------------------------------------------------------------------
-    -- Helper: Pack array of integers into coefficient/sample vector
-    ---------------------------------------------------------------------------
-    procedure pack_values(
-        values : in  integer_vector;
-        width  : in  positive;
-        signal vec : out std_logic_vector
-    ) is
-        variable tmp : signed(width - 1 downto 0);
-    begin
-        for i in values'range loop
-            tmp := to_signed(values(i), width);
-            vec((i + 1) * width - 1 downto i * width) <= std_logic_vector(tmp);
-        end loop;
-    end procedure;
 
 begin
 
