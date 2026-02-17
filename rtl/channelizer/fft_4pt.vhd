@@ -200,8 +200,8 @@ architecture rtl of fft_4pt is
     ---------------------------------------------------------------------------
     -- Signals
     ---------------------------------------------------------------------------
-    signal x : complex_array_t;      -- Input samples
-    signal X : complex_array_t;      -- Output bins
+    signal x_samples : complex_array_t;  -- Input samples (unpacked)
+    signal X_bins    : complex_array_t;  -- Output bins
     
     -- Intermediate results
     signal s1 : complex_array_t;     -- After stage 1
@@ -218,7 +218,7 @@ begin
     process(x_in)
     begin
         for i in 0 to 3 loop
-            x(i) <= unpack_sample(x_in, i, DATA_WIDTH);
+            x_samples(i) <= unpack_sample(x_in, i, DATA_WIDTH);
         end loop;
     end process;
 
@@ -228,16 +228,16 @@ begin
     -- Stage 1: Butterflies on (x0,x2) and (x1,x3) - no twiddles
     -- Stage 2: Butterflies on results with twiddle W4^1 = -j on second pair
     ---------------------------------------------------------------------------
-    process(x)
+    process(x_samples)
         variable t0, t1, t2, t3 : complex_t;
         variable s1_0, s1_1, s1_2, s1_3 : complex_t;
     begin
         -- Stage 1: 2-point DFTs
         -- Butterfly on (x[0], x[2])
-        butterfly(x(0), x(2), s1_0, s1_2);
+        butterfly(x_samples(0), x_samples(2), s1_0, s1_2);
         
         -- Butterfly on (x[1], x[3])
-        butterfly(x(1), x(3), s1_1, s1_3);
+        butterfly(x_samples(1), x_samples(3), s1_1, s1_3);
         
         -- Stage 2: Final butterflies with twiddles
         -- X[0] = s1_0 + s1_1 (twiddle = W4^0 = 1)
@@ -245,11 +245,11 @@ begin
         -- X[2] = s1_0 - s1_1 (twiddle = W4^0 = 1, but subtract)
         -- X[3] = s1_2 - s1_3 * W4^1 = s1_2 - s1_3 * (-j)
         
-        butterfly(s1_0, s1_1, X(0), X(2));
+        butterfly(s1_0, s1_1, X_bins(0), X_bins(2));
         
         -- For X[1] and X[3], apply -j twiddle to s1_3 first
         t3 := mult_neg_j(s1_3);
-        butterfly(s1_2, t3, X(1), X(3));
+        butterfly(s1_2, t3, X_bins(1), X_bins(3));
     end process;
 
     ---------------------------------------------------------------------------
@@ -267,7 +267,7 @@ begin
             else
                 valid_reg <= valid_in;
                 if valid_in = '1' then
-                    X_reg <= X;
+                    X_reg <= X_bins;
                 end if;
             end if;
         end if;

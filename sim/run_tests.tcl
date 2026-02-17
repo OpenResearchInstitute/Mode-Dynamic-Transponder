@@ -1,55 +1,145 @@
-#------------------------------------------------------------------------------
+################################################################################
 # run_tests.tcl
 # Vivado TCL Script for Running Polyphase Channelizer Testbenches
-#------------------------------------------------------------------------------
+################################################################################
 # Open Research Institute
 # Project: Polyphase Channelizer (MDT / Haifuraiya)
 #
 # Usage:
 #   From Vivado TCL console:
-#     cd /path/to/Mode-Dynamic-Transponder
-#     source sim/run_tests.tcl
-#     run_all_tests              ;# Run all testbenches
-#     run_test tb_coeff_rom      ;# Run single testbench
+#     source /path/to/Mode-Dynamic-Transponder/sim/run_tests.tcl
 #
-#   Or from command line:
-#     vivado -mode batch -source sim/run_tests.tcl -tclargs run_all
+#   The script will automatically:
+#     - Close any existing simulation
+#     - Delete and recreate the project
+#     - Add all source files with VHDL-2008
+#     - Run the specified testbench
 #
-#------------------------------------------------------------------------------
+################################################################################
 
-# Get the directory where this script lives
-variable script_dir [file dirname [info script]]
-variable repo_root [file normalize [file join $script_dir ".."]]
+# Close any existing simulation
+catch {close_sim -force}
 
-#------------------------------------------------------------------------------
-# Configuration
-#------------------------------------------------------------------------------
+# Change to script directory for consistent relative path resolution
+cd [file dirname [info script]]
+cd ..
 
-# RTL source files (in compilation order)
-set rtl_files {
-    rtl/pkg/channelizer_pkg.vhd
-    rtl/channelizer/coeff_rom.vhd
-    rtl/channelizer/delay_line.vhd
-    rtl/channelizer/mac.vhd
-    rtl/channelizer/fir_branch.vhd
-    rtl/channelizer/polyphase_filterbank.vhd
-    rtl/channelizer/fft_4pt.vhd
-    rtl/channelizer/fft_64pt.vhd
-    rtl/channelizer/polyphase_channelizer_top.vhd
+puts "========================================"
+puts "Polyphase Channelizer Testbench Runner"
+puts "Working directory: [pwd]"
+puts "========================================"
+
+set project_name "channelizer_sim"
+set project_dir "./sim/vivado_project"
+set part_name "xc7a35tcpg236-1"
+
+# Delete existing project and create fresh
+if {[file exists $project_dir]} {
+    puts "Removing existing project..."
+    file delete -force $project_dir
 }
 
-# Testbench files
-set tb_files {
-    sim/tb_coeff_rom.vhd
-    sim/tb_delay_line.vhd
-    sim/tb_mac.vhd
-    sim/tb_fir_branch.vhd
-    sim/tb_polyphase_filterbank.vhd
-    sim/tb_fft_4pt.vhd
-    sim/tb_fft_64pt.vhd
+puts "Creating project: $project_name"
+create_project $project_name $project_dir -part $part_name -force
+set_property target_language VHDL [current_project]
+set_property simulator_language VHDL [current_project]
+
+# VHDL-2008 configuration
+set_property -name {xsim.compile.xvhdl.more_options} -value {-2008} -objects [get_filesets sim_1]
+set_property -name {xsim.elaborate.xelab.more_options} -value {-2008} -objects [get_filesets sim_1]
+set_property -name {xsim.simulate.runtime} -value {10ms} -objects [get_filesets sim_1]
+set_property -name {xsim.simulate.log_all_signals} -value {true} -objects [get_filesets sim_1]
+
+################################################################################
+# File adding helper with detailed error reporting
+################################################################################
+
+proc safe_add_files {fileset file_list} {
+    foreach file $file_list {
+        if {[file exists $file]} {
+            puts "  ✓ Adding: $file"
+            add_files -fileset $fileset -norecurse $file
+            set_property file_type {VHDL 2008} [get_files $file]
+        } else {
+            puts "  ✗ MISSING: $file"
+            puts "    Current directory: [pwd]"
+            puts "    Full path would be: [file normalize $file]"
+            return 0
+        }
+    }
+    return 1
 }
 
-# List of all testbench names (entity names)
+################################################################################
+# Add VHDL source files
+################################################################################
+
+puts ""
+puts "========================================"
+puts "Adding VHDL source files..."
+puts "========================================"
+
+# Package (must be first)
+puts "\n--- Package ---"
+safe_add_files sources_1 {
+    ./rtl/pkg/channelizer_pkg.vhd
+}
+
+# Channelizer modules
+puts "\n--- Channelizer Modules ---"
+safe_add_files sources_1 {
+    ./rtl/channelizer/coeff_rom.vhd
+    ./rtl/channelizer/delay_line.vhd
+    ./rtl/channelizer/mac.vhd
+    ./rtl/channelizer/fir_branch.vhd
+    ./rtl/channelizer/polyphase_filterbank.vhd
+    ./rtl/channelizer/fft_4pt.vhd
+    ./rtl/channelizer/fft_64pt.vhd
+    ./rtl/channelizer/polyphase_channelizer_top.vhd
+}
+
+# Testbenches
+puts "\n--- Testbenches ---"
+safe_add_files sim_1 {
+    ./sim/tb_coeff_rom.vhd
+    ./sim/tb_delay_line.vhd
+    ./sim/tb_mac.vhd
+    ./sim/tb_fir_branch.vhd
+    ./sim/tb_polyphase_filterbank.vhd
+    ./sim/tb_fft_4pt.vhd
+    ./sim/tb_fft_64pt.vhd
+}
+
+puts "\n========================================"
+puts "File addition complete"
+puts "========================================"
+
+################################################################################
+# Copy coefficient files to simulation directory
+################################################################################
+
+puts "\nCopying coefficient files..."
+set coeff_src "./rtl/coeffs"
+set coeff_dst "$project_dir/$project_name.sim/sim_1/behav/xsim"
+file mkdir $coeff_dst
+
+foreach hex_file [glob -nocomplain [file join $coeff_src "*.hex"]] {
+    file copy -force $hex_file $coeff_dst
+    puts "  ✓ Copied: [file tail $hex_file]"
+}
+
+################################################################################
+# Update compile order
+################################################################################
+
+puts "\nUpdating compile order..."
+update_compile_order -fileset sources_1
+update_compile_order -fileset sim_1
+
+################################################################################
+# Testbench list
+################################################################################
+
 set testbenches {
     tb_coeff_rom
     tb_delay_line
@@ -60,72 +150,11 @@ set testbenches {
     tb_fft_64pt
 }
 
-#------------------------------------------------------------------------------
-# Procedures
-#------------------------------------------------------------------------------
+################################################################################
+# Procedures for running tests
+################################################################################
 
-proc create_sim_project {project_name} {
-    # Create a new simulation-only project
-    variable repo_root
-    
-    set project_dir [file join $repo_root "sim" "vivado_project"]
-    
-    # Remove existing project if present
-    if {[file exists $project_dir]} {
-        file delete -force $project_dir
-    }
-    
-    # Create project
-    create_project $project_name $project_dir -part xc7a35tcpg236-1
-    
-    # Set project for simulation only
-    set_property target_language VHDL [current_project]
-    set_property simulator_language VHDL [current_project]
-    
-    # Add RTL sources
-    variable rtl_files
-    foreach f $rtl_files {
-        set full_path [file join $repo_root $f]
-        if {[file exists $full_path]} {
-            add_files -norecurse $full_path
-            puts "Added: $f"
-        } else {
-            puts "WARNING: File not found: $full_path"
-        }
-    }
-    
-    # Add testbench sources
-    variable tb_files
-    foreach f $tb_files {
-        set full_path [file join $repo_root $f]
-        if {[file exists $full_path]} {
-            add_files -fileset sim_1 -norecurse $full_path
-            puts "Added TB: $f"
-        } else {
-            puts "WARNING: File not found: $full_path"
-        }
-    }
-    
-    # Copy coefficient files to simulation directory
-    set coeff_src [file join $repo_root "rtl" "coeffs"]
-    set coeff_dst [file join $project_dir "${project_name}.sim" "sim_1" "behav" "xsim"]
-    file mkdir $coeff_dst
-    
-    foreach hex_file [glob -nocomplain [file join $coeff_src "*.hex"]] {
-        file copy -force $hex_file $coeff_dst
-        puts "Copied: [file tail $hex_file] to simulation directory"
-    }
-    
-    # Update compile order
-    update_compile_order -fileset sources_1
-    update_compile_order -fileset sim_1
-    
-    puts "\nProject created: $project_dir"
-    return $project_dir
-}
-
-proc run_test {tb_name {runtime "10ms"}} {
-    # Run a single testbench
+proc run_test {tb_name} {
     variable testbenches
     
     # Verify testbench exists
@@ -135,79 +164,35 @@ proc run_test {tb_name {runtime "10ms"}} {
         return -1
     }
     
-    puts "\n============================================================"
+    puts ""
+    puts "========================================"
     puts "Running testbench: $tb_name"
-    puts "============================================================\n"
+    puts "========================================"
     
     # Set the top module for simulation
     set_property top $tb_name [get_filesets sim_1]
     set_property top_lib xil_defaultlib [get_filesets sim_1]
     
     # Launch simulation
-    launch_simulation
+    if {[catch {launch_simulation -simset sim_1 -mode behavioral} result]} {
+        puts "✗ Simulation launch failed: $result"
+        return -1
+    }
     
-    # Run for specified time
-    run $runtime
+    puts "✓ Simulation launched successfully"
     
-    puts "\n============================================================"
+    # Run simulation
+    run 10ms
+    
+    puts ""
+    puts "========================================"
     puts "Testbench $tb_name complete"
-    puts "============================================================\n"
-    
-    # Close simulation
-    close_sim
+    puts "========================================"
     
     return 0
 }
 
-proc run_all_tests {{runtime "10ms"}} {
-    # Run all testbenches
-    variable testbenches
-    
-    set passed 0
-    set failed 0
-    set results {}
-    
-    puts "\n============================================================"
-    puts "RUNNING ALL TESTBENCHES"
-    puts "============================================================\n"
-    
-    foreach tb $testbenches {
-        puts "----------------------------------------"
-        puts "Starting: $tb"
-        puts "----------------------------------------"
-        
-        if {[catch {run_test $tb $runtime} result]} {
-            puts "FAILED: $tb - $result"
-            incr failed
-            lappend results [list $tb "FAILED" $result]
-        } else {
-            puts "PASSED: $tb"
-            incr passed
-            lappend results [list $tb "PASSED" ""]
-        }
-    }
-    
-    # Print summary
-    puts "\n============================================================"
-    puts "TEST SUMMARY"
-    puts "============================================================"
-    puts "Passed: $passed"
-    puts "Failed: $failed"
-    puts "Total:  [expr {$passed + $failed}]"
-    puts ""
-    
-    foreach r $results {
-        set name [lindex $r 0]
-        set status [lindex $r 1]
-        puts "  $name: $status"
-    }
-    puts "============================================================\n"
-    
-    return [expr {$failed == 0}]
-}
-
 proc run_test_gui {tb_name} {
-    # Run testbench with waveform viewer
     variable testbenches
     
     if {[lsearch -exact $testbenches $tb_name] == -1} {
@@ -221,76 +206,100 @@ proc run_test_gui {tb_name} {
     set_property top_lib xil_defaultlib [get_filesets sim_1]
     
     # Launch simulation with GUI
-    launch_simulation
+    if {[catch {launch_simulation -simset sim_1 -mode behavioral} result]} {
+        puts "✗ Simulation launch failed: $result"
+        return -1
+    }
     
-    # Add useful signals to waveform
-    # (User can add more interactively)
-    
-    puts "\nSimulation launched for $tb_name"
-    puts "Use 'run 10ms' or 'run -all' to execute"
-    puts "Use 'close_sim' when done"
+    puts ""
+    puts "✓ Simulation launched for $tb_name"
+    puts "  Use 'run 10ms' or 'run -all' to execute"
+    puts "  Waveform viewer is open for inspection"
+    puts ""
     
     return 0
 }
 
-#------------------------------------------------------------------------------
-# Print usage
-#------------------------------------------------------------------------------
-proc print_usage {} {
-    puts ""
-    puts "Polyphase Channelizer Testbench Runner"
-    puts "======================================="
-    puts ""
-    puts "Available commands:"
-    puts "  create_sim_project <name>  - Create Vivado simulation project"
-    puts "  run_test <tb_name>         - Run single testbench"
-    puts "  run_all_tests              - Run all testbenches"
-    puts "  run_test_gui <tb_name>     - Run testbench with waveform viewer"
-    puts "  print_usage                - Show this help"
-    puts ""
-    puts "Available testbenches:"
+proc run_all_tests {} {
     variable testbenches
+    
+    set passed 0
+    set failed 0
+    set results {}
+    
+    puts ""
+    puts "========================================"
+    puts "RUNNING ALL TESTBENCHES"
+    puts "========================================"
+    
     foreach tb $testbenches {
-        puts "  $tb"
+        puts ""
+        puts "----------------------------------------"
+        puts "Starting: $tb"
+        puts "----------------------------------------"
+        
+        # Close any previous simulation
+        catch {close_sim -force}
+        
+        if {[catch {run_test $tb} result]} {
+            puts "✗ FAILED: $tb - $result"
+            incr failed
+            lappend results [list $tb "FAILED"]
+        } else {
+            puts "✓ PASSED: $tb"
+            incr passed
+            lappend results [list $tb "PASSED"]
+        }
+        
+        # Close simulation before next test
+        catch {close_sim -force}
     }
+    
+    # Print summary
     puts ""
-    puts "Example:"
-    puts "  create_sim_project channelizer_sim"
-    puts "  run_test tb_mac"
-    puts "  run_all_tests"
+    puts "========================================"
+    puts "TEST SUMMARY"
+    puts "========================================"
+    puts "Passed: $passed"
+    puts "Failed: $failed"
+    puts "Total:  [expr {$passed + $failed}]"
     puts ""
+    
+    foreach r $results {
+        set name [lindex $r 0]
+        set status [lindex $r 1]
+        if {$status == "PASSED"} {
+            puts "  ✓ $name: $status"
+        } else {
+            puts "  ✗ $name: $status"
+        }
+    }
+    puts "========================================"
+    
+    return [expr {$failed == 0}]
 }
 
-#------------------------------------------------------------------------------
-# Handle command line arguments (for batch mode)
-#------------------------------------------------------------------------------
-if {[info exists argc] && $argc > 0} {
-    set cmd [lindex $argv 0]
-    
-    switch $cmd {
-        "run_all" {
-            create_sim_project "channelizer_sim"
-            run_all_tests
-            exit
-        }
-        "run" {
-            if {$argc > 1} {
-                set tb [lindex $argv 1]
-                create_sim_project "channelizer_sim"
-                run_test $tb
-                exit
-            } else {
-                puts "ERROR: Specify testbench name"
-                exit 1
-            }
-        }
-        default {
-            puts "Unknown command: $cmd"
-            print_usage
-            exit 1
-        }
-    }
-} else {
-    # Interactive mode - just print usage
-    print_usage
+################################################################################
+# Print usage
+################################################################################
+
+puts ""
+puts "========================================"
+puts "Setup complete! Available commands:"
+puts "========================================"
+puts ""
+puts "  run_test <tb_name>     - Run testbench, auto-close when done"
+puts "  run_test_gui <tb_name> - Run testbench, keep waveform open"
+puts "  run_all_tests          - Run all testbenches"
+puts ""
+puts "Available testbenches:"
+foreach tb $testbenches {
+    puts "  $tb"
 }
+puts ""
+puts "Example:"
+puts "  run_test tb_coeff_rom"
+puts "  run_test_gui tb_mac"
+puts "  run_all_tests"
+puts "========================================"
+puts ""

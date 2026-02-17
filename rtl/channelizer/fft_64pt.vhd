@@ -82,11 +82,11 @@ entity fft_64pt is
         x_last    : in  std_logic;  -- Asserted with last sample (idx=63)
         
         -- Output: 64 complex frequency bins (output sequentially)
-        X_re      : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-        X_im      : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-        X_idx     : out std_logic_vector(5 downto 0);
-        X_valid   : out std_logic;
-        X_last    : out std_logic;
+        out_re    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+        out_im    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+        out_idx   : out std_logic_vector(5 downto 0);
+        out_valid : out std_logic;
+        out_last  : out std_logic;
         
         -- Status
         busy      : out std_logic  -- High while computing
@@ -362,15 +362,15 @@ begin
                 else
                     src := buf_a(to_integer(out_cnt));
                 end if;
-                X_re <= std_logic_vector(src.re);
-                X_im <= std_logic_vector(src.im);
+                out_re <= std_logic_vector(src.re);
+                out_im <= std_logic_vector(src.im);
             end if;
         end if;
     end process;
     
-    X_idx <= std_logic_vector(out_cnt);
-    X_valid <= '1' when state = OUTPUTTING else '0';
-    X_last <= '1' when state = OUTPUTTING and out_cnt = N - 1 else '0';
+    out_idx <= std_logic_vector(out_cnt);
+    out_valid <= '1' when state = OUTPUTTING else '0';
+    out_last <= '1' when state = OUTPUTTING and out_cnt = N - 1 else '0';
     busy <= '1' when state /= IDLE else '0';
 
 end architecture rtl;
