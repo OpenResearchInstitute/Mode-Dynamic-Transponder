@@ -79,7 +79,7 @@ $(JSON): $(VHDL_SRCS) | $(BUILD_DIR)
 	@echo "=== Synthesizing VHDL with Yosys+GHDL ==="
 	yosys -m ghdl -p "\
 		ghdl --std=08 $(VHDL_SRCS) -e $(TOP); \
-		synth_ice40 -top $(TOP) -json $@"
+		synth_ice40 -dsp -top $(TOP) -json $@"
 
 # Place and Route
 $(ASC): $(JSON) $(PCF)

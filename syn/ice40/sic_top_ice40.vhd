@@ -59,7 +59,7 @@ entity sic_top_ice40 is
         clk_12m         : in  std_logic;
         
         ------------------------------------------------------------------------
-        -- SPI Slave Interface (directly matches Martin's signals)
+        -- SPI Slave Interface (matches Martin's signals)
         ------------------------------------------------------------------------
         spi_cs_n        : in  std_logic;    -- FPGA_~{CS}
         spi_sclk        : in  std_logic;    -- FPGA_SCLK
@@ -67,20 +67,20 @@ entity sic_top_ice40 is
         spi_miso        : out std_logic;    -- FPGA_MISO
         
         ------------------------------------------------------------------------
-        -- Control (directly matches Martin's signals)
+        -- Control (matches Martin's signals)
         ------------------------------------------------------------------------
         fpga_rst_n      : in  std_logic;    -- FPGA_~{RST}
         fpga_done       : out std_logic;    -- FPGA_DONE
         
         ------------------------------------------------------------------------
-        -- I2S ADC Input (directly matches Martin's signals)
+        -- I2S ADC Input (matches Martin's signals)
         ------------------------------------------------------------------------
         adc_i2s_bclk    : in  std_logic;    -- ADC_I2S_CLK
         adc_i2s_ws      : in  std_logic;    -- ADC_I2S_WS
         adc_i2s_data    : in  std_logic;    -- ADC_I2S_DATA
         
         ------------------------------------------------------------------------
-        -- I2S DAC Output (directly matches Martin's signals)
+        -- I2S DAC Output (matches Martin's signals)
         ------------------------------------------------------------------------
         dac_i2s_bclk    : out std_logic;    -- DAC_I2S_CLK
         dac_i2s_ws      : out std_logic;    -- DAC_I2S_WS
@@ -117,7 +117,7 @@ architecture rtl of sic_top_ice40 is
     ---------------------------------------------------------------------------
     -- Clocks and Reset
     ---------------------------------------------------------------------------
-    signal clk_sys          : std_logic;    -- System clock (from PLL or direct)
+    signal clk_sys          : std_logic;
     signal reset            : std_logic;
     signal reset_sync       : std_logic_vector(2 downto 0) := (others => '1');
     
@@ -136,7 +136,7 @@ architecture rtl of sic_top_ice40 is
     signal chan_ready       : std_logic;
     
     ---------------------------------------------------------------------------
-    -- Magnitude Computation (simplified: |re| + |im| approximation)
+    -- Magnitude Computation
     ---------------------------------------------------------------------------
     type mag_array_t is array (0 to N_CHANNELS - 1) of unsigned(15 downto 0);
     signal channel_mags     : mag_array_t;
@@ -149,12 +149,17 @@ architecture rtl of sic_top_ice40 is
     signal spi_rx_valid     : std_logic;
     signal spi_tx_data      : std_logic_vector(7 downto 0);
     signal spi_tx_load      : std_logic;
-    signal spi_tx_ready     : std_logic;
     
     -- SPI state machine
-    type spi_state_t is (IDLE, CMD_RECEIVED, SEND_MAGS, SEND_STATUS);
+    type spi_state_t is (IDLE, SEND_MAGS, SEND_STATUS);
     signal spi_state        : spi_state_t := IDLE;
     signal spi_byte_cnt     : unsigned(3 downto 0) := (others => '0');
+    
+    -- SPI shift registers
+    signal sclk_prev        : std_logic := '0';
+    signal spi_bit_cnt      : unsigned(2 downto 0) := (others => '0');
+    signal spi_rx_shift     : std_logic_vector(7 downto 0) := (others => '0');
+    signal spi_tx_shift     : std_logic_vector(7 downto 0) := (others => '0');
     
     ---------------------------------------------------------------------------
     -- Status Register
@@ -186,10 +191,9 @@ begin
     reset <= reset_sync(2);
     
     ---------------------------------------------------------------------------
-    -- I2S Receiver (simplified placeholder)
+    -- I2S Receiver (test pattern generator for bring-up)
     ---------------------------------------------------------------------------
     -- TODO: Implement proper I2S receiver
-    -- For now, generate test pattern for bring-up
     ---------------------------------------------------------------------------
     process(clk_sys)
         variable sample_cnt : unsigned(15 downto 0) := (others => '0');
@@ -230,7 +234,7 @@ begin
             DATA_WIDTH      => DATA_WIDTH,
             COEFF_WIDTH     => COEFF_WIDTH,
             ACCUM_WIDTH     => ACCUM_WIDTH,
-            COEFF_FILE      => "mdt_coeffs.hex"
+            COEFF_FILE      => "../../rtl/coeffs/mdt_coeffs.hex"
         )
         port map (
             clk           => clk_sys,
@@ -249,163 +253,172 @@ begin
     -- Simple approximation: mag ≈ max(|re|, |im|) + 0.5 * min(|re|, |im|)
     -- This avoids multipliers/sqrt while giving ~3% max error
     ---------------------------------------------------------------------------
-    process(clk_sys)
-        variable re_abs, im_abs : unsigned(ACCUM_WIDTH - 1 downto 0);
-        variable max_val, min_val : unsigned(ACCUM_WIDTH - 1 downto 0);
-        variable mag_approx : unsigned(ACCUM_WIDTH downto 0);
-    begin
-        if rising_edge(clk_sys) then
-            mags_valid <= '0';
-            
-            if chan_valid = '1' then
-                for i in 0 to N_CHANNELS - 1 loop
-                    -- Extract real and imaginary parts
-                    -- Real is in lower half, imag in upper half of each channel slot
-                    re_abs := unsigned(abs(signed(
-                        chan_out((i * 2 + 1) * ACCUM_WIDTH - 1 downto i * 2 * ACCUM_WIDTH))));
-                    im_abs := unsigned(abs(signed(
-                        chan_out((i * 2 + 2) * ACCUM_WIDTH - 1 downto (i * 2 + 1) * ACCUM_WIDTH))));
-                    
-                    -- Max/min
-                    if re_abs > im_abs then
-                        max_val := re_abs;
-                        min_val := im_abs;
-                    else
-                        max_val := im_abs;
-                        min_val := re_abs;
-                    end if;
-                    
-                    -- Approximation: max + min/2
-                    mag_approx := ('0' & max_val) + ('0' & ('0' & min_val(ACCUM_WIDTH - 1 downto 1)));
-                    
-                    -- Take top 16 bits for output
-                    channel_mags(i) <= mag_approx(ACCUM_WIDTH - 1 downto ACCUM_WIDTH - 16);
-                end loop;
-                
-                mags_valid <= '1';
-            end if;
+    --process(clk_sys)
+    --    variable re_abs, im_abs : unsigned(ACCUM_WIDTH - 1 downto 0);
+    --    variable max_val, min_val : unsigned(ACCUM_WIDTH - 1 downto 0);
+    --    variable mag_approx : unsigned(ACCUM_WIDTH downto 0);
+    --begin
+    --    if rising_edge(clk_sys) then
+    --        mags_valid <= '0';
+    --        
+    --        if chan_valid = '1' then
+    --            for i in 0 to N_CHANNELS - 1 loop
+    --                -- Extract real and imaginary parts
+    --                re_abs := unsigned(abs(signed(
+    --                    chan_out((i * 2 + 1) * ACCUM_WIDTH - 1 downto i * 2 * ACCUM_WIDTH))));
+    --                im_abs := unsigned(abs(signed(
+    --                    chan_out((i * 2 + 2) * ACCUM_WIDTH - 1 downto (i * 2 + 1) * ACCUM_WIDTH))));
+    --                
+    --                -- Max/min
+    --                if re_abs > im_abs then
+    --                    max_val := re_abs;
+    --                    min_val := im_abs;
+    --                else
+    --                    max_val := im_abs;
+    --                    min_val := re_abs;
+    --                end if;
+    --                
+    --                -- Approximation: max + min/2
+    --                mag_approx := ('0' & max_val) + ('0' & ('0' & min_val(ACCUM_WIDTH - 1 downto 1)));
+    --                
+    --                -- Take top 16 bits for output
+    --                channel_mags(i) <= mag_approx(ACCUM_WIDTH - 1 downto ACCUM_WIDTH - 16);
+    --            end loop;
+    --            
+    --            mags_valid <= '1';
+    --        end if;
+    --    end if;
+    --end process;
+
+
+
+
+
+---------------------------------------------------------------------------
+-- Magnitude Computation (simplified - just extract upper bits of real)
+-- Full magnitude will be computed on STM32
+---------------------------------------------------------------------------
+process(clk_sys)
+begin
+    if rising_edge(clk_sys) then
+        mags_valid <= chan_valid;
+        if chan_valid = '1' then
+            for i in 0 to N_CHANNELS - 1 loop
+                channel_mags(i) <= unsigned(chan_out((i * 2 + 1) * ACCUM_WIDTH - 1 downto (i * 2 + 1) * ACCUM_WIDTH - 16));
+            end loop;
         end if;
-    end process;
+    end if;
+end process;
+
+
+
+
+
+
+
+
+
+
+
     
     ---------------------------------------------------------------------------
-    -- SPI Slave (a simple bit-banged implementation)
-    ---------------------------------------------------------------------------
-    -- TODO: Replace with proper SPI slave module
-    -- This is a placeholder for bring-up
+    -- SPI Slave (single unified process)
     ---------------------------------------------------------------------------
     process(clk_sys)
-        variable sclk_prev : std_logic := '0';
-        variable bit_cnt   : unsigned(2 downto 0) := (others => '0');
-        variable rx_shift  : std_logic_vector(7 downto 0) := (others => '0');
-        variable tx_shift  : std_logic_vector(7 downto 0) := (others => '0');
     begin
         if rising_edge(clk_sys) then
             spi_rx_valid <= '0';
+            spi_tx_load <= '0';
             
-            if spi_cs_n = '1' then
-                -- Not selected, reset state
-                bit_cnt := (others => '0');
+            if reset = '1' or spi_cs_n = '1' then
+                -- Not selected or in reset
+                spi_bit_cnt <= (others => '0');
                 spi_state <= IDLE;
                 spi_byte_cnt <= (others => '0');
+                sclk_prev <= '0';
             else
                 -- Rising edge of SCLK: sample MOSI
                 if spi_sclk = '1' and sclk_prev = '0' then
-                    rx_shift := rx_shift(6 downto 0) & spi_mosi;
-                    bit_cnt := bit_cnt + 1;
+                    spi_rx_shift <= spi_rx_shift(6 downto 0) & spi_mosi;
+                    spi_bit_cnt <= spi_bit_cnt + 1;
                     
-                    if bit_cnt = 7 then
-                        spi_rx_data <= rx_shift(6 downto 0) & spi_mosi;
+                    if spi_bit_cnt = 7 then
+                        spi_rx_data <= spi_rx_shift(6 downto 0) & spi_mosi;
                         spi_rx_valid <= '1';
-                        bit_cnt := (others => '0');
+                        spi_bit_cnt <= (others => '0');
                     end if;
                 end if;
                 
                 -- Falling edge of SCLK: shift out MISO
                 if spi_sclk = '0' and sclk_prev = '1' then
-                    tx_shift := tx_shift(6 downto 0) & '0';
+                    spi_tx_shift <= spi_tx_shift(6 downto 0) & '0';
                 end if;
                 
-                -- Load new TX byte
+                -- Load new TX byte when requested
                 if spi_tx_load = '1' then
-                    tx_shift := spi_tx_data;
+                    spi_tx_shift <= spi_tx_data;
                 end if;
+                
+                -- Process received bytes
+                if spi_rx_valid = '1' then
+                    case spi_state is
+                        when IDLE =>
+                            case spi_rx_data is
+                                when x"01" =>
+                                    -- Read channel magnitudes
+                                    spi_state <= SEND_MAGS;
+                                    spi_byte_cnt <= (others => '0');
+                                    spi_tx_data <= std_logic_vector(channel_mags(0)(15 downto 8));
+                                    spi_tx_load <= '1';
+                                    
+                                when x"02" =>
+                                    -- Read status
+                                    spi_state <= SEND_STATUS;
+                                    spi_tx_data <= status_reg;
+                                    spi_tx_load <= '1';
+                                    
+                                when others =>
+                                    -- NOP or unknown
+                                    spi_tx_data <= x"00";
+                                    spi_tx_load <= '1';
+                            end case;
+                            
+                        when SEND_MAGS =>
+                            spi_byte_cnt <= spi_byte_cnt + 1;
+                            
+                            case to_integer(spi_byte_cnt) is
+                                when 0 => spi_tx_data <= std_logic_vector(channel_mags(0)(7 downto 0));
+                                when 1 => spi_tx_data <= std_logic_vector(channel_mags(1)(15 downto 8));
+                                when 2 => spi_tx_data <= std_logic_vector(channel_mags(1)(7 downto 0));
+                                when 3 => spi_tx_data <= std_logic_vector(channel_mags(2)(15 downto 8));
+                                when 4 => spi_tx_data <= std_logic_vector(channel_mags(2)(7 downto 0));
+                                when 5 => spi_tx_data <= std_logic_vector(channel_mags(3)(15 downto 8));
+                                when 6 => spi_tx_data <= std_logic_vector(channel_mags(3)(7 downto 0));
+                                when 7 => 
+                                    spi_tx_data <= x"00";
+                                    spi_state <= IDLE;
+                                when others =>
+                                    spi_state <= IDLE;
+                            end case;
+                            spi_tx_load <= '1';
+                            
+                        when SEND_STATUS =>
+                            spi_state <= IDLE;
+                    end case;
+                end if;
+                
+                sclk_prev <= spi_sclk;
             end if;
             
-            sclk_prev := spi_sclk;
-            spi_miso <= tx_shift(7);
-        end if;
-    end process;
-    
-    ---------------------------------------------------------------------------
-    -- SPI Command Processing
-    ---------------------------------------------------------------------------
-    process(clk_sys)
-    begin
-        if rising_edge(clk_sys) then
-            spi_tx_load <= '0';
-            
-            if reset = '1' or spi_cs_n = '1' then
-                spi_state <= IDLE;
-                spi_byte_cnt <= (others => '0');
-            elsif spi_rx_valid = '1' then
-                case spi_state is
-                    when IDLE =>
-                        -- Process command byte
-                        case spi_rx_data is
-                            when x"01" =>
-                                -- Read channel magnitudes
-                                spi_state <= SEND_MAGS;
-                                spi_byte_cnt <= (others => '0');
-                                spi_tx_data <= std_logic_vector(channel_mags(0)(15 downto 8));
-                                spi_tx_load <= '1';
-                                
-                            when x"02" =>
-                                -- Read status
-                                spi_state <= SEND_STATUS;
-                                spi_tx_data <= status_reg;
-                                spi_tx_load <= '1';
-                                
-                            when others =>
-                                -- NOP or unknown
-                                spi_tx_data <= x"00";
-                                spi_tx_load <= '1';
-                        end case;
-                        
-                    when SEND_MAGS =>
-                        spi_byte_cnt <= spi_byte_cnt + 1;
-                        
-                        -- Send 8 bytes: 4 channels × 2 bytes each
-                        case to_integer(spi_byte_cnt) is
-                            when 0 => spi_tx_data <= std_logic_vector(channel_mags(0)(7 downto 0));
-                            when 1 => spi_tx_data <= std_logic_vector(channel_mags(1)(15 downto 8));
-                            when 2 => spi_tx_data <= std_logic_vector(channel_mags(1)(7 downto 0));
-                            when 3 => spi_tx_data <= std_logic_vector(channel_mags(2)(15 downto 8));
-                            when 4 => spi_tx_data <= std_logic_vector(channel_mags(2)(7 downto 0));
-                            when 5 => spi_tx_data <= std_logic_vector(channel_mags(3)(15 downto 8));
-                            when 6 => spi_tx_data <= std_logic_vector(channel_mags(3)(7 downto 0));
-                            when 7 => 
-                                spi_tx_data <= x"00";
-                                spi_state <= IDLE;
-                            when others =>
-                                spi_state <= IDLE;
-                        end case;
-                        spi_tx_load <= '1';
-                        
-                    when SEND_STATUS =>
-                        spi_state <= IDLE;
-                        
-                    when others =>
-                        spi_state <= IDLE;
-                end case;
-            end if;
+            spi_miso <= spi_tx_shift(7);
         end if;
     end process;
     
     ---------------------------------------------------------------------------
     -- Status Register
     ---------------------------------------------------------------------------
-    status_reg(0) <= chan_ready;        -- Channelizer ready
-    status_reg(1) <= mags_valid;        -- New magnitudes available
+    status_reg(0) <= chan_ready;
+    status_reg(1) <= mags_valid;
     status_reg(7 downto 2) <= (others => '0');
     
     ---------------------------------------------------------------------------
@@ -418,10 +431,10 @@ begin
         end if;
     end process;
     
-    -- LED outputs (directly directly directly directly directly directly directly directly directly directly directly active low on EVN board)
-    led_red   <= not heartbeat_cnt(23);                    -- ~0.7 Hz heartbeat
-    led_green <= not chan_ready;                           -- On when ready
-    led_blue  <= not mags_valid;                           -- Blinks with valid data
+    -- LED outputs (active low on EVN board)
+    led_red   <= not heartbeat_cnt(23);
+    led_green <= not chan_ready;
+    led_blue  <= not mags_valid;
     
     ---------------------------------------------------------------------------
     -- FPGA Done
