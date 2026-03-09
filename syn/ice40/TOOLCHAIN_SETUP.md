@@ -86,12 +86,23 @@ yosys -m ghdl -p "ghdl --version"
 
 ```bash
 # Install IceStorm tools
-brew install icestorm yosys nextpnr
+cd ~
+mkdir fpga-tools
+# or whatever directory name you like
+cd fpga-tools/
+git clone https://github.com/YosysHQ/icestorm.git
+cd icestorm/
+make -j$(sysctl -n hw.ncpu)
+sudo make install
+cd ..
+# confirm it installed
+which icepack
+icepack --help
 
 # Install GHDL
 brew install ghdl
 
-# GHDL plugin may need manual build (see above)
+# GHDL plugin may need manual build
 ```
 
 ### Windows (WSL2 Recommended)
