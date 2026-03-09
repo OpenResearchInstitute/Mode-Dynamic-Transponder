@@ -122,13 +122,17 @@ sudo cmake --install build
 
 # Verify nextpnr
 nextpnr-ice40 --version
-```
 
-Key changes:
-- Added `libftdi pkg-config` for IceStorm
-- Added `brew install yosys` (we forgot this earlier)
-- Fixed nextpnr cmake: added `-DBUILD_PYTHON=OFF -DBUILD_GUI=OFF` to avoid ARM64 linker errors
-- Removed duplicate `make` commands — nextpnr uses cmake, not make directly
+# Install GHDL plugin
+cd ~/fpga-tools
+git clone https://github.com/ghdl/ghdl-yosys-plugin.git
+cd ghdl-yosys-plugin
+make
+sudo make install
+
+# verify install
+yosys -m ghdl -p "ghdl --version"
+```
 
 ### Windows (WSL2 Recommended)
 
