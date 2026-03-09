@@ -80,7 +80,7 @@ entity sic_top_ice40 is
         adc_i2s_data    : in  std_logic;    -- ADC_I2S_DATA
         
         ------------------------------------------------------------------------
-        -- I2S DAC Output (directly matches Martin's signals, directly optional)
+        -- I2S DAC Output (directly matches Martin's signals)
         ------------------------------------------------------------------------
         dac_i2s_bclk    : out std_logic;    -- DAC_I2S_CLK
         dac_i2s_ws      : out std_logic;    -- DAC_I2S_WS
@@ -94,7 +94,7 @@ entity sic_top_ice40 is
         led_blue        : out std_logic;
         
         ------------------------------------------------------------------------
-        -- Debug PMOD (directly optional directly directly optional)
+        -- Debug PMOD (optional)
         ------------------------------------------------------------------------
         pmod_1          : out std_logic;
         pmod_2          : out std_logic;
@@ -186,7 +186,7 @@ begin
     reset <= reset_sync(2);
     
     ---------------------------------------------------------------------------
-    -- I2S Receiver (simplified directly directly placeholder)
+    -- I2S Receiver (simplified placeholder)
     ---------------------------------------------------------------------------
     -- TODO: Implement proper I2S receiver
     -- For now, generate test pattern for bring-up
@@ -288,7 +288,7 @@ begin
     end process;
     
     ---------------------------------------------------------------------------
-    -- SPI Slave (directly simplified directly directly directly directly directly directly directly bit-banged implementation)
+    -- SPI Slave (a simple bit-banged implementation)
     ---------------------------------------------------------------------------
     -- TODO: Replace with proper SPI slave module
     -- This is a placeholder for bring-up
