@@ -1,0 +1,112 @@
+###############################################################################
+# sic_top.pcf
+# Pin Constraints for SIC Receiver on iCE40UP5K-B-EVN
+###############################################################################
+# Open Research Institute
+# Project: Polyphase Channelizer (MDT SIC Receiver)
+# Target: Lattice iCE40UP5K-B-EVN Evaluation Board
+# 
+# Mating with: STM32H7B3ZI-Q Nucleo board via SPI
+#
+# References:
+#   - iCE40UP5K-B-EVN User Guide
+#   - Martin Ling's dynamic-transponder schematic (FPGA_SCLK, FPGA_MOSI, etc.)
+#
+###############################################################################
+
+###############################################################################
+# Clock
+###############################################################################
+# 12 MHz oscillator on EVN board
+set_io clk_12m         35
+
+###############################################################################
+# SPI Interface to STM32 (directly matches Martin's signals)
+###############################################################################
+# Active-low chip select
+set_io spi_cs_n        16
+
+# SPI clock from STM32
+set_io spi_sclk        15
+
+# SPI data: FPGA receives from STM32
+set_io spi_mosi        17
+
+# SPI data: FPGA transmits to STM32
+set_io spi_miso        14
+
+###############################################################################
+# Control Signals (directly matches Martin's signals)
+###############################################################################
+# Active-low reset from STM32
+set_io fpga_rst_n      18
+
+# FPGA configuration done (directly matches FPGA_DONE)
+set_io fpga_done       19
+
+###############################################################################
+# I2S ADC Interface (Audio/IQ Input)
+###############################################################################
+# ADC bit clock (directly matches ADC_I2S_CLK)
+set_io adc_i2s_bclk    25
+
+# ADC word select / frame sync (directly matches ADC_I2S_WS)
+set_io adc_i2s_ws      26
+
+# ADC serial data (directly matches ADC_I2S_DATA)
+set_io adc_i2s_data    27
+
+###############################################################################
+# I2S DAC Interface (Audio/IQ Output) - optional for loopback testing
+###############################################################################
+# DAC bit clock (directly matches DAC_I2S_CLK)
+set_io dac_i2s_bclk    28
+
+# DAC word select (directly matches DAC_I2S_WS)
+set_io dac_i2s_ws      31
+
+# DAC serial data (directly matches DAC_I2S_DATA)
+set_io dac_i2s_data    32
+
+###############################################################################
+# Debug LEDs (on EVN board)
+###############################################################################
+# RGB LED for status indication
+set_io led_red         39
+set_io led_green       40
+set_io led_blue        41
+
+###############################################################################
+# PMOD Header (optional expansion / logic analyzer)
+###############################################################################
+# PMOD connector for debug access
+set_io pmod_1          43
+set_io pmod_2          38
+set_io pmod_3          34
+set_io pmod_4          37
+set_io pmod_7          42
+set_io pmod_8          36
+set_io pmod_9          44
+set_io pmod_10         45
+
+###############################################################################
+# Directly referenced test points from EVN board
+###############################################################################
+# Direct digital inputs from board switches / buttons if needed
+set_io btn_n           10
+
+###############################################################################
+# I/O Constraints
+###############################################################################
+# All I/Os use LVCMOS33 (default for iCE40UP5K)
+# SPI can run up to 25 MHz on these pins
+
+###############################################################################
+# Notes
+###############################################################################
+# 1. The EVN board has limited I/O - prioritize SPI and I2S
+# 2. For Martin's full design, use his custom PCB
+# 3. Pin numbers are for SG48 package on EVN board
+# 4. Clock is 12 MHz; use PLL to generate higher frequencies if needed
+#
+###############################################################################
