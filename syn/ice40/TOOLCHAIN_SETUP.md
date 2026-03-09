@@ -83,27 +83,52 @@ yosys -m ghdl -p "ghdl --version"
 ```
 
 ### macOS (Homebrew)
-
 ```bash
-# Install IceStorm tools
+# Create a directory for FPGA tools
 cd ~
 mkdir fpga-tools
-# or whatever directory name you like
-cd fpga-tools/
+cd fpga-tools
+
+# Install IceStorm tools (not in Homebrew, build from source)
+brew install libftdi pkg-config
 git clone https://github.com/YosysHQ/icestorm.git
-cd icestorm/
+cd icestorm
 make -j$(sysctl -n hw.ncpu)
 sudo make install
 cd ..
-# confirm it installed
+
+# Verify IceStorm
 which icepack
 icepack --help
 
 # Install GHDL
 brew install ghdl
 
-# GHDL plugin may need manual build
+# Install Yosys
+brew install yosys
+
+# Install nextpnr (not in Homebrew, build from source)
+brew install cmake boost python3 eigen
+git clone https://github.com/YosysHQ/nextpnr.git
+cd nextpnr
+cmake -DARCH=ice40 \
+      -DICESTORM_INSTALL_PREFIX=/usr/local \
+      -DCMAKE_INSTALL_PREFIX=/usr/local \
+      -DBUILD_PYTHON=OFF \
+      -DBUILD_GUI=OFF \
+      -B build
+cmake --build build -j$(sysctl -n hw.ncpu)
+sudo cmake --install build
+
+# Verify nextpnr
+nextpnr-ice40 --version
 ```
+
+Key changes:
+- Added `libftdi pkg-config` for IceStorm
+- Added `brew install yosys` (we forgot this earlier)
+- Fixed nextpnr cmake: added `-DBUILD_PYTHON=OFF -DBUILD_GUI=OFF` to avoid ARM64 linker errors
+- Removed duplicate `make` commands — nextpnr uses cmake, not make directly
 
 ### Windows (WSL2 Recommended)
 
