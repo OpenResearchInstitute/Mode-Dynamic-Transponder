@@ -65,7 +65,7 @@ RPT = $(BUILD_DIR)/$(PROJECT).rpt
 # Synthesis and P&R
 ###############################################################################
 
-.PHONY: all clean prog timing
+.PHONY: all clean prog timing resources report
 
 all: $(BIN)
 
@@ -121,10 +121,19 @@ timing: $(ASC)
 	icetime -d $(DEVICE) -p $(PCF) -r $(BUILD_DIR)/timing.rpt $<
 	@cat $(BUILD_DIR)/timing.rpt
 
-# Show resource utilization from nextpnr report
+# Show resource utilization from nextpnr report (JSON format)
 resources: $(RPT)
 	@echo "=== Resource Utilization ==="
-	@grep -A 20 "Device utilisation" $(RPT) || cat $(RPT)
+	@python3 $(SYN_DIR)/report.py $(RPT)
+
+# Show full build report (resources + timing + bitstream)
+report: $(RPT) $(BIN)
+	@echo ""
+	@echo "╔════════════════════════════════════════════════════════════╗"
+	@echo "║              SIC Receiver Build Report                     ║"
+	@echo "╚════════════════════════════════════════════════════════════╝"
+	@echo ""
+	@python3 $(SYN_DIR)/report.py $(RPT) $(BIN)
 
 ###############################################################################
 # Simulation (optional, uses existing Vivado testbenches)
@@ -153,8 +162,9 @@ help:
 	@echo "  all        - Build bitstream (default)"
 	@echo "  prog       - Program flash"
 	@echo "  prog-sram  - Program SRAM (volatile, for testing)"
-	@echo "  timing     - Run timing analysis"
-	@echo "  resources  - Show resource utilization"
+	@echo "  report     - Show full build report (resources + timing)"
+	@echo "  resources  - Show resource utilization only"
+	@echo "  timing     - Run timing analysis with icetime"
 	@echo "  clean      - Remove build artifacts"
 	@echo ""
 	@echo "Requirements:"

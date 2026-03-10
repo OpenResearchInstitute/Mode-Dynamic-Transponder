@@ -16,8 +16,8 @@
 --   3. PLL for clock generation from 12 MHz input
 --   4. Status LEDs
 --
--- The SPI interface streams channel magnitude data to the STM32 for
--- spectrum display and signal detection (successive interference cancellation).
+-- The SPI interface streams complex I/Q channel data to the STM32 for
+-- magnitude computation and signal detection (SIC algorithm runs on MCU).
 --
 -------------------------------------------------------------------------------
 -- SPI PROTOCOL
@@ -26,14 +26,17 @@
 --
 --   Command byte (from STM32):
 --     0x00 - NOP
---     0x01 - Read channel magnitudes (4 × 16-bit values)
+--     0x01 - Read channel I/Q data (4 channels × 4 bytes = 16 bytes)
 --     0x02 - Read status register
 --     0x10 - Write config register
 --     0x80 - Reset
 --
 --   Response (to STM32):
---     After cmd 0x01: [ch0_mag_hi][ch0_mag_lo][ch1...][ch2...][ch3...]
+--     After cmd 0x01: [I0_H][I0_L][Q0_H][Q0_L][I1_H][I1_L][Q1_H][Q1_L]...
 --     After cmd 0x02: [status_byte]
+--
+--   Each channel sends 16-bit signed I followed by 16-bit signed Q.
+--   Magnitude computation is done on the STM32 (FPU is faster than FPGA LUTs).
 --
 -------------------------------------------------------------------------------
 -- PIN MAPPING (see sic_top.pcf)
@@ -136,11 +139,12 @@ architecture rtl of sic_top_ice40 is
     signal chan_ready       : std_logic;
     
     ---------------------------------------------------------------------------
-    -- Magnitude Computation
+    -- Channel I/Q Data (extracted from channelizer output)
     ---------------------------------------------------------------------------
-    type mag_array_t is array (0 to N_CHANNELS - 1) of unsigned(15 downto 0);
-    signal channel_mags     : mag_array_t;
-    signal mags_valid       : std_logic;
+    type iq_array_t is array (0 to N_CHANNELS - 1) of signed(15 downto 0);
+    signal channel_i        : iq_array_t;
+    signal channel_q        : iq_array_t;
+    signal iq_valid         : std_logic;
     
     ---------------------------------------------------------------------------
     -- SPI Slave Signals
@@ -151,9 +155,9 @@ architecture rtl of sic_top_ice40 is
     signal spi_tx_load      : std_logic;
     
     -- SPI state machine
-    type spi_state_t is (IDLE, SEND_MAGS, SEND_STATUS);
+    type spi_state_t is (IDLE, SEND_IQ, SEND_STATUS);
     signal spi_state        : spi_state_t := IDLE;
-    signal spi_byte_cnt     : unsigned(3 downto 0) := (others => '0');
+    signal spi_byte_cnt     : unsigned(4 downto 0) := (others => '0');  -- 5 bits for 0-16
     
     -- SPI shift registers
     signal sclk_prev        : std_logic := '0';
@@ -193,8 +197,6 @@ begin
     ---------------------------------------------------------------------------
     -- I2S Receiver (test pattern generator for bring-up)
     ---------------------------------------------------------------------------
-    -- TODO: Implement proper I2S receiver
-    ---------------------------------------------------------------------------
     process(clk_sys)
         variable sample_cnt : unsigned(15 downto 0) := (others => '0');
         variable div_cnt    : unsigned(9 downto 0) := (others => '0');
@@ -208,14 +210,13 @@ begin
                 i2s_sample_valid <= '0';
                 
                 -- Generate sample at ~40 kHz from 12 MHz clock
-                -- 12 MHz / 300 = 40 kHz
                 if div_cnt = 299 then
                     div_cnt := (others => '0');
                     i2s_sample_valid <= '1';
                     
-                    -- Test pattern: incrementing counter
+                    -- Test pattern: incrementing counter (real), inverted (imag)
                     i2s_sample_re <= std_logic_vector(sample_cnt);
-                    i2s_sample_im <= (others => '0');
+                    i2s_sample_im <= std_logic_vector(not sample_cnt);
                     sample_cnt := sample_cnt + 1;
                 else
                     div_cnt := div_cnt + 1;
@@ -248,78 +249,28 @@ begin
         );
     
     ---------------------------------------------------------------------------
-    -- Magnitude Computation
+    -- Extract I/Q from Channelizer Output
     ---------------------------------------------------------------------------
-    -- Simple approximation: mag ≈ max(|re|, |im|) + 0.5 * min(|re|, |im|)
-    -- This avoids multipliers/sqrt while giving ~3% max error
+    -- The channelizer outputs complex data. We extract the upper 16 bits
+    -- of both real (I) and imaginary (Q) components for each channel.
+    -- Full magnitude computation is done on the STM32 (FPU is faster).
     ---------------------------------------------------------------------------
-    --process(clk_sys)
-    --    variable re_abs, im_abs : unsigned(ACCUM_WIDTH - 1 downto 0);
-    --    variable max_val, min_val : unsigned(ACCUM_WIDTH - 1 downto 0);
-    --    variable mag_approx : unsigned(ACCUM_WIDTH downto 0);
-    --begin
-    --    if rising_edge(clk_sys) then
-    --        mags_valid <= '0';
-    --        
-    --        if chan_valid = '1' then
-    --            for i in 0 to N_CHANNELS - 1 loop
-    --                -- Extract real and imaginary parts
-    --                re_abs := unsigned(abs(signed(
-    --                    chan_out((i * 2 + 1) * ACCUM_WIDTH - 1 downto i * 2 * ACCUM_WIDTH))));
-    --                im_abs := unsigned(abs(signed(
-    --                    chan_out((i * 2 + 2) * ACCUM_WIDTH - 1 downto (i * 2 + 1) * ACCUM_WIDTH))));
-    --                
-    --                -- Max/min
-    --                if re_abs > im_abs then
-    --                    max_val := re_abs;
-    --                    min_val := im_abs;
-    --                else
-    --                    max_val := im_abs;
-    --                    min_val := re_abs;
-    --                end if;
-    --                
-    --                -- Approximation: max + min/2
-    --                mag_approx := ('0' & max_val) + ('0' & ('0' & min_val(ACCUM_WIDTH - 1 downto 1)));
-    --                
-    --                -- Take top 16 bits for output
-    --                channel_mags(i) <= mag_approx(ACCUM_WIDTH - 1 downto ACCUM_WIDTH - 16);
-    --            end loop;
-    --            
-    --            mags_valid <= '1';
-    --        end if;
-    --    end if;
-    --end process;
-
-
-
-
-
----------------------------------------------------------------------------
--- Magnitude Computation (simplified - just extract upper bits of real)
--- Full magnitude will be computed on STM32
----------------------------------------------------------------------------
-process(clk_sys)
-begin
-    if rising_edge(clk_sys) then
-        mags_valid <= chan_valid;
-        if chan_valid = '1' then
-            for i in 0 to N_CHANNELS - 1 loop
-                channel_mags(i) <= unsigned(chan_out((i * 2 + 1) * ACCUM_WIDTH - 1 downto (i * 2 + 1) * ACCUM_WIDTH - 16));
-            end loop;
+    process(clk_sys)
+    begin
+        if rising_edge(clk_sys) then
+            iq_valid <= chan_valid;
+            if chan_valid = '1' then
+                for i in 0 to N_CHANNELS - 1 loop
+                    -- Extract upper 16 bits of real part (I)
+                    channel_i(i) <= signed(chan_out((i * 2 + 1) * ACCUM_WIDTH - 1 
+                                                downto (i * 2 + 1) * ACCUM_WIDTH - 16));
+                    -- Extract upper 16 bits of imaginary part (Q)
+                    channel_q(i) <= signed(chan_out((i * 2 + 2) * ACCUM_WIDTH - 1 
+                                                downto (i * 2 + 2) * ACCUM_WIDTH - 16));
+                end loop;
+            end if;
         end if;
-    end if;
-end process;
-
-
-
-
-
-
-
-
-
-
-
+    end process;
     
     ---------------------------------------------------------------------------
     -- SPI Slave (single unified process)
@@ -365,10 +316,10 @@ end process;
                         when IDLE =>
                             case spi_rx_data is
                                 when x"01" =>
-                                    -- Read channel magnitudes
-                                    spi_state <= SEND_MAGS;
+                                    -- Read channel I/Q data
+                                    spi_state <= SEND_IQ;
                                     spi_byte_cnt <= (others => '0');
-                                    spi_tx_data <= std_logic_vector(channel_mags(0)(15 downto 8));
+                                    spi_tx_data <= std_logic_vector(channel_i(0)(15 downto 8));
                                     spi_tx_load <= '1';
                                     
                                 when x"02" =>
@@ -383,18 +334,32 @@ end process;
                                     spi_tx_load <= '1';
                             end case;
                             
-                        when SEND_MAGS =>
+                        when SEND_IQ =>
                             spi_byte_cnt <= spi_byte_cnt + 1;
                             
+                            -- Send 16 bytes: 4 channels × (2 bytes I + 2 bytes Q)
+                            -- Format: [I0_H][I0_L][Q0_H][Q0_L][I1_H][I1_L][Q1_H][Q1_L]...
                             case to_integer(spi_byte_cnt) is
-                                when 0 => spi_tx_data <= std_logic_vector(channel_mags(0)(7 downto 0));
-                                when 1 => spi_tx_data <= std_logic_vector(channel_mags(1)(15 downto 8));
-                                when 2 => spi_tx_data <= std_logic_vector(channel_mags(1)(7 downto 0));
-                                when 3 => spi_tx_data <= std_logic_vector(channel_mags(2)(15 downto 8));
-                                when 4 => spi_tx_data <= std_logic_vector(channel_mags(2)(7 downto 0));
-                                when 5 => spi_tx_data <= std_logic_vector(channel_mags(3)(15 downto 8));
-                                when 6 => spi_tx_data <= std_logic_vector(channel_mags(3)(7 downto 0));
-                                when 7 => 
+                                -- Channel 0
+                                when 0  => spi_tx_data <= std_logic_vector(channel_i(0)(7 downto 0));
+                                when 1  => spi_tx_data <= std_logic_vector(channel_q(0)(15 downto 8));
+                                when 2  => spi_tx_data <= std_logic_vector(channel_q(0)(7 downto 0));
+                                -- Channel 1
+                                when 3  => spi_tx_data <= std_logic_vector(channel_i(1)(15 downto 8));
+                                when 4  => spi_tx_data <= std_logic_vector(channel_i(1)(7 downto 0));
+                                when 5  => spi_tx_data <= std_logic_vector(channel_q(1)(15 downto 8));
+                                when 6  => spi_tx_data <= std_logic_vector(channel_q(1)(7 downto 0));
+                                -- Channel 2
+                                when 7  => spi_tx_data <= std_logic_vector(channel_i(2)(15 downto 8));
+                                when 8  => spi_tx_data <= std_logic_vector(channel_i(2)(7 downto 0));
+                                when 9  => spi_tx_data <= std_logic_vector(channel_q(2)(15 downto 8));
+                                when 10 => spi_tx_data <= std_logic_vector(channel_q(2)(7 downto 0));
+                                -- Channel 3
+                                when 11 => spi_tx_data <= std_logic_vector(channel_i(3)(15 downto 8));
+                                when 12 => spi_tx_data <= std_logic_vector(channel_i(3)(7 downto 0));
+                                when 13 => spi_tx_data <= std_logic_vector(channel_q(3)(15 downto 8));
+                                when 14 => spi_tx_data <= std_logic_vector(channel_q(3)(7 downto 0));
+                                when 15 =>
                                     spi_tx_data <= x"00";
                                     spi_state <= IDLE;
                                 when others =>
@@ -418,7 +383,7 @@ end process;
     -- Status Register
     ---------------------------------------------------------------------------
     status_reg(0) <= chan_ready;
-    status_reg(1) <= mags_valid;
+    status_reg(1) <= iq_valid;
     status_reg(7 downto 2) <= (others => '0');
     
     ---------------------------------------------------------------------------
@@ -434,7 +399,7 @@ end process;
     -- LED outputs (active low on EVN board)
     led_red   <= not heartbeat_cnt(23);
     led_green <= not chan_ready;
-    led_blue  <= not mags_valid;
+    led_blue  <= not iq_valid;
     
     ---------------------------------------------------------------------------
     -- FPGA Done
@@ -452,7 +417,7 @@ end process;
     -- Debug PMOD
     ---------------------------------------------------------------------------
     pmod_1 <= chan_valid;
-    pmod_2 <= mags_valid;
+    pmod_2 <= iq_valid;
     pmod_3 <= spi_cs_n;
     pmod_4 <= spi_sclk;
 
