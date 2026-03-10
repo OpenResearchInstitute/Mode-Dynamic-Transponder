@@ -25,11 +25,15 @@ Example serial output when working:
 ```
 SIC FPGA initialized
 SIC Channels @ 1234 ms:
-  CH0: I=  1234 Q=     0  Mag= 1234 (-12.3 dB) [PEAK]
-  CH1: I=   567 Q=     0  Mag=  567 (-18.7 dB)
-  CH2: I=   890 Q=     0  Mag=  890 (-15.2 dB)
-  CH3: I=   123 Q=     0  Mag=  123 (-24.1 dB)
+  CH0: I=  1234 Q=  -567  Mag= 1358 (-11.5 dB) [PEAK]
+  CH1: I=   456 Q=   234  Mag=  512 (-19.0 dB)
+  CH2: I=  -890 Q=   123  Mag=  898 (-15.1 dB)
+  CH3: I=   100 Q=   -50  Mag=  111 (-24.3 dB)
 ```
+
+Note: The test pattern generator produces an incrementing counter, so initial
+values will ramp up. Once real I2S ADC data is connected, you'll see actual
+signal levels.
 
 ---
 
@@ -433,10 +437,10 @@ FPGA ready!
 SIC Receiver initialized
 
 SIC Channels @ 100 ms:
-  CH0: I=  1234 Q=     0  Mag= 1234 (-12.3 dB) [PEAK]
-  CH1: I=   567 Q=     0  Mag=  567 (-18.7 dB)
-  CH2: I=   890 Q=     0  Mag=  890 (-15.2 dB)
-  CH3: I=   123 Q=     0  Mag=  123 (-24.1 dB)
+  CH0: I=  1234 Q=  -567  Mag= 1358 (-11.5 dB) [PEAK]
+  CH1: I=   456 Q=   234  Mag=  512 (-19.0 dB)
+  CH2: I=  -890 Q=   123  Mag=  898 (-15.1 dB)
+  CH3: I=   100 Q=   -50  Mag=  111 (-24.3 dB)
 ```
 
 ---
