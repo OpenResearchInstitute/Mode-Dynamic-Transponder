@@ -231,7 +231,7 @@ on 21 March 2026, we found that Radiant flatly wouldn't program the FPGA on wind
 So we have to use MSYS32, which opens what looks like a linux-ish console in windows, and let's us command line a programming session.
 
 '''
-openFPGALoader -b ice40_generic --cable-index 1 -f /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+openFPGALoader -b ice40_generic -f --unprotect-flash /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 '''
 
 The above command worked to program the FPGA. You have to have the J6 Jumpers in horizontal mode for this to work. It resets itself, but if that doesn't work then a reset *may* be necessary to get the device to work. The FPGA has to be running before the STM in order for things to work, as of today. 
