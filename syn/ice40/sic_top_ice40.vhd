@@ -26,7 +26,7 @@
 --
 --   Command byte (from STM32):
 --     0x00 - NOP
---     0x01 - Read channel I/Q data (4 channels × 4 bytes = 16 bytes)
+--     0x01 - Read channel I/Q data (4 channels 4 bytes = 16 bytes)
 --     0x02 - Read status register
 --     0x10 - Write config register
 --     0x80 - Reset
@@ -53,6 +53,9 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+
+library iCE40UP;
+use iCE40UP.components.all;
 
 entity sic_top_ice40 is
     port (
@@ -89,8 +92,8 @@ entity sic_top_ice40 is
         dac_i2s_ws      : out std_logic;    -- DAC_I2S_WS
         dac_i2s_data    : out std_logic;    -- DAC_I2S_DATA
         
-        ------------------------------------------------------------------------
-        -- Debug LEDs
+		------------------------------------------------------------------------
+        -- RGB LED outputs (directly to pins 39/40/41)
         ------------------------------------------------------------------------
         led_red         : out std_logic;
         led_green       : out std_logic;
@@ -163,8 +166,8 @@ architecture rtl of sic_top_ice40 is
     signal sclk_prev        : std_logic := '0';
     signal spi_bit_cnt      : unsigned(2 downto 0) := (others => '0');
     signal spi_rx_shift     : std_logic_vector(7 downto 0) := (others => '0');
-    signal spi_tx_shift     : std_logic_vector(7 downto 0) := (others => '0');
-    
+    signal spi_tx_shift     : std_logic_vector(7 downto 0);
+	attribute syn_keep : boolean;
     ---------------------------------------------------------------------------
     -- Status Register
     ---------------------------------------------------------------------------
@@ -175,7 +178,45 @@ architecture rtl of sic_top_ice40 is
     ---------------------------------------------------------------------------
     signal heartbeat_cnt    : unsigned(23 downto 0) := (others => '0');
 
+    ---------------------------------------------------------------------------
+    -- iCE40 RGB Driver Primitive
+    ---------------------------------------------------------------------------
+--    component RGB is
+--        generic (
+--            CURRENT_MODE : string := "0b0";
+--            RGB0_CURRENT : string := "0b000001";
+--            RGB1_CURRENT : string := "0b000001";
+--            RGB2_CURRENT : string := "0b000001"
+--        );
+--        port (
+--            CURREN   : in  std_logic;
+--            RGBLEDEN : in  std_logic;
+--            RGB0PWM  : in  std_logic;
+--            RGB1PWM  : in  std_logic;
+--            RGB2PWM  : in  std_logic;
+--            RGB0     : out std_logic;
+--            RGB1     : out std_logic;
+--            RGB2     : out std_logic
+--        );
+--    end component;
+
+
+    attribute syn_keep of u_rgb_drv : label is true;
+
+
+
 begin
+
+
+    ---------------------------------------------------------------------------
+    -- Heartbeat Counter
+    ---------------------------------------------------------------------------
+    process(clk_sys)
+    begin
+        if rising_edge(clk_sys) then
+            heartbeat_cnt <= heartbeat_cnt + 1;
+        end if;
+    end process;
 
     ---------------------------------------------------------------------------
     -- Clock: Use 12 MHz directly for now
@@ -189,7 +230,8 @@ begin
     process(clk_sys)
     begin
         if rising_edge(clk_sys) then
-            reset_sync <= reset_sync(1 downto 0) & (not fpga_rst_n);
+		    reset_sync <= reset_sync(1 downto 0) & '0';  -- No external reset for now
+            --reset_sync <= reset_sync(1 downto 0) & (not fpga_rst_n);
         end if;
     end process;
     reset <= reset_sync(2);
@@ -275,110 +317,146 @@ begin
     ---------------------------------------------------------------------------
     -- SPI Slave (single unified process)
     ---------------------------------------------------------------------------
+--    process(clk_sys)
+--    begin
+--        if rising_edge(clk_sys) then
+--            spi_rx_valid <= '0';
+--            spi_tx_load <= '0';
+--            
+--            if reset = '1' or spi_cs_n = '1' then
+--                -- Not selected or in reset
+--                spi_bit_cnt <= (others => '0');
+                --spi_state <= IDLE;
+                --spi_byte_cnt <= (others => '0');
+                --sclk_prev <= '0';
+            --else
+ ----                Rising edge of SCLK: sample MOSI
+                --if spi_sclk = '1' and sclk_prev = '0' then
+                    --spi_rx_shift <= spi_rx_shift(6 downto 0) & spi_mosi;
+                    --spi_bit_cnt <= spi_bit_cnt + 1;
+                    
+                    --if spi_bit_cnt = 7 then
+                        --spi_rx_data <= spi_rx_shift(6 downto 0) & spi_mosi;
+                        --spi_rx_valid <= '1';
+                        --spi_bit_cnt <= (others => '0');
+                    --end if;
+                --end if;
+                
+ ----                Falling edge of SCLK: shift out MISO
+                --if spi_sclk = '0' and sclk_prev = '1' then
+                    --spi_tx_shift <= spi_tx_shift(6 downto 0) & '0';
+                --end if;
+                
+----                 Load new TX byte when requested
+                --if spi_tx_load = '1' then
+                    --spi_tx_shift <= spi_tx_data;
+                --end if;
+                
+----                 Process received bytes
+                --if spi_rx_valid = '1' then
+                    --case spi_state is
+                        --when IDLE =>
+                            --case spi_rx_data is
+                                --when x"01" =>
+----                                     Read channel I/Q data
+                                    --spi_state <= SEND_IQ;
+                                    --spi_byte_cnt <= (others => '0');
+                                    --spi_tx_data <= std_logic_vector(channel_i(0)(15 downto 8));
+                                    --spi_tx_load <= '1';
+                                    
+                                --when x"02" =>
+----                                     Read status
+                                    --spi_state <= SEND_STATUS;
+                                    --spi_tx_data <= status_reg;
+                                    --spi_tx_load <= '1';
+                                    
+                                --when others =>
+----                                     NOP or unknown
+                                    --spi_tx_data <= x"00";
+                                    --spi_tx_load <= '1';
+                            --end case;
+                            
+                        --when SEND_IQ =>
+                            --spi_byte_cnt <= spi_byte_cnt + 1;
+                            
+ ----                            Send 16 bytes: 4 channels ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â (2 bytes I + 2 bytes Q)
+ ----                            Format: [I0_H][I0_L][Q0_H][Q0_L][I1_H][I1_L][Q1_H][Q1_L]...
+                            --case to_integer(spi_byte_cnt) is
+ ----                                Channel 0
+                                --when 0  => spi_tx_data <= std_logic_vector(channel_i(0)(7 downto 0));
+                                --when 1  => spi_tx_data <= std_logic_vector(channel_q(0)(15 downto 8));
+                                --when 2  => spi_tx_data <= std_logic_vector(channel_q(0)(7 downto 0));
+ ----                                Channel 1
+                                --when 3  => spi_tx_data <= std_logic_vector(channel_i(1)(15 downto 8));
+                                --when 4  => spi_tx_data <= std_logic_vector(channel_i(1)(7 downto 0));
+                                --when 5  => spi_tx_data <= std_logic_vector(channel_q(1)(15 downto 8));
+                                --when 6  => spi_tx_data <= std_logic_vector(channel_q(1)(7 downto 0));
+----                                 Channel 2
+                                --when 7  => spi_tx_data <= std_logic_vector(channel_i(2)(15 downto 8));
+                                --when 8  => spi_tx_data <= std_logic_vector(channel_i(2)(7 downto 0));
+                                --when 9  => spi_tx_data <= std_logic_vector(channel_q(2)(15 downto 8));
+                                --when 10 => spi_tx_data <= std_logic_vector(channel_q(2)(7 downto 0));
+----                                 Channel 3
+                                --when 11 => spi_tx_data <= std_logic_vector(channel_i(3)(15 downto 8));
+                                --when 12 => spi_tx_data <= std_logic_vector(channel_i(3)(7 downto 0));
+                                --when 13 => spi_tx_data <= std_logic_vector(channel_q(3)(15 downto 8));
+                                --when 14 => spi_tx_data <= std_logic_vector(channel_q(3)(7 downto 0));
+                                --when 15 =>
+                                    --spi_tx_data <= x"00";
+                                    --spi_state <= IDLE;
+                                --when others =>
+                                    --spi_state <= IDLE;
+                            --end case;
+                            --spi_tx_load <= '1';
+                            
+                        --when SEND_STATUS =>
+                            --spi_state <= IDLE;
+                    --end case;
+                --end if;
+                
+                --sclk_prev <= spi_sclk;
+            --end if;
+            
+            --spi_miso <= spi_tx_shift(7);
+        --end if;
+    --end process;
+    
+	
+	
+	
+	
+	
+    ---------------------------------------------------------------------------
+    -- SPI Slave (SIMPLIFIED TEST - just echo back a counter)
+    ---------------------------------------------------------------------------
     process(clk_sys)
     begin
         if rising_edge(clk_sys) then
-            spi_rx_valid <= '0';
-            spi_tx_load <= '0';
-            
-            if reset = '1' or spi_cs_n = '1' then
-                -- Not selected or in reset
+            if reset = '1' then
+                spi_tx_shift <= x"A5";
                 spi_bit_cnt <= (others => '0');
-                spi_state <= IDLE;
-                spi_byte_cnt <= (others => '0');
                 sclk_prev <= '0';
+            elsif spi_cs_n = '1' then
+                spi_bit_cnt <= (others => '0');
+                spi_tx_shift <= x"A5";
             else
-                -- Rising edge of SCLK: sample MOSI
-                if spi_sclk = '1' and sclk_prev = '0' then
-                    spi_rx_shift <= spi_rx_shift(6 downto 0) & spi_mosi;
+                if spi_sclk = '0' and sclk_prev = '1' then
+                    spi_tx_shift <= spi_tx_shift(6 downto 0) & '1';
                     spi_bit_cnt <= spi_bit_cnt + 1;
-                    
                     if spi_bit_cnt = 7 then
-                        spi_rx_data <= spi_rx_shift(6 downto 0) & spi_mosi;
-                        spi_rx_valid <= '1';
-                        spi_bit_cnt <= (others => '0');
+                        spi_tx_shift <= x"A6";
                     end if;
                 end if;
-                
-                -- Falling edge of SCLK: shift out MISO
-                if spi_sclk = '0' and sclk_prev = '1' then
-                    spi_tx_shift <= spi_tx_shift(6 downto 0) & '0';
-                end if;
-                
-                -- Load new TX byte when requested
-                if spi_tx_load = '1' then
-                    spi_tx_shift <= spi_tx_data;
-                end if;
-                
-                -- Process received bytes
-                if spi_rx_valid = '1' then
-                    case spi_state is
-                        when IDLE =>
-                            case spi_rx_data is
-                                when x"01" =>
-                                    -- Read channel I/Q data
-                                    spi_state <= SEND_IQ;
-                                    spi_byte_cnt <= (others => '0');
-                                    spi_tx_data <= std_logic_vector(channel_i(0)(15 downto 8));
-                                    spi_tx_load <= '1';
-                                    
-                                when x"02" =>
-                                    -- Read status
-                                    spi_state <= SEND_STATUS;
-                                    spi_tx_data <= status_reg;
-                                    spi_tx_load <= '1';
-                                    
-                                when others =>
-                                    -- NOP or unknown
-                                    spi_tx_data <= x"00";
-                                    spi_tx_load <= '1';
-                            end case;
-                            
-                        when SEND_IQ =>
-                            spi_byte_cnt <= spi_byte_cnt + 1;
-                            
-                            -- Send 16 bytes: 4 channels × (2 bytes I + 2 bytes Q)
-                            -- Format: [I0_H][I0_L][Q0_H][Q0_L][I1_H][I1_L][Q1_H][Q1_L]...
-                            case to_integer(spi_byte_cnt) is
-                                -- Channel 0
-                                when 0  => spi_tx_data <= std_logic_vector(channel_i(0)(7 downto 0));
-                                when 1  => spi_tx_data <= std_logic_vector(channel_q(0)(15 downto 8));
-                                when 2  => spi_tx_data <= std_logic_vector(channel_q(0)(7 downto 0));
-                                -- Channel 1
-                                when 3  => spi_tx_data <= std_logic_vector(channel_i(1)(15 downto 8));
-                                when 4  => spi_tx_data <= std_logic_vector(channel_i(1)(7 downto 0));
-                                when 5  => spi_tx_data <= std_logic_vector(channel_q(1)(15 downto 8));
-                                when 6  => spi_tx_data <= std_logic_vector(channel_q(1)(7 downto 0));
-                                -- Channel 2
-                                when 7  => spi_tx_data <= std_logic_vector(channel_i(2)(15 downto 8));
-                                when 8  => spi_tx_data <= std_logic_vector(channel_i(2)(7 downto 0));
-                                when 9  => spi_tx_data <= std_logic_vector(channel_q(2)(15 downto 8));
-                                when 10 => spi_tx_data <= std_logic_vector(channel_q(2)(7 downto 0));
-                                -- Channel 3
-                                when 11 => spi_tx_data <= std_logic_vector(channel_i(3)(15 downto 8));
-                                when 12 => spi_tx_data <= std_logic_vector(channel_i(3)(7 downto 0));
-                                when 13 => spi_tx_data <= std_logic_vector(channel_q(3)(15 downto 8));
-                                when 14 => spi_tx_data <= std_logic_vector(channel_q(3)(7 downto 0));
-                                when 15 =>
-                                    spi_tx_data <= x"00";
-                                    spi_state <= IDLE;
-                                when others =>
-                                    spi_state <= IDLE;
-                            end case;
-                            spi_tx_load <= '1';
-                            
-                        when SEND_STATUS =>
-                            spi_state <= IDLE;
-                    end case;
-                end if;
-                
                 sclk_prev <= spi_sclk;
             end if;
-            
-            spi_miso <= spi_tx_shift(7);
         end if;
     end process;
+
+    -- Drive MISO directly from shift register (not registered)
+    spi_miso <= spi_tx_shift(7);
     
+	
+	
     ---------------------------------------------------------------------------
     -- Status Register
     ---------------------------------------------------------------------------
@@ -387,19 +465,25 @@ begin
     status_reg(7 downto 2) <= (others => '0');
     
     ---------------------------------------------------------------------------
-    -- Heartbeat LED
+    -- RGB LED Driver (required for iCE40UP5K pins 39/40/41)
     ---------------------------------------------------------------------------
-    process(clk_sys)
-    begin
-        if rising_edge(clk_sys) then
-            heartbeat_cnt <= heartbeat_cnt + 1;
-        end if;
-    end process;
-    
-    -- LED outputs (active low on EVN board)
-    led_red   <= not heartbeat_cnt(23);
-    led_green <= not chan_ready;
-    led_blue  <= not iq_valid;
+    u_rgb_drv : RGB
+        generic map (
+            CURRENT_MODE => "0",
+            RGB0_CURRENT => "0b000001",
+            RGB1_CURRENT => "0b000001",
+            RGB2_CURRENT => "0b000001"
+        )
+        port map (
+            CURREN   => '1',
+            RGBLEDEN => '1',
+            RGB0PWM  => heartbeat_cnt(23),
+            RGB1PWM  => chan_ready,
+            RGB2PWM  => iq_valid,
+            RGB0     => led_red,
+            RGB1     => led_green,
+            RGB2     => led_blue
+        );
     
     ---------------------------------------------------------------------------
     -- FPGA Done
