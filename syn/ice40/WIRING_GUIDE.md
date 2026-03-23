@@ -5,156 +5,232 @@
 | Item | Part Number | Approx Cost |
 |------|-------------|-------------|
 | FPGA Board | Lattice iCE40UP5K-B-EVN | ~$50 |
-| MCU Board | NUCLEO-H7B3ZI-Q | ~$70 |
+| MCU Board | NUCLEO-H753ZI | ~$70 |
 | Jumper wires | Female-Female Dupont | ~$5 |
 | USB cables | 2× Micro-USB | ~$5 |
 
 **Total: ~$130**
 
+---
+
+## Critical Notes Before You Start
+
+### FPGA Programming
+- The Zadig WinUSB driver for the iCE40 FTDI interface **reverts to FTDI on every USB reconnect** on Windows.
+- **Always run Zadig and verify WinUSB is set before programming the FPGA.**
+- Successful programming shows the Micron N25Q32 flash chip identified and a progress bar:
+  ```
+  JEDEC ID: 0x20ba16
+  Detected: micron N25Q32 64 sectors size: 32Mb
+  Erasing: [==================================================] 100.00%
+  Writing: [==================================================] 100.00%
+  Done
+  Wait for CDONE DONE
+  ```
+- If you see `Jedec ID: ff` with no progress bar, the driver has reverted. Run Zadig again.
+
+### STM32 Must Be Disconnected When Programming FPGA
+- The SPI lines between the STM32 and FPGA boards share signals with the FPGA's flash programming interface.
+- **Disconnect the STM32 board (unplug USB) before running openFPGALoader.**
+- Reconnect after programming is complete.
+
+### Verify Programming with MD5
+After programming, verify the flash contents match the bitstream:
+```bash
+openFPGALoader -b ice40_generic --dump-flash --file-size 104156 readback.bin
+md5sum sic_receiver_impl_1.bin
+md5sum readback.bin
+# Both hashes must match
+```
+
+---
+
 ## Pin Connections
 
 ### SPI Interface (Primary Data Path)
 
-| Signal | STM32 Pin | STM32 Function | iCE40 EVN Pin | iCE40 Ball |
-|--------|-----------|----------------|---------------|------------|
-| SCLK | PE12 | SPI4_SCK | J52.15 | 15 |
-| MISO | PE13 | SPI4_MISO | J52.14 | 14 |
-| MOSI | PE14 | SPI4_MOSI | J52.17 | 17 |
-| CS_N | PE11 | SPI4_NSS / GPIO | J52.16 | 16 |
+> ⚠️ **IMPORTANT:** MISO is NOT on J52. It is on **J3, pin labeled 22A**.
+> J52 pin 14 (labeled MISO) is the dedicated hardware SPI_SO pin and does not
+> function as a general-purpose GPIO output in our design.
+
+| Signal | STM32 Pin | STM32 Connector | iCE40 EVN Location | iCE40 Ball/Site |
+|--------|-----------|-----------------|-------------------|-----------------|
+| SCLK   | PE12      | CN12 pin 38     | J52, labeled SCK  | Site 15         |
+| **MISO** | **PE13** | **CN12 pin 40** | **J3, labeled 22A** | **Site 12**   |
+| MOSI   | PE14      | CN12 pin 42     | J52, labeled MOSI | Site 17         |
+| CS_N   | PE11      | CN12 pin 36     | J52, labeled SS   | Site 16         |
 
 ### Control Signals
 
-| Signal | STM32 Pin | Direction | iCE40 EVN Pin | iCE40 Ball |
-|--------|-----------|-----------|---------------|------------|
-| FPGA_RST_N | PD0 (or free GPIO) | STM32 to FPGA | J52.18 | 18 |
-| FPGA_DONE | PD1 (or free GPIO) | FPGA to STM32 | J52.19 | 19 |
+| Signal | STM32 Pin | STM32 Connector | iCE40 EVN Location | iCE40 Ball/Site |
+|--------|-----------|-----------------|-------------------|-----------------|
+| FPGA_RST_N | PD0  | CN11 (labeled PD0) | J3, labeled 18A | Site 18     |
+| FPGA_DONE  | PD1  | CN11 (labeled PD1) | J3, labeled 29B | Site 19     |
 
 ### Ground (CRITICAL)
 
 | Connection | Notes |
 |------------|-------|
-| STM32 GND | Connect to iCE40 EVN GND |
+| STM32 GND  | Connect to iCE40 EVN GND |
 | Use at least 2 ground wires | Signal integrity |
 
 ### Power
 
-Both boards are powered independently via their USB connectors. Do NOT connect 3.3V between boards unless you know what you're doing.
+Both boards are powered independently via their USB connectors. Do NOT connect 3.3V between boards.
+
+---
 
 ## Physical Wiring Diagram
 
 ```
-  NUCLEO-H7B3ZI-Q                    iCE40UP5K-B-EVN
-  ================                    ===============
-  
-  CN10 (Morpho Left)                 J52 (PMOD/GPIO)
-  ┌─────────────────┐                ┌─────────────────┐
-  │                 │                │                 │
-  │  PE11 (SPI4_NSS)├───────────────►│ Pin 16 (CS_N)   │
-  │  PE12 (SPI4_SCK)├───────────────►│ Pin 15 (SCLK)   │
-  │  PE13 (SPI4_MISO)◄───────────────┤ Pin 14 (MISO)   │
-  │  PE14 (SPI4_MOSI)├──────────────►│ Pin 17 (MOSI)   │
-  │                 │                │                 │
-  │  PD0 (GPIO)     ├───────────────►│ Pin 18 (RST_N)  │
-  │  PD1 (GPIO)     ◄────────────────┤ Pin 19 (DONE)   │
-  │                 │                │                 │
+  NUCLEO-H753ZI                      iCE40UP5K-B-EVN
+  =============                      ===============
+
+  CN12 (Morpho Right)
+  ┌─────────────────┐                J52 Header
+  │                 │                ┌─────────────────┐
+  │  PE11 (CS_N)    ├───────────────►│ SS  (site 16)   │
+  │  PE12 (SCK)     ├───────────────►│ SCK (site 15)   │
+  │  PE14 (MOSI)    ├───────────────►│ MOSI(site 17)   │
+  │                 │                └─────────────────┘
+  └─────────────────┘
+                                      J3 Header
+  CN12 (Morpho Right)                ┌─────────────────┐
+  ┌─────────────────┐                │                 │
+  │  PE13 (MISO)    ◄────────────────┤ 22A (site 12)   │◄── MISO HERE
+  └─────────────────┘                │                 │
+                                     └─────────────────┘
+  CN11
+  ┌─────────────────┐                J3 Header
+  │  PD0 (RST_N)    ├───────────────►│ 18A (site 18)   │
+  │  PD1 (DONE)     ◄────────────────┤ 29B (site 19)   │
   │  GND            ├───────────────►│ GND             │
   │  GND            ├───────────────►│ GND             │
-  │                 │                │                 │
   └─────────────────┘                └─────────────────┘
 ```
 
-## STM32CubeMX Configuration
+---
 
-### SPI4 Settings
+## FPGA Programming Command
 
-1. Open STM32CubeMX or STM32CubeIDE
-2. Enable SPI4 in **Full-Duplex Master** mode
-3. Configure:
-   - Prescaler: Adjust for ~10 MHz (APB2 / prescaler)
-   - CPOL: Low (idle low)
-   - CPHA: 1 Edge (sample on rising edge)
-   - Data Size: 8 Bits
-   - MSB First
-   - NSS: Software (we control CS via GPIO)
+```bash
+# Always run Zadig first to set WinUSB on Interface 0 of the FTDI device
+# Then, with STM32 board DISCONNECTED:
 
-### GPIO Settings
+openFPGALoader -b ice40_generic -f --unprotect-flash \
+  /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+```
 
-| Pin | Mode | Pull | Speed | Label |
-|-----|------|------|-------|-------|
-| PE11 | GPIO_Output | None | High | FPGA_CS_N |
-| PD0 | GPIO_Output | None | Low | FPGA_RST_N |
-| PD1 | GPIO_Input | Pull-Up | - | FPGA_DONE |
+---
 
-### Clock Configuration
+## STM32CubeMX / spi.c Configuration
 
-- Use HSE with the Nucleo's 8 MHz crystal
-- Configure PLL for 280 MHz system clock (or as needed)
-- SPI4 is on APB2; ensure reasonable clock divider
+### SPI4 Settings (in spi.c)
+
+```c
+hspi4.Init.Mode = SPI_MODE_MASTER;
+hspi4.Init.Direction = SPI_DIRECTION_2LINES;
+hspi4.Init.DataSize = SPI_DATASIZE_8BIT;
+hspi4.Init.CLKPolarity = SPI_POLARITY_LOW;       // CPOL=0, idle low
+hspi4.Init.CLKPhase = SPI_PHASE_1EDGE;            // CPHA=0, sample on rising
+hspi4.Init.NSS = SPI_NSS_SOFT;
+hspi4.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;  // ~1 MHz (safe for FPGA 12 MHz)
+hspi4.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;     // No CS pulse between bytes
+```
+
+### GPIO Settings (in gpio.c)
+
+| Pin | Mode | Pull | Label |
+|-----|------|------|-------|
+| PE11 | GPIO_Output | NOPULL | FPGA_CS_N |
+| PD0  | GPIO_Output | NOPULL | FPGA_RST_N |
+| PD1  | GPIO_Input  | PULLDOWN | FPGA_DONE |
+
+> Note: PD0 and PD1 are on **CN11**, not CN10 as originally documented.
+> They are labeled PD0 and PD1 on the Nucleo silkscreen.
+
+### SPI4 GPIO Alternate Function (in spi.c HAL_SPI_MspInit)
+
+```c
+// PE12 = SPI4_SCK, PE13 = SPI4_MISO, PE14 = SPI4_MOSI
+// Alternate function: GPIO_AF5_SPI4
+GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14;
+GPIO_InitStruct.Alternate = GPIO_AF5_SPI4;
+```
+
+---
 
 ## iCE40 EVN Board Notes
 
-1. **J52 Header**: This is the main GPIO/PMOD header. Pin numbering matches ball numbers in the PCF file.
+1. **J52 Header**: Carries SS, SCK, MOSI signals. Pin labeled MISO on J52 is the
+   dedicated hardware SPI slave output (IOB_32A_SPI_SO, site 14) and does NOT
+   work as a regular GPIO output in Radiant synthesis. Use J3 pin 22A instead.
 
-2. **Power**: The EVN board runs at 3.3V I/O by default, which matches STM32H7.
+2. **J3 Header**: Bank 0 GPIO header. Contains MISO (22A, site 12), RST (18A, site 18),
+   and DONE (29B, site 19).
 
-3. **12 MHz Clock**: The EVN has a 12 MHz oscillator. Our design uses this directly (no PLL for initial testing).
+3. **J6 Jumpers**: Must be in **horizontal** position for flash boot. This is the
+   default for normal operation.
 
-4. **RGB LED**: Used for status indication (might work, might not work, let's try it)
-   - Red: Heartbeat (0.7 Hz blink)
-   - Green: Channelizer ready
-   - Blue: Data valid pulses
+4. **Power**: The EVN board runs at 3.3V I/O.
 
-## Testing Procedure
+5. **12 MHz Clock**: Connected via J51 jumper (must be installed).
 
-### Step 1: Program the FPGA
+6. **RGB LED Status**:
+   - Red (slow blink ~0.7 Hz): Heartbeat, FPGA running
+   - Green (steady): `chan_ready` high, channelizer running
+   - Blue: `iq_valid` signal
 
-```bash
-cd syn/ice40
-make prog
+---
+
+## Power-Up Sequence
+
+1. Unplug both boards
+2. Plug in iCE40 board first
+3. Verify RGB LED shows green/blue (channelizer running)
+4. Plug in Nucleo board
+5. Open serial terminal at 115200 baud
+6. Press RESET on Nucleo
+
+Expected serial output:
+```
+=== SIC Receiver Starting ===
+Waiting for FPGA...
+SIC Receiver initialized
+RAW: xx xx xx xx ...
+CH0: I= XXXX Q= XXXX  Mag= XXXX  (-XX.X dB)
 ```
 
-### Step 2: Program the STM32
+---
 
-1. Open the project in STM32CubeIDE
-2. Build and flash to the Nucleo board
-3. Connect a serial terminal to the ST-Link VCP (115200 baud)
-
-### Step 3: Verify Communication
-
-1. Press reset on STM32
-2. Should see "SIC Init OK" on terminal
-3. RGB LED on iCE40 should show:
-   - Red blinking (heartbeat)
-   - Green on (ready)
-
-### Step 4: View Spectrum Data
-
-The STM32 will print channel magnitudes over the serial port!
-
-```
-CH[0]=12345 CH[1]=  234 CH[2]=  567 CH[3]=  890  Peak=CH0 (-12.3 dB)
-```
-
-## Troubleshooting (anticipated and encountered)
+## Troubleshooting
 
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
-| No LED activity on iCE40 | Not programmed | Run `make prog` |
-| "FPGA not ready" on STM32 | RST_N stuck low | Check wiring |
-| All zeros from SPI | CS not toggling | Verify PE11 config |
-| Garbage data | Clock/phase mismatch | Check SPI settings |
-| Intermittent errors | Ground bounce | Add more GND wires |
+| openFPGALoader shows `ff` JEDEC ID | Zadig driver reverted to FTDI | Run Zadig, set WinUSB on Interface 0 |
+| openFPGALoader shows `ff` with WinUSB set | STM32 board is connected | Disconnect STM32 before programming FPGA |
+| "FPGA not responding" | PD1 not connected or FPGA not programmed | Check J3 29B wire and FPGA programming |
+| All zeros from SPI | MISO wire on wrong pin | Move MISO wire to J3 pin 22A |
+| `0x0F` repeating | MISO floating high (pullup), not driven | Check MISO wire connection |
+| 1-bit offset in data (`0x4B` instead of `0xA5`) | SPI clock phase alignment issue | Under investigation |
+| Three red blinks on Nucleo | ST-LINK low power mode warning | Normal behavior, ignore |
+| Firmware crashes (rapid red blink) | HAL_SPI_Init fails | Check DataSize = 8BIT in spi.c |
 
-## Next Steps
+---
 
-Once basic SPI communication is verified:
+## Known Issues / Under Investigation
 
-1. **Add I2S input**: Connect an I2S ADC or use the test pattern generator
-2. **Real RF testing**: Feed actual RF through SDR dongle to I2S to FPGA
-3. **Port to Martin's PCB**: Once validated, build the proper hardware
+- **1-bit SPI alignment**: Received bytes appear to be `0xA5` shifted right by 1
+  (`0x4B`). The STM32 appears to miss the first MISO bit. Root cause not yet
+  confirmed — scope investigation of MISO behavior at CS falling edge is needed.
+  Workaround: none yet; real channelizer data still flows but byte values are shifted.
+
+---
 
 ## References
 
 - [iCE40UP5K-B-EVN User Guide](https://www.latticesemi.com/products/developmentboardsandkits/ice40ultraplusbreakoutboard)
-- [NUCLEO-H7B3ZI User Manual](https://www.st.com/resource/en/user_manual/um2616-stm32h7b3zi-nucleo144-board-stmicroelectronics.pdf)
+- [NUCLEO-H753ZI User Manual](https://www.st.com/resource/en/user_manual/um2616-stm32h7b3zi-nucleo144-board-stmicroelectronics.pdf)
 - [Martin Ling's dynamic-transponder schematic](https://github.com/martinling/dynamic-transponder)
+- [openFPGALoader](https://trabucayre.github.io/openFPGALoader/)
+- [Zadig USB driver tool](https://zadig.akeo.ie/)
