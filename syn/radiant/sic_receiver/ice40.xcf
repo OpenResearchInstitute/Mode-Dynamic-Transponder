@@ -1,0 +1,24 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<ispXCF version="R2025.2">
+    <Chain>
+        <Comm>SPI</Comm>
+        <Device>
+            <SelectedProg value="TRUE"/>
+            <Pos>1</Pos>
+            <Vendor>Lattice</Vendor>
+            <Family>iCE40 UltraPlus</Family>
+            <Name>iCE40UP5K</Name>
+            <Package>SG48</Package>
+            <File>C:/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin</File>
+            <FileType>BIN</FileType>
+            <Operation>Fast Program</Operation>
+            <Option>
+                <AccessMode>Direct Programming</AccessMode>
+            </Option>
+        </Device>
+    </Chain>
+    <CableOptions>
+        <CableName>USB2</CableName>
+        <PortAdd>FTUSB-0</PortAdd>
+    </CableOptions>
+</ispXCF>
