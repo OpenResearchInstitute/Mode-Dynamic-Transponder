@@ -1,0 +1,18 @@
+# Build outputs
+Debug/
+Release/
+*.o
+*.d
+*.elf
+*.bin
+*.map
+*.list
+*.su
+*.cyclo
+*.dbo
+*.lnp
+
+# STM32CubeIDE generated (safe to exclude, regenerated from .ioc)
+.settings/
+
+# Keep Drivers/ in the repo for self-contained build
