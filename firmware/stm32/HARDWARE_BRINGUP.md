@@ -1,14 +1,21 @@
 # Hardware Bringup Checklist
 
 Step-by-step checklist for bringing up the SIC receiver prototype hardware.
+**Read `syn/ice40/WIRING_GUIDE.md` before starting** — it has critical notes
+about pin locations and the FPGA programming workflow.
 
 ## Required Hardware
 
 - [ ] Lattice iCE40UP5K-B-EVN evaluation board (~$50)
-- [ ] STM32 NUCLEO-H7B3ZI-Q board (~$70)
-- [ ] 6× female-female jumper wires
-- [ ] 2× USB cables (one for each board)
-- [ ] Serial terminal software (screen, CoolTerm, etc.)
+- [ ] STM32 NUCLEO-H753ZI board (~$70)
+- [ ] 8× female-female jumper wires (6 signal + 2 ground)
+- [ ] 2× Micro-USB cables (one for each board)
+- [ ] Windows PC with Lattice Radiant installed
+- [ ] MSYS2 with openFPGALoader installed (see TOOLCHAIN_SETUP.md)
+- [ ] Zadig USB driver tool (https://zadig.akeo.ie/)
+- [ ] Serial terminal software (PuTTY, CoolTerm, screen)
+
+---
 
 ## Phase 1: FPGA Board Only
 
@@ -17,25 +24,68 @@ Step-by-step checklist for bringing up the SIC receiver prototype hardware.
 ### 1.1 Initial Power-Up
 - [ ] Connect USB to iCE40 board (J6 USB connector)
 - [ ] Verify power LED illuminates
-- [ ] Board should enumerate as USB device
+- [ ] Board enumerates as USB device in Windows Device Manager
 
-### 1.2 Program the FPGA
+### 1.2 Set Up Zadig USB Driver
+- [ ] Open Zadig
+- [ ] Options → List All Devices
+- [ ] Select **"USB Serial Converter A"** (Interface 0)
+- [ ] Verify right side shows **WinUSB** — if not, click **Replace Driver**
+
+> ⚠️ Windows reverts the FTDI driver to default on every USB reconnect.
+> You must rerun Zadig every time you reconnect the iCE40 board.
+
+### 1.3 Build Bitstream in Radiant
+- [ ] Open `syn/radiant/sic_receiver/sic_receiver.rdf` in Lattice Radiant
+- [ ] Click the green Run button to synthesize, place & route, and export
+- [ ] Wait for "Bitstream authenticated" in the log
+- [ ] Verify no errors (warnings are OK)
+
+### 1.4 Program the FPGA
+- [ ] **Disconnect STM32 board** (SPI lines interfere with flash programming)
+- [ ] Open **MSYS2 UCRT64** from Start Menu
+- [ ] Run:
+
 ```bash
-cd Mode-Dynamic-Transponder/syn/ice40
-make prog
+openFPGALoader -b ice40_generic -f --unprotect-flash \
+  /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 ```
-- [ ] Programming completes without error
-- [ ] Red LED starts blinking (~1 Hz heartbeat)
-- [ ] Green LED turns on (channelizer ready)
 
-### 1.3 Verify Build Report
+If you get `ff` JEDEC ID with no progress bar, try `--cable-index 1`:
+
 ```bash
-make report
+openFPGALoader -b ice40_generic --cable-index 1 -f --unprotect-flash \
+  /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 ```
-- [ ] LUT usage ~87%
-- [ ] Timing shows ✓ PASS
 
-**Phase 1 Pass Criteria:** Red LED blinking, green LED solid on.
+**Successful programming output:**
+```
+JEDEC ID: 0x20ba16
+Detected: micron N25Q32 64 sectors size: 32Mb
+Erasing: [==================================================] 100.00%
+Done
+Writing: [==================================================] 100.00%
+Done
+Wait for CDONE DONE
+```
+
+- [ ] Erasing and Writing progress bars appear ✓
+- [ ] "Wait for CDONE DONE" at the end ✓
+
+### 1.5 Verify MD5 (Optional but Recommended)
+```bash
+openFPGALoader -b ice40_generic --dump-flash --file-size 104156 readback.bin
+md5sum /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+md5sum readback.bin
+# Both hashes must match
+```
+
+### 1.6 Power Cycle and Verify LEDs
+- [ ] Unplug and replug iCE40 USB (cold boot loads new bitstream)
+- [ ] RGB LED cycles green/blue (channelizer running)
+- [ ] Red LED blinks at ~0.7 Hz (heartbeat)
+
+**Phase 1 Pass Criteria:** RGB LED shows green/blue cycling, red blinks.
 
 ---
 
@@ -43,36 +93,23 @@ make report
 
 **Goal:** Verify STM32 board works and serial output functions.
 
-### 2.1 Initial Power-Up
-- [ ] Connect USB to Nucleo board (CN1 ST-Link connector)
-- [ ] Board power LED illuminates
-- [ ] ST-Link LED blinks then goes solid
+### 2.1 Open the Firmware Project
+- [ ] Open STM32CubeIDE
+- [ ] **File → Import → General → Existing Projects into Workspace**
+- [ ] Browse to `firmware/stm32/sic_receiver/`
+- [ ] Uncheck "Copy projects into workspace"
+- [ ] Click Finish
 
-### 2.2 Find Serial Port
-```bash
-ls /dev/cu.usbmodem*
-```
-- [ ] Serial port appears (e.g., `/dev/cu.usbmodem14203`)
+### 2.2 Build and Flash
+- [ ] **Project → Clean**
+- [ ] **Project → Build** — verify no errors
+- [ ] Connect Nucleo USB (CN1 ST-Link connector)
+- [ ] **Run → Run** to flash
 
-### 2.3 Create and Flash Test Project
+### 2.3 Open Serial Terminal
+Connect at **115200 baud** to the ST-Link virtual COM port.
 
-Follow `firmware/stm32/STM32_SETUP_GUIDE.md` Parts 1-7.
-
-- [ ] STM32CubeIDE installed
-- [ ] Project created for NUCLEO-H7B3ZI-Q
-- [ ] SPI4 configured
-- [ ] GPIOs configured (PE11=CS, PD0=RST, PD1=DONE)
-- [ ] USART3 configured (115200 baud)
-- [ ] Driver files added (`sic_fpga.c`, `sic_fpga.h`)
-- [ ] Main loop code added
-- [ ] Project builds without errors
-- [ ] Flash succeeds
-
-### 2.4 Serial Output Test
-```bash
-screen /dev/cu.usbmodem14203 115200
-```
-Press RESET button on Nucleo. You should see:
+Press RESET on Nucleo. You should see:
 ```
 === SIC Receiver Starting ===
 Waiting for FPGA...
@@ -82,9 +119,9 @@ SIC Receiver initialized
 SPI read error: 3
 ```
 - [ ] Serial output appears
-- [ ] "SPI read error" is expected (FPGA not connected yet)
+- [ ] "SPI read error" is expected — FPGA not connected yet
 
-**Phase 2 Pass Criteria:** Serial output visible, errors are expected.
+**Phase 2 Pass Criteria:** Serial output visible, errors expected.
 
 ---
 
@@ -97,108 +134,107 @@ SPI read error: 3
 
 ### 3.2 Wire Connections
 
-Refer to `syn/ice40/WIRING_GUIDE.md` for exact pin locations.
+> ⚠️ MISO is on **J3 pin 22A**, NOT on J52 pin labeled "MISO".
+> J52 MISO (site 14) is a dedicated hardware SPI pin that does not
+> function as GPIO output in Radiant. Use J3 22A (site 12).
 
-| Signal | STM32 Pin | iCE40 EVN Pin | Wire Color (suggested) |
-|--------|-----------|---------------|------------------------|
-| CS     | PE11      | 16            | White                  |
-| SCK    | PE12      | 15            | Yellow                 |
-| MISO   | PE13      | 14            | Orange                 |
-| MOSI   | PE14      | 17            | Blue                   |
-| RST    | PD0       | 18            | Green                  |
-| DONE   | PD1       | 19            | Purple                 |
-| GND    | GND       | GND           | Black                  |
-| GND    | GND       | GND           | Black                  |
+| Signal | STM32 Pin | STM32 Connector | iCE40 EVN Location | Notes |
+|--------|-----------|-----------------|-------------------|-------|
+| CS | PE11 | CN12 | J52 labeled SS | Active low |
+| SCK | PE12 | CN12 | J52 labeled SCK | |
+| **MISO** | **PE13** | **CN12** | **J3 pin 22A** | **NOT J52 MISO!** |
+| MOSI | PE14 | CN12 | J52 labeled MOSI | |
+| RST | PD0 | CN11 | J3 pin 18A | |
+| DONE | PD1 | CN11 | J3 pin 29B | |
+| GND | GND | CN11 | GND | |
+| GND | GND | CN11 | GND | Use 2 wires |
 
 - [ ] All 6 signal wires connected
 - [ ] 2 GND wires connected (important for signal integrity!)
+- [ ] MISO wire is on **J3 pin 22A** (not J52)
 - [ ] Double-check no wires are swapped
-- [ ] No bare wire touching adjacent pins
 
 ### 3.3 Power Up Sequence
 1. [ ] Plug in FPGA board first
-2. [ ] Verify red LED blinking, green LED on
+2. [ ] Verify RGB LED shows green/blue cycling
 3. [ ] Plug in Nucleo board
-4. [ ] Open serial terminal
+4. [ ] Open serial terminal at 115200 baud
 
 ### 3.4 Verify Communication
 Press RESET on Nucleo. You should see:
 ```
 === SIC Receiver Starting ===
-FPGA ready!
+Waiting for FPGA...
 SIC Receiver initialized
-
-SIC Channels @ 100 ms:
-  CH0: I=  1234 Q=  -567  Mag= 1358 (-11.5 dB) [PEAK]
-  CH1: I=   456 Q=   234  Mag=  512 (-19.0 dB)
-  CH2: I=  -890 Q=   123  Mag=  898 (-15.1 dB)
-  CH3: I=   100 Q=   -50  Mag=  111 (-24.3 dB)
+---
+RAW: 00 00 AF 00 00 FF B7 FF AD 00 09 00 00 FF B7 00 52
+CH0: I=   175 Q=     0  Mag=  175  (-50.0 dB) [PEAK]
+CH1: I=   -73 Q=   -83  Mag=  119  (-50.0 dB)
+CH2: I=     9 Q=     0  Mag=    9  (-50.0 dB)
+CH3: I=   -73 Q=    82  Mag=  118  (-50.0 dB)
+---
 ```
-- [ ] "FPGA ready!" message appears
-- [ ] Channel data streaming (values will differ)
-- [ ] All 4 channels show non-zero I values
-- [ ] Q values are non-zero (full I/Q working)
-- [ ] One channel marked `[PEAK]`
 
-**Phase 3 Pass Criteria:** Channel data streaming with I and Q values.
+- [ ] Channel data streaming ✓
+- [ ] All 4 channels show data ✓
+- [ ] CH1 and CH3 show non-zero Q values ✓
+- [ ] One channel marked [PEAK] ✓
+
+> Note: CH0 Q is always 0. This is a known limitation — the channelizer
+> currently processes only the real part of the input. Complex I/Q
+> channelizer processing is the next development milestone.
+
+**Phase 3 Pass Criteria:** All 4 channels streaming data.
 
 ---
 
 ## Phase 4: Functional Tests
 
-**Goal:** Verify the channelizer is processing signals correctly.
-
-### 4.1 Test Pattern Verification
-
-The FPGA generates a test pattern (incrementing counter). Observe:
-- [ ] Channel values change over time
-- [ ] Values follow a pattern (wrapping around)
-
-### 4.2 Reset Test
+### 4.1 Reset Test
 - [ ] Press RESET on Nucleo
-- [ ] Verify "FPGA ready!" appears quickly (<1 sec)
-- [ ] Data streaming resumes
+- [ ] Data streaming resumes within 1 second
+- [ ] All 4 channels present
 
-### 4.3 Power Cycle Test
+### 4.2 Power Cycle Test
 - [ ] Unplug both USB cables
 - [ ] Reconnect FPGA first, then Nucleo
 - [ ] Verify everything comes up correctly
 
-### 4.4 SPI Speed Test (Optional)
-
-Edit `sic_fpga.h` to try different SPI speeds:
-```c
-#define SIC_SPI_CLOCK_HZ  20000000  // Try 20 MHz
+### 4.3 Verify FPGA Bitstream Integrity
+After any FPGA programming, verify the flash contents match:
+```bash
+openFPGALoader -b ice40_generic --dump-flash --file-size 104156 readback.bin
+md5sum sic_receiver_impl_1.bin
+md5sum readback.bin
 ```
-- [ ] Rebuild and flash
-- [ ] Verify data still correct at higher speed
 
 ---
 
-## Troubleshooting Quick Reference
+## Troubleshooting
 
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
-| No red LED blink | FPGA not programmed | Run `make prog` |
-| "FPGA not responding" | Wiring issue | Check RST/DONE wires |
-| "SPI read error" | SPI wiring issue | Check SCK/MISO/MOSI/CS |
-| All zeros | SPI polarity wrong | Check CPOL/CPHA in CubeIDE |
-| Garbage data | Baud rate wrong | Verify 115200 |
-| Q always zero | Old FPGA bitstream | Reprogram FPGA |
+| `ff` JEDEC ID, no progress bar | Zadig driver reverted | Rerun Zadig, set WinUSB on Interface 0 |
+| `ff` JEDEC ID with WinUSB set | STM32 board connected | Disconnect STM32 before programming FPGA |
+| `ff` JEDEC ID, try cable index | Cable index mismatch | Try `--cable-index 1` or `--cable-index 0` |
+| CDONE FAIL after programming | Synthesis error in bitstream | Check Radiant log for errors, rebuild |
+| No RGB LED activity | FPGA not booted | Power cycle iCE40 board after programming |
+| All zeros from SPI | MISO wire on wrong pin | Move MISO wire to J3 pin 22A |
+| `0x0F` repeating | MISO floating high | Check MISO wire connection to J3 22A |
+| "FPGA not responding" | DONE wire issue | Check J3 pin 29B to PD1 |
+| STM32 red LED rapid blink | Firmware crash | Check DataSize=8BIT in spi.c |
+| Q always zero for all channels | Known limitation | Complex I/Q channelizer not yet implemented |
 
 ---
 
 ## Success Checklist
 
-When everything works:
-
-- [ ] FPGA red LED blinking (heartbeat)
-- [ ] FPGA green LED on (channelizer ready)
-- [ ] Serial shows "FPGA ready!"
-- [ ] All 4 channels have I and Q data
-- [ ] Magnitudes computed correctly
-- [ ] Peak channel identified
+- [ ] FPGA RGB LED: red blinks (~0.7 Hz), green/blue cycling
+- [ ] Serial shows 4 channels of data streaming
+- [ ] CH1 and CH3 show non-zero Q values
+- [ ] Peak channel identified correctly
 - [ ] System survives reset and power cycle
+- [ ] MD5 verified after FPGA programming
 
 🎉 **Congratulations!** The SIC receiver prototype is operational.
 
@@ -206,32 +242,20 @@ When everything works:
 
 ## Next Steps After Bringup
 
-1. **Connect real I2S ADC** — Replace test pattern with actual signal
-2. **Test with RF input** — Inject test signal, verify channel separation
-3. **Implement SIC algorithm** — Add interference cancellation logic
-4. **Optimize** — Profile performance, tune SPI timing
-5. **Document** — Record any lessons learned
+1. **Complex I/Q channelizer** — Update polyphase_channelizer_top.vhd to process sample_im
+2. **Connect real I2S ADC** — Replace test pattern with TLV320ADC6120 input
+3. **Implement SIC algorithm** — Peak detection, reconstruction, subtraction on STM32
+4. **RF testing** — Inject test signal, verify channel separation
 
 ---
 
+## Hardware Versions
+
+- iCE40UP5K-B-EVN rev: ______
+- NUCLEO-H753ZI rev: ______
+- Radiant version: 2025.2
+- Bringup date: ____________
+
 ## Notes / Observations
 
-*(Use this space to record anything unexpected during bringup)*
-
-Date: ____________
-
-Hardware versions:
-- iCE40UP5K-B-EVN rev: ______
-- NUCLEO-H7B3ZI-Q rev: ______
-
-Notes:
-
-on 21 March 2026, we found that Radiant flatly wouldn't program the FPGA on windows. 
-
-So we have to use MSYS32, which opens what looks like a linux-ish console in windows, and let's us command line a programming session.
-
-'''
-openFPGALoader -b ice40_generic -f --unprotect-flash /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
-'''
-
-The above command worked to program the FPGA. You have to have the J6 Jumpers in horizontal mode for this to work. It resets itself, but if that doesn't work then a reset *may* be necessary to get the device to work. The FPGA has to be running before the STM in order for things to work, as of today. 
+*(Record anything unexpected during bringup)*
