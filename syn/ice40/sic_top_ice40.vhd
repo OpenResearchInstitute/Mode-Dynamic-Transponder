@@ -26,7 +26,7 @@
 --
 --   Command byte (from STM32):
 --     0x00 - NOP
---     0x01 - Read channel I/Q data (4 channels 4 bytes = 16 bytes)
+--     0x01 - Read channel I/Q data (4 channels x 4 bytes = 16 bytes)
 --     0x02 - Read status register
 --     0x10 - Write config register
 --     0x80 - Reset
@@ -39,14 +39,29 @@
 --   Magnitude computation is done on the STM32 (FPU is faster than FPGA LUTs).
 --
 -------------------------------------------------------------------------------
--- PIN MAPPING (see sic_top.pcf)
+-- SPI TIMING
 -------------------------------------------------------------------------------
---   clk_12m      - 12 MHz oscillator input
---   spi_*        - SPI interface to STM32
---   adc_i2s_*    - I2S ADC input
---   led_*        - Status LEDs
---   fpga_rst_n   - Active-low reset from STM32
---   fpga_done    - Configuration done signal
+-- SPI Mode 0: CPOL=0 (idle low), CPHA=0 (sample on rising edge)
+-- FPGA shifts MISO on falling edge of SCLK
+-- STM32 samples MISO on rising edge of SCLK
+--
+-- All SPI input signals (spi_sclk, spi_cs_n, spi_mosi) pass through a
+-- 2-stage synchronizer before use. This prevents metastability when
+-- asynchronous inputs cross into the 12 MHz clk_sys domain.
+-- At 12 MHz FPGA clock / 1 MHz SPI clock = 12x oversampling, well above
+-- the minimum 2x required for reliable synchronization.
+--
+-------------------------------------------------------------------------------
+-- PIN MAPPING (see sic_top.pdc)
+-------------------------------------------------------------------------------
+--   clk_12m      - 12 MHz oscillator input (site 35)
+--   spi_cs_n     - SPI chip select, active low (site 16, J52 SS)
+--   spi_sclk     - SPI clock from STM32 (site 15, J52 SCK)
+--   spi_mosi     - SPI data STM32->FPGA (site 17, J52 MOSI)
+--   spi_miso     - SPI data FPGA->STM32 (site 12, J3 pin 22A)
+--   fpga_rst_n   - Active-low reset from STM32 (site 18, J3 pin 18A)
+--   fpga_done    - Configuration done signal (site 19, J3 pin 29B)
+--   led_*        - RGB LED outputs (sites 39/40/41)
 --
 -------------------------------------------------------------------------------
 
@@ -92,7 +107,7 @@ entity sic_top_ice40 is
         dac_i2s_ws      : out std_logic;    -- DAC_I2S_WS
         dac_i2s_data    : out std_logic;    -- DAC_I2S_DATA
         
-		------------------------------------------------------------------------
+        ------------------------------------------------------------------------
         -- RGB LED outputs (directly to pins 39/40/41)
         ------------------------------------------------------------------------
         led_red         : out std_logic;
@@ -150,24 +165,38 @@ architecture rtl of sic_top_ice40 is
     signal iq_valid         : std_logic;
     
     ---------------------------------------------------------------------------
+    -- SPI Input Synchronizers
+    -- 2-stage synchronizers prevent metastability on asynchronous SPI inputs.
+    -- All SPI logic uses the _sync signals, never the raw port signals.
+    ---------------------------------------------------------------------------
+    signal sclk_sync1       : std_logic := '0';
+    signal sclk_sync2       : std_logic := '0';
+    signal cs_n_sync1       : std_logic := '1';
+    signal cs_n_sync2       : std_logic := '1';
+    signal mosi_sync1       : std_logic := '0';
+    signal mosi_sync2       : std_logic := '0';
+
+    ---------------------------------------------------------------------------
     -- SPI Slave Signals
     ---------------------------------------------------------------------------
-    signal spi_rx_data      : std_logic_vector(7 downto 0);
-    signal spi_rx_valid     : std_logic;
-    signal spi_tx_data      : std_logic_vector(7 downto 0);
-    signal spi_tx_load      : std_logic;
-    
-    -- SPI state machine
+    -- SPI state machine (for full I/Q protocol - currently simplified test)
     type spi_state_t is (IDLE, SEND_IQ, SEND_STATUS);
     signal spi_state        : spi_state_t := IDLE;
-    signal spi_byte_cnt     : unsigned(4 downto 0) := (others => '0');  -- 5 bits for 0-16
-    
+    signal spi_byte_cnt     : unsigned(4 downto 0) := (others => '0');
+
     -- SPI shift registers
     signal sclk_prev        : std_logic := '0';
     signal spi_bit_cnt      : unsigned(2 downto 0) := (others => '0');
     signal spi_rx_shift     : std_logic_vector(7 downto 0) := (others => '0');
-    signal spi_tx_shift     : std_logic_vector(7 downto 0);
-	attribute syn_keep : boolean;
+    signal spi_tx_shift     : std_logic_vector(7 downto 0) := (others => '0');
+
+    -- Unused SPI signals (retained for future full protocol)
+    signal spi_rx_data      : std_logic_vector(7 downto 0);
+    signal spi_rx_valid     : std_logic;
+    signal spi_tx_data      : std_logic_vector(7 downto 0);
+    signal spi_tx_load      : std_logic;
+    signal spi_byte_cnt_rx  : unsigned(4 downto 0) := (others => '0');
+
     ---------------------------------------------------------------------------
     -- Status Register
     ---------------------------------------------------------------------------
@@ -179,34 +208,30 @@ architecture rtl of sic_top_ice40 is
     signal heartbeat_cnt    : unsigned(23 downto 0) := (others => '0');
 
     ---------------------------------------------------------------------------
-    -- iCE40 RGB Driver Primitive
+    -- Keep attribute for RGB driver primitive
     ---------------------------------------------------------------------------
---    component RGB is
---        generic (
---            CURRENT_MODE : string := "0b0";
---            RGB0_CURRENT : string := "0b000001";
---            RGB1_CURRENT : string := "0b000001";
---            RGB2_CURRENT : string := "0b000001"
---        );
---        port (
---            CURREN   : in  std_logic;
---            RGBLEDEN : in  std_logic;
---            RGB0PWM  : in  std_logic;
---            RGB1PWM  : in  std_logic;
---            RGB2PWM  : in  std_logic;
---            RGB0     : out std_logic;
---            RGB1     : out std_logic;
---            RGB2     : out std_logic
---        );
---    end component;
-
-
+    attribute syn_keep : boolean;
     attribute syn_keep of u_rgb_drv : label is true;
-
-
 
 begin
 
+    ---------------------------------------------------------------------------
+    -- Clock: Use 12 MHz directly
+    -- For higher performance, instantiate SB_PLL40_CORE
+    ---------------------------------------------------------------------------
+    clk_sys <= clk_12m;
+
+    ---------------------------------------------------------------------------
+    -- Reset Synchronizer
+    -- Initializes to '1' (in reset), shifts in '0' after 3 cycles
+    ---------------------------------------------------------------------------
+    process(clk_sys)
+    begin
+        if rising_edge(clk_sys) then
+            reset_sync <= reset_sync(1 downto 0) & '0';
+        end if;
+    end process;
+    reset <= reset_sync(2);
 
     ---------------------------------------------------------------------------
     -- Heartbeat Counter
@@ -219,25 +244,30 @@ begin
     end process;
 
     ---------------------------------------------------------------------------
-    -- Clock: Use 12 MHz directly for now
-    -- For higher performance, instantiate SB_PLL40_CORE
-    ---------------------------------------------------------------------------
-    clk_sys <= clk_12m;
-    
-    ---------------------------------------------------------------------------
-    -- Reset Synchronizer
+    -- SPI Input Synchronizers
+    -- 2-stage flip-flop synchronizers for all asynchronous SPI inputs.
+    -- Prevents metastability from async signals entering the clk_sys domain.
+    -- At 12 MHz / 1 MHz = 12x oversampling, MTBF is extremely high.
     ---------------------------------------------------------------------------
     process(clk_sys)
     begin
         if rising_edge(clk_sys) then
-		    reset_sync <= reset_sync(1 downto 0) & '0';  -- No external reset for now
-            --reset_sync <= reset_sync(1 downto 0) & (not fpga_rst_n);
+            -- SCLK synchronizer
+            sclk_sync1 <= spi_sclk;
+            sclk_sync2 <= sclk_sync1;
+            -- CS_N synchronizer
+            cs_n_sync1 <= spi_cs_n;
+            cs_n_sync2 <= cs_n_sync1;
+            -- MOSI synchronizer
+            mosi_sync1 <= spi_mosi;
+            mosi_sync2 <= mosi_sync1;
         end if;
     end process;
-    reset <= reset_sync(2);
-    
+
     ---------------------------------------------------------------------------
     -- I2S Receiver (test pattern generator for bring-up)
+    -- Generates a complex ramp: re = incrementing counter, im = inverted
+    -- Replace with real I2S receiver for production use
     ---------------------------------------------------------------------------
     process(clk_sys)
         variable sample_cnt : unsigned(15 downto 0) := (others => '0');
@@ -250,13 +280,10 @@ begin
                 i2s_sample_valid <= '0';
             else
                 i2s_sample_valid <= '0';
-                
-                -- Generate sample at ~40 kHz from 12 MHz clock
+                -- Generate sample at ~40 kHz from 12 MHz clock (div by 300)
                 if div_cnt = 299 then
                     div_cnt := (others => '0');
                     i2s_sample_valid <= '1';
-                    
-                    -- Test pattern: incrementing counter (real), inverted (imag)
                     i2s_sample_re <= std_logic_vector(sample_cnt);
                     i2s_sample_im <= std_logic_vector(not sample_cnt);
                     sample_cnt := sample_cnt + 1;
@@ -292,10 +319,7 @@ begin
     
     ---------------------------------------------------------------------------
     -- Extract I/Q from Channelizer Output
-    ---------------------------------------------------------------------------
-    -- The channelizer outputs complex data. We extract the upper 16 bits
-    -- of both real (I) and imaginary (Q) components for each channel.
-    -- Full magnitude computation is done on the STM32 (FPU is faster).
+    -- Upper 16 bits of each 36-bit accumulator output
     ---------------------------------------------------------------------------
     process(clk_sys)
     begin
@@ -303,160 +327,62 @@ begin
             iq_valid <= chan_valid;
             if chan_valid = '1' then
                 for i in 0 to N_CHANNELS - 1 loop
-                    -- Extract upper 16 bits of real part (I)
-                    channel_i(i) <= signed(chan_out((i * 2 + 1) * ACCUM_WIDTH - 1 
+                    channel_i(i) <= signed(chan_out((i * 2 + 1) * ACCUM_WIDTH - 1
                                                 downto (i * 2 + 1) * ACCUM_WIDTH - 16));
-                    -- Extract upper 16 bits of imaginary part (Q)
-                    channel_q(i) <= signed(chan_out((i * 2 + 2) * ACCUM_WIDTH - 1 
+                    channel_q(i) <= signed(chan_out((i * 2 + 2) * ACCUM_WIDTH - 1
                                                 downto (i * 2 + 2) * ACCUM_WIDTH - 16));
                 end loop;
             end if;
         end if;
     end process;
-    
+
     ---------------------------------------------------------------------------
-    -- SPI Slave (single unified process)
-    ---------------------------------------------------------------------------
---    process(clk_sys)
---    begin
---        if rising_edge(clk_sys) then
---            spi_rx_valid <= '0';
---            spi_tx_load <= '0';
---            
---            if reset = '1' or spi_cs_n = '1' then
---                -- Not selected or in reset
---                spi_bit_cnt <= (others => '0');
-                --spi_state <= IDLE;
-                --spi_byte_cnt <= (others => '0');
-                --sclk_prev <= '0';
-            --else
- ----                Rising edge of SCLK: sample MOSI
-                --if spi_sclk = '1' and sclk_prev = '0' then
-                    --spi_rx_shift <= spi_rx_shift(6 downto 0) & spi_mosi;
-                    --spi_bit_cnt <= spi_bit_cnt + 1;
-                    
-                    --if spi_bit_cnt = 7 then
-                        --spi_rx_data <= spi_rx_shift(6 downto 0) & spi_mosi;
-                        --spi_rx_valid <= '1';
-                        --spi_bit_cnt <= (others => '0');
-                    --end if;
-                --end if;
-                
- ----                Falling edge of SCLK: shift out MISO
-                --if spi_sclk = '0' and sclk_prev = '1' then
-                    --spi_tx_shift <= spi_tx_shift(6 downto 0) & '0';
-                --end if;
-                
-----                 Load new TX byte when requested
-                --if spi_tx_load = '1' then
-                    --spi_tx_shift <= spi_tx_data;
-                --end if;
-                
-----                 Process received bytes
-                --if spi_rx_valid = '1' then
-                    --case spi_state is
-                        --when IDLE =>
-                            --case spi_rx_data is
-                                --when x"01" =>
-----                                     Read channel I/Q data
-                                    --spi_state <= SEND_IQ;
-                                    --spi_byte_cnt <= (others => '0');
-                                    --spi_tx_data <= std_logic_vector(channel_i(0)(15 downto 8));
-                                    --spi_tx_load <= '1';
-                                    
-                                --when x"02" =>
-----                                     Read status
-                                    --spi_state <= SEND_STATUS;
-                                    --spi_tx_data <= status_reg;
-                                    --spi_tx_load <= '1';
-                                    
-                                --when others =>
-----                                     NOP or unknown
-                                    --spi_tx_data <= x"00";
-                                    --spi_tx_load <= '1';
-                            --end case;
-                            
-                        --when SEND_IQ =>
-                            --spi_byte_cnt <= spi_byte_cnt + 1;
-                            
- ----                            Send 16 bytes: 4 channels ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â (2 bytes I + 2 bytes Q)
- ----                            Format: [I0_H][I0_L][Q0_H][Q0_L][I1_H][I1_L][Q1_H][Q1_L]...
-                            --case to_integer(spi_byte_cnt) is
- ----                                Channel 0
-                                --when 0  => spi_tx_data <= std_logic_vector(channel_i(0)(7 downto 0));
-                                --when 1  => spi_tx_data <= std_logic_vector(channel_q(0)(15 downto 8));
-                                --when 2  => spi_tx_data <= std_logic_vector(channel_q(0)(7 downto 0));
- ----                                Channel 1
-                                --when 3  => spi_tx_data <= std_logic_vector(channel_i(1)(15 downto 8));
-                                --when 4  => spi_tx_data <= std_logic_vector(channel_i(1)(7 downto 0));
-                                --when 5  => spi_tx_data <= std_logic_vector(channel_q(1)(15 downto 8));
-                                --when 6  => spi_tx_data <= std_logic_vector(channel_q(1)(7 downto 0));
-----                                 Channel 2
-                                --when 7  => spi_tx_data <= std_logic_vector(channel_i(2)(15 downto 8));
-                                --when 8  => spi_tx_data <= std_logic_vector(channel_i(2)(7 downto 0));
-                                --when 9  => spi_tx_data <= std_logic_vector(channel_q(2)(15 downto 8));
-                                --when 10 => spi_tx_data <= std_logic_vector(channel_q(2)(7 downto 0));
-----                                 Channel 3
-                                --when 11 => spi_tx_data <= std_logic_vector(channel_i(3)(15 downto 8));
-                                --when 12 => spi_tx_data <= std_logic_vector(channel_i(3)(7 downto 0));
-                                --when 13 => spi_tx_data <= std_logic_vector(channel_q(3)(15 downto 8));
-                                --when 14 => spi_tx_data <= std_logic_vector(channel_q(3)(7 downto 0));
-                                --when 15 =>
-                                    --spi_tx_data <= x"00";
-                                    --spi_state <= IDLE;
-                                --when others =>
-                                    --spi_state <= IDLE;
-                            --end case;
-                            --spi_tx_load <= '1';
-                            
-                        --when SEND_STATUS =>
-                            --spi_state <= IDLE;
-                    --end case;
-                --end if;
-                
-                --sclk_prev <= spi_sclk;
-            --end if;
-            
-            --spi_miso <= spi_tx_shift(7);
-        --end if;
-    --end process;
-    
-	
-	
-	
-	
-	
-    ---------------------------------------------------------------------------
-    -- SPI Slave (SIMPLIFIED TEST - just echo back a counter)
+    -- SPI Slave - Simplified Test Pattern
+    --
+    -- Sends 0xA5 for every byte of every transfer.
+    -- Uses synchronized SPI inputs (sclk_sync2, cs_n_sync2, mosi_sync2).
+    --
+    -- SPI Mode 0: CPOL=0 (SCLK idle low), CPHA=0 (sample on rising edge)
+    -- MISO shifts out on falling edge of SCLK (changes after STM32 samples)
+    -- MISO is driven combinatorially from spi_tx_shift(7)
+    --
+    -- TODO: Replace with full I/Q protocol once test pattern verified clean
     ---------------------------------------------------------------------------
     process(clk_sys)
     begin
         if rising_edge(clk_sys) then
             if reset = '1' then
+                -- Synchronous reset: load test pattern, clear state
                 spi_tx_shift <= x"A5";
-                spi_bit_cnt <= (others => '0');
-                sclk_prev <= '0';
-            elsif spi_cs_n = '1' then
-                spi_bit_cnt <= (others => '0');
+                spi_bit_cnt  <= (others => '0');
+                sclk_prev    <= '0';
+            elsif cs_n_sync2 = '1' then
+                -- CS deasserted: reload test pattern for next transfer
                 spi_tx_shift <= x"A5";
+                spi_bit_cnt  <= (others => '0');
+                sclk_prev    <= '0';  -- Reset to SCLK idle state (CPOL=0)
             else
-                if spi_sclk = '0' and sclk_prev = '1' then
+                -- CS asserted: shift on falling edge of SCLK
+                if sclk_sync2 = '0' and sclk_prev = '1' then
                     spi_tx_shift <= spi_tx_shift(6 downto 0) & '1';
-                    spi_bit_cnt <= spi_bit_cnt + 1;
+                    spi_bit_cnt  <= spi_bit_cnt + 1;
+                    -- After 8 bits, reload 0xA5 for next byte
+                    -- Note: this assignment overrides the shift above (VHDL
+                    -- last-assignment-wins in synchronous process)
                     if spi_bit_cnt = 7 then
-                        spi_tx_shift <= x"A6";
+                        spi_tx_shift <= x"A5";
+                        spi_bit_cnt  <= (others => '0');
                     end if;
                 end if;
-                sclk_prev <= spi_sclk;
+                sclk_prev <= sclk_sync2;
             end if;
         end if;
     end process;
 
-    -- Drive MISO directly from shift register (not registered)
+    -- MISO driven combinatorially from MSB of shift register
+    -- Valid before first SCLK rising edge (0xA5 bit 7 = '1')
     spi_miso <= spi_tx_shift(7);
-    
-	
-	
+
     ---------------------------------------------------------------------------
     -- Status Register
     ---------------------------------------------------------------------------
@@ -502,7 +428,7 @@ begin
     ---------------------------------------------------------------------------
     pmod_1 <= chan_valid;
     pmod_2 <= iq_valid;
-    pmod_3 <= spi_cs_n;
-    pmod_4 <= spi_sclk;
+    pmod_3 <= cs_n_sync2;   -- Synchronized CS for debug
+    pmod_4 <= sclk_sync2;   -- Synchronized SCLK for debug
 
 end architecture rtl;
