@@ -1,5 +1,5 @@
 # Spotting Guide
-_What are these models about anyway?_
+_What are these documents and models about anyway?_
 ---
 
 The `polyphase_channelizer.ipynb` is the one you want to use for the FPGA design for successive interference cancellation. 
