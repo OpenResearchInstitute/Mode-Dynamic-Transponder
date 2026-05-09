@@ -393,7 +393,7 @@ begin
         -- Drive a quiet period (zeros) and confirm we get output frames
         -- (they should be all zero or near-zero from the initial state).
         feed_zeros(N_SAMP_TEST);
-        wait_frames(2);
+        wait_frames(1);
 
         snapshot_power(pwr);
         find_peak_bin(pwr, peak_bin, peak_pwr);
@@ -414,7 +414,7 @@ begin
         for i in 1 to N_SAMP_TEST loop
             feed_sample(integer(TONE_AMPLITUDE), 0);
         end loop;
-        wait_frames(2);
+        wait_frames(1);
 
         snapshot_power(pwr);
         find_peak_bin(pwr, peak_bin, peak_pwr);
@@ -432,7 +432,7 @@ begin
 
         -- Settle with zeros before next test
         feed_zeros(2 * N_CHANNELS);
-        wait_frames(2);
+        wait_frames(1);
 
         ---------------------------------------------------------------------
         -- Test 3: COMPLEX EXPONENTIAL AT BIN k
@@ -449,9 +449,9 @@ begin
                 severity note;
 
             feed_zeros(2 * N_CHANNELS);
-            wait_frames(2);
+            wait_frames(1);
             feed_complex_exp(real(expected_bin) / real(N_CHANNELS), N_SAMP_TEST);
-            wait_frames(2);
+            wait_frames(1);
 
             snapshot_power(pwr);
             find_peak_bin(pwr, peak_bin, peak_pwr);
@@ -477,9 +477,9 @@ begin
         report "--- Test 4: OFF-BIN TONE (k = 16.5) ---" severity note;
 
         feed_zeros(2 * N_CHANNELS);
-        wait_frames(2);
+        wait_frames(1);
         feed_complex_exp(16.5 / real(N_CHANNELS), N_SAMP_TEST);
-        wait_frames(2);
+        wait_frames(1);
 
         snapshot_power(pwr);
         find_peak_bin(pwr, peak_bin, peak_pwr);
@@ -506,9 +506,9 @@ begin
         report "--- Test 5: ADJACENT-CHANNEL REJECTION ---" severity note;
 
         feed_zeros(2 * N_CHANNELS);
-        wait_frames(2);
+        wait_frames(1);
         feed_complex_exp(16.0 / real(N_CHANNELS), N_SAMP_TEST);
-        wait_frames(2);
+        wait_frames(1);
 
         snapshot_power(pwr);
         find_peak_bin(pwr, peak_bin, peak_pwr);
@@ -546,11 +546,11 @@ begin
         report "--- Test 6: OPV-LIKE CARRIER IN BIN 16 ---" severity note;
 
         feed_zeros(2 * N_CHANNELS);
-        wait_frames(2);
+        wait_frames(1);
 
         -- Run for a longer duration to capture multiple output frames
         feed_complex_exp(16.0 / real(N_CHANNELS), 64 * N_CHANNELS);
-        wait_frames(2);
+        wait_frames(1);
 
         snapshot_power(pwr);
         find_peak_bin(pwr, peak_bin, peak_pwr);
