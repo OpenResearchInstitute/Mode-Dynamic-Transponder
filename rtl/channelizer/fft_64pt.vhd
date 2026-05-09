@@ -158,7 +158,21 @@ architecture rtl of fft_64pt is
     signal state : state_t := IDLE;
     
     -- Ping-pong buffers
-    signal buf_a, buf_b : sample_buffer_t;
+    --
+    -- IMPORTANT: explicitly initialize to zero. Without this default, both
+    -- buffers start as 'U' (uninitialized) in simulation. Combined with the
+    -- known pre-existing pipeline issues in this FFT (off-by-one between
+    -- read/write addresses; stage-transition spillover writing into the
+    -- wrong buffer), uninitialized cells in buf_b end up being read by
+    -- stage 1 and the resulting X propagates through subsequent stages,
+    -- contaminating most output bins after a few frames.
+    --
+    -- This default is a band-aid to make zero-input behaviour
+    -- well-defined. The pipeline alignment issues still need addressing
+    -- separately for non-zero inputs to produce correct results.
+    constant ZERO_COMPLEX : complex_t :=
+        (re => (others => '0'), im => (others => '0'));
+    signal buf_a, buf_b : sample_buffer_t := (others => ZERO_COMPLEX);
     signal use_buf_a    : std_logic := '1';  -- Which buffer is source
     
     -- Twiddle ROM
