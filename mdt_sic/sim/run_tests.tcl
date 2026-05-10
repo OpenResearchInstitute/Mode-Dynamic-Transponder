@@ -30,7 +30,7 @@ puts "Working directory: [pwd]"
 puts "========================================"
 
 set project_name "channelizer_sim"
-set project_dir "./sim/vivado_project"
+set project_dir "./vivado_project"
 set part_name "xc7a35tcpg236-1"
 
 # Delete existing project and create fresh
@@ -82,20 +82,19 @@ puts "========================================"
 # Package (must be first)
 puts "\n--- Package ---"
 safe_add_files sources_1 {
-    ./rtl/pkg/channelizer_pkg.vhd
+    ../rtl/pkg/channelizer_pkg.vhd
 }
 
 # Channelizer modules
 puts "\n--- Channelizer Modules ---"
 safe_add_files sources_1 {
-    ./rtl/channelizer/coeff_rom.vhd
-    ./rtl/channelizer/delay_line.vhd
-    ./rtl/channelizer/mac.vhd
-    ./rtl/channelizer/fir_branch.vhd
-    ./rtl/channelizer/polyphase_filterbank.vhd
-    ./rtl/channelizer/fft_4pt.vhd
-    ./rtl/channelizer/fft_64pt.vhd
-    ./rtl/channelizer/polyphase_channelizer_top.vhd
+    ../rtl/channelizer/coeff_rom.vhd
+    ../rtl/channelizer/delay_line.vhd
+    ../rtl/channelizer/mac.vhd
+    ../rtl/channelizer/fir_branch.vhd
+    ../rtl/channelizer/polyphase_filterbank.vhd
+    ../rtl/channelizer/fft_4pt.vhd
+    ../rtl/channelizer/polyphase_channelizer_top.vhd
 }
 
 # Testbenches
@@ -107,7 +106,6 @@ safe_add_files sim_1 {
     ./sim/tb_fir_branch.vhd
     ./sim/tb_polyphase_filterbank.vhd
     ./sim/tb_fft_4pt.vhd
-    ./sim/tb_fft_64pt.vhd
 }
 
 puts "\n========================================"
@@ -119,7 +117,7 @@ puts "========================================"
 ################################################################################
 
 puts "\nCopying coefficient files..."
-set coeff_src "./rtl/coeffs"
+set coeff_src "../rtl/coeffs"
 set coeff_dst "$project_dir/$project_name.sim/sim_1/behav/xsim"
 file mkdir $coeff_dst
 

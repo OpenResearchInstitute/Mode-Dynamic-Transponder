@@ -115,25 +115,25 @@ Mode-Dynamic-Transponder/
 | MCU Board | STM32 NUCLEO-H753ZI | ~$70 |
 | Jumper wires | Female-Female Dupont | ~$5 |
 
-See `syn/ice40/WIRING_GUIDE.md` for complete connection details.
+See `mdt_sic/syn/ice40/WIRING_GUIDE.md` for complete connection details.
 
 ### Programming the FPGA (Windows)
 
-The FPGA is programmed using Lattice Radiant for synthesis and openFPGALoader via MSYS2 for flashing. See `syn/ice40/TOOLCHAIN_SETUP.md` for full setup.
+The FPGA is programmed using Lattice Radiant for synthesis and openFPGALoader via MSYS2 for flashing. See `mdt_sic/syn/ice40/TOOLCHAIN_SETUP.md` for full setup.
 
 ```bash
 # In MSYS2 UCRT64 (after running Zadig to set WinUSB driver):
 openFPGALoader -b ice40_generic -f --unprotect-flash \
-  /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+  /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 ```
 
 ### Opening the STM32 Firmware
 
-The firmware is a complete STM32CubeIDE project stored in `firmware/stm32/sic_receiver/`.
+The firmware is a complete STM32CubeIDE project stored in `mdt_sic/firmware/stm32/sic_receiver/`.
 
 1. Open STM32CubeIDE
 2. **File → Import → General → Existing Projects into Workspace**
-3. Browse to `firmware/stm32/sic_receiver/`
+3. Browse to `mdt_sic/firmware/stm32/sic_receiver/`
 4. Uncheck "Copy projects into workspace"
 5. Build and flash
 
@@ -142,7 +142,7 @@ The firmware is a complete STM32CubeIDE project stored in `firmware/stm32/sic_re
 ```tcl
 # In Vivado TCL console:
 cd /path/to/Mode-Dynamic-Transponder
-source sim/run_tests.tcl
+source mdt_sic/sim/run_tests.tcl
 create_sim_project channelizer_sim
 run_all_tests
 ```
@@ -228,10 +228,10 @@ RX: [0x00] [I0_H][I0_L][Q0_H][Q0_L][I1_H][I1_L][Q1_H][Q1_L]
 
 | Document | Location | Description |
 |----------|----------|-------------|
-| Wiring Guide | `syn/ice40/WIRING_GUIDE.md` | Hardware connections, pin mapping, programming |
-| Toolchain Setup | `syn/ice40/TOOLCHAIN_SETUP.md` | Radiant, MSYS2, openFPGALoader setup |
-| Hardware Bringup | `firmware/stm32/HARDWARE_BRINGUP.md` | Step-by-step bringup checklist |
-| STM32 Setup | `firmware/stm32/STM32_SETUP_GUIDE.md` | STM32CubeIDE project guide |
+| Wiring Guide | `mdt_sic/syn/ice40/WIRING_GUIDE.md` | Hardware connections, pin mapping, programming |
+| Toolchain Setup | `mdt_sic/syn/ice40/TOOLCHAIN_SETUP.md` | Radiant, MSYS2, openFPGALoader setup |
+| Hardware Bringup | `mdt_sic/firmware/stm32/HARDWARE_BRINGUP.md` | Step-by-step bringup checklist |
+| STM32 Setup | `mdt_sic/firmware/stm32/STM32_SETUP_GUIDE.md` | STM32CubeIDE project guide |
 | RTL Reference | `rtl/README.md` | Module descriptions and timing |
 | Python Reference | `docs/polyphase_channelizer.ipynb` | Filter design and visualization |
 
