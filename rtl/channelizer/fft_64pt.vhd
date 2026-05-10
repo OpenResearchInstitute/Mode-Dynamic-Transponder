@@ -374,27 +374,40 @@ begin
 
     ---------------------------------------------------------------------------
     -- Output
+    --
+    -- All five output signals (re, im, idx, valid, last) are driven from the
+    -- same clocked process so they share one 1-cycle latency from FSM state.
+    -- Originally idx/valid/last were concurrent assignments, but Vivado xsim's
+    -- delta-cycle scheduling let out_last lag out_idx, so the downstream
+    -- capture process saw idx=63 with last=0 on the same edge -- frame
+    -- increment missed.  Registering them all together fixes the alignment.
     ---------------------------------------------------------------------------
     process(clk)
         variable src : complex_t;
     begin
         if rising_edge(clk) then
+            -- Default: outputs idle
+            out_valid <= '0';
+            out_last  <= '0';
+
             if state = OUTPUTTING then
-                -- Output from whichever buffer has final results
+                -- Read from whichever buffer holds final results
                 if use_buf_a = '1' then
                     src := buf_b(to_integer(out_cnt));
                 else
                     src := buf_a(to_integer(out_cnt));
                 end if;
-                out_re <= std_logic_vector(src.re);
-                out_im <= std_logic_vector(src.im);
+                out_re    <= std_logic_vector(src.re);
+                out_im    <= std_logic_vector(src.im);
+                out_idx   <= std_logic_vector(out_cnt);
+                out_valid <= '1';
+                if out_cnt = N - 1 then
+                    out_last <= '1';
+                end if;
             end if;
         end if;
     end process;
-    
-    out_idx <= std_logic_vector(out_cnt);
-    out_valid <= '1' when state = OUTPUTTING else '0';
-    out_last <= '1' when state = OUTPUTTING and out_cnt = N - 1 else '0';
+
     busy <= '1' when state /= IDLE else '0';
 
 end architecture rtl;
