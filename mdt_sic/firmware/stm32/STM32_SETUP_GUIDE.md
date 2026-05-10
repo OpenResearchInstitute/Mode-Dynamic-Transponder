@@ -4,7 +4,7 @@
 
 This guide covers setting up and working with the STM32H7 firmware for the SIC receiver.
 The complete STM32CubeIDE project is included in the repository at
-`firmware/stm32/sic_receiver/` — you do not need to create a new project from scratch.
+`mdt_sic/firmware/stm32/sic_receiver/` — you do not need to create a new project from scratch.
 
 ## What the Firmware Does
 
@@ -43,7 +43,7 @@ The firmware project is already in the repository. Import it into STM32CubeIDE:
 1. Open **STM32CubeIDE**
 2. **File → Import → General → Existing Projects into Workspace**
 3. Click **"Select root directory"** and browse to:
-   `<repo>/firmware/stm32/sic_receiver/`
+   `<repo>/mdt_sic/firmware/stm32/sic_receiver/`
 4. Make sure **"Copy projects into workspace"** is **unchecked**
    (you want to work directly in the repository)
 5. The project `sic_receiver` should appear with a checkmark
@@ -60,7 +60,7 @@ The firmware project is already in the repository. Import it into STM32CubeIDE:
 ### Build
 - **Project → Clean**, then **Project → Build**
 - Watch the Console for errors
-- Output: `firmware/stm32/sic_receiver/Debug/sic_receiver.elf`
+- Output: `mdt_sic/firmware/stm32/sic_receiver/Debug/sic_receiver.elf`
 
 ### Flash
 - Connect Nucleo USB (CN1 ST-Link connector)
@@ -113,7 +113,7 @@ Connected to ST-Link virtual COM port via PD8 (TX) and PD9 (RX).
 ## Part 4: Project Structure
 
 ```
-firmware/stm32/sic_receiver/
+mdt_sic/firmware/stm32/sic_receiver/
 ├── sic_receiver.ioc          ← CubeMX config — open this to modify peripherals
 ├── Core/
 │   ├── Inc/

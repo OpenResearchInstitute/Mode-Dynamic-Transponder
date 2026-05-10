@@ -12,7 +12,6 @@ This directory contains testbenches for verifying the polyphase channelizer modu
 | `tb_fir_branch.vhd` | `fir_branch` | Complete FIR filtering, coefficient routing |
 | `tb_polyphase_filterbank.vhd` | `polyphase_filterbank` | N branches, round-robin distribution, output sync |
 | `tb_fft_4pt.vhd` | `fft_4pt` | DC, Nyquist, positive/negative frequency tones |
-| `tb_fft_64pt.vhd` | `fft_64pt` | DC, impulse response, cosine tone |
 
 ## Running with Vivado
 
@@ -21,7 +20,7 @@ This directory contains testbenches for verifying the polyphase channelizer modu
 ```tcl
 # From Vivado TCL console:
 cd /path/to/Mode-Dynamic-Transponder
-source sim/run_tests.tcl
+cd mdt_sic/sim && source run_tests.tcl
 
 # Run all tests:
 run_all_tests

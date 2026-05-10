@@ -58,51 +58,45 @@ The FPGA handles real-time DSP (channelization), while the STM32 handles post-pr
 
 ```
 Mode-Dynamic-Transponder/
-├── README.md                    # This file
-├── docs/                        # Documentation and reference models
-│   ├── polyphase_channelizer.ipynb  # Python reference implementation
-│   └── mdt-model.ipynb              # Store-and-forward simulation
-├── rtl/                         # Synthesizable VHDL
-│   ├── README.md
-│   ├── pkg/                     # Packages
-│   │   └── channelizer_pkg.vhd
-│   ├── channelizer/             # Core modules
-│   │   ├── coeff_rom.vhd
-│   │   ├── delay_line.vhd
-│   │   ├── mac.vhd
-│   │   ├── fir_branch.vhd
-│   │   ├── polyphase_filterbank.vhd
-│   │   ├── fft_4pt.vhd
-│   │   ├── fft_64pt.vhd
-│   │   └── polyphase_channelizer_top.vhd
-│   └── coeffs/                  # Filter coefficients
-│       ├── mdt_coeffs.hex
-│       └── haifuraiya_coeffs.hex
-├── sim/                         # Simulation
-│   ├── README.md
-│   ├── run_tests.tcl
-│   └── tb_*.vhd
-├── syn/                         # Synthesis
-│   ├── ice40/                   # iCE40 UltraPlus (Lattice Radiant)
-│   │   ├── sic_top_ice40.vhd   # iCE40 top wrapper (SPI, LEDs, synchronizers)
-│   │   ├── TOOLCHAIN_SETUP.md  # Radiant + MSYS2/openFPGALoader setup
-│   │   ├── WIRING_GUIDE.md     # Hardware connections (read this first!)
-│   │   └── README.md
-│   ├── radiant/                 # Lattice Radiant project
-│   │   └── sic_receiver/
-│   │       ├── sic_receiver.rdf         # Radiant project file
-│   │       └── source/impl_1/sic_top.pdc  # Pin constraints
-│   └── zcu102/                  # Xilinx ZCU102 (future)
-│       └── README.md
-└── firmware/                    # MCU firmware
-    └── stm32/
-        ├── sic_receiver/        # Complete STM32CubeIDE project
-        │   ├── sic_receiver.ioc # CubeMX config (SPI4, GPIO, clocks)
-        │   ├── Core/Src/        # User code (main.c, sic_fpga.c, spi.c)
-        │   ├── Core/Inc/        # Headers (sic_fpga.h)
-        │   └── Drivers/         # STM32H7 HAL (self-contained build)
-        ├── HARDWARE_BRINGUP.md  # Step-by-step bringup checklist
-        └── STM32_SETUP_GUIDE.md # STM32CubeIDE setup guide
+├── README.md                       # This file (top-level overview)
+├── LICENSE
+├── docs/                           # Shared documentation and reference models
+│   ├── polyphase_channelizer.ipynb # Python reference implementation
+│   ├── mdt-model.ipynb             # Store-and-forward simulation
+│   ├── funcube-mission-concept.md
+│   └── mdt-sic-wire-protocol.md
+│
+├── mdt_sic/                        # MDT successive-interference-cancellation receiver
+│   │                                  Target: Lattice iCE40UP5K + STM32H753ZI
+│   ├── rtl/
+│   │   ├── pkg/channelizer_pkg.vhd
+│   │   ├── channelizer/            # Serial-MAC channelizer (one MAC per branch)
+│   │   │   ├── coeff_rom.vhd
+│   │   │   ├── delay_line.vhd
+│   │   │   ├── mac.vhd
+│   │   │   ├── fir_branch.vhd
+│   │   │   ├── polyphase_filterbank.vhd
+│   │   │   ├── fft_4pt.vhd
+│   │   │   └── polyphase_channelizer_top.vhd
+│   │   └── coeffs/mdt_coeffs.hex
+│   ├── sim/                        # Module-level testbenches + run_tests.tcl
+│   ├── syn/
+│   │   ├── ice40/                  # Open-source flow (Yosys+GHDL+nextpnr) and Radiant
+│   │   │                              top wrapper, constraints, toolchain docs
+│   │   └── radiant/sic_receiver/   # Lattice Radiant project (.rdf, .pdc, etc.)
+│   └── firmware/stm32/             # STM32CubeIDE project for SPI host MCU
+│
+└── haifuraiya/                     # Opulent Voice ground station channelizer
+    │                                  Target: Xilinx ZCU102
+    ├── rtl/
+    │   ├── channelizer/            # Parallel-MAC channelizer (one MAC per tap)
+    │   │   ├── fir_branch_parallel.vhd
+    │   │   ├── polyphase_filterbank_parallel.vhd
+    │   │   ├── fft_64pt.vhd
+    │   │   └── haifuraiya_channelizer_top.vhd
+    │   └── coeffs/haifuraiya_coeffs.hex
+    ├── sim/                        # Integration testbench + run_haifuraiya_*.tcl
+    └── syn/zcu102/
 ```
 
 ## Quick Start

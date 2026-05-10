@@ -1,4 +1,6 @@
-# RTL - Synthesizable VHDL
+# RTL - MDT-SIC (iCE40 + STM32)
+
+_For Haifuraiya channelizer RTL, see [`../../haifuraiya/rtl/`](../../haifuraiya/rtl/)._
 
 This directory contains the synthesizable VHDL for the polyphase channelizer.
 
@@ -16,12 +18,10 @@ rtl/
 │   ├── fir_branch.vhd      # Single polyphase branch (delay_line + mac)
 │   ├── polyphase_filterbank.vhd  # All N branches + sample distribution
 │   ├── fft_4pt.vhd         # 4-point FFT for MDT
-│   ├── fft_64pt.vhd        # 64-point FFT for Haifuraiya
 │   └── polyphase_channelizer_top.vhd  # Top level integration
 │
 └── coeffs/                 # Coefficient files
-    ├── mdt_coeffs.hex      # MDT: 64 coefficients (4 ch × 16 taps)
-    └── haifuraiya_coeffs.hex  # Haifuraiya: 1536 coefficients (64 ch × 24 taps)
+    └── mdt_coeffs.hex      # MDT: 64 coefficients (4 ch × 16 taps)
 ```
 
 ## Compilation Order
@@ -36,7 +36,6 @@ The design supports two configurations defined in `channelizer_pkg.vhd`:
 | Config | Channels | Taps | Target | Application |
 |--------|----------|------|--------|-------------|
 | MDT_CONFIG | 4 | 64 | iCE40 UP | FunCube+ spectrum monitoring |
-| HAIFURAIYA_CONFIG | 64 | 1536 | ZCU102 | Opulent Voice FDMA |
 
 ## Usage
 
@@ -213,7 +212,6 @@ The delay line uses flip-flops (not Block RAM):
 | Config | Branches | Taps/Branch | Bits | FFs per Branch | Total FFs |
 |--------|----------|-------------|------|----------------|-----------|
 | MDT | 4 | 16 | 16 | 256 | 1,024 |
-| Haifuraiya | 64 | 24 | 16 | 384 | 24,576 |
 
 This is acceptable for both targets:
 - **iCE40 UP** (~5K FFs): 1,024 FFs = ~20% utilization
@@ -271,7 +269,6 @@ ACCUM_WIDTH >= DATA_WIDTH + COEFF_WIDTH + ceil(log2(NUM_TAPS))
 | Config | Calculation | ACCUM_WIDTH |
 |--------|-------------|-------------|
 | MDT | 16 + 16 + ceil(log2(16)) = 36 | 36 |
-| Haifuraiya | 16 + 16 + ceil(log2(24)) = 37 | 40 (with margin) |
 
 ### Resource Usage
 
@@ -385,7 +382,6 @@ For N=4 channels, M=16 taps:
 | Config | Branches | FFs | Multipliers |
 |--------|----------|-----|-------------|
 | MDT | 4 | ~1,024 | 4 |
-| Haifuraiya | 64 | ~24,576 | 64 |
 
 ---
 
@@ -406,16 +402,6 @@ Twiddle factors:
 ```
 
 Latency: 1 clock cycle (combinatorial with output register)
-
-### 64-Point FFT (Haifuraiya)
-
-Uses iterative radix-2 DIF with 6 stages. Time-multiplexed single butterfly for resource efficiency.
-
-- Twiddle factors stored in ROM (32 unique values, Q1.14 format)
-- Ping-pong buffers for intermediate results
-- Latency: ~384 cycles
-
-For production, consider vendor FFT IP (Xilinx FFT) for better optimization.
 
 ---
 

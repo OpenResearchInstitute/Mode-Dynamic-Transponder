@@ -31,7 +31,7 @@ Use Radiant for:
 
 The output bitstream will be at:
 ```
-syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+mdt_sic/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 ```
 
 ### Step 2: Install MSYS2
@@ -83,7 +83,7 @@ Every time you want to program the FPGA:
 4. **Run the programming command:**
 
 ```bash
-openFPGALoader -b ice40_generic -f --unprotect-flash /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+openFPGALoader -b ice40_generic -f --unprotect-flash /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 ```
 
 **Successful output looks like this:**
@@ -108,9 +108,9 @@ Wait for CDONE DONE
 5. **Verify the flash contents** (optional but recommended):
 
 ```bash
-openFPGALoader -b ice40_generic --dump-flash --file-size 104156 /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/readback.bin
-md5sum /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
-md5sum /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/readback.bin
+openFPGALoader -b ice40_generic --dump-flash --file-size 104156 /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/readback.bin
+md5sum /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+md5sum /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/readback.bin
 ```
 
 Both MD5 hashes must match. If they don't match, the flash was not written
@@ -138,7 +138,7 @@ In MSYS2, Windows paths use forward slashes with a leading `/c/` instead of `C:\
 Radiant does not have a "Clean and Rebuild" button in the GUI. To force a
 full rebuild:
 
-1. Navigate to `syn/radiant/sic_receiver/impl_1/` in Windows Explorer
+1. Navigate to `mdt_sic/syn/radiant/sic_receiver/impl_1/` in Windows Explorer
 2. Delete all files in that folder
 3. Click the green triangle in Radiant to rebuild
 
@@ -146,7 +146,7 @@ full rebuild:
 
 The post-synthesis constraint file is at:
 ```
-syn/radiant/sic_receiver/impl_1/sic_top.pdc
+mdt_sic/syn/radiant/sic_receiver/impl_1/sic_top.pdc
 ```
 
 This maps signal names to physical FPGA pin numbers. Changes here require
@@ -195,7 +195,7 @@ sudo cmake --install build
 ### Build Commands (Yosys/nextpnr)
 
 ```bash
-cd syn/ice40
+cd mdt_sic/syn/ice40
 make          # Synthesize, place & route, generate bitstream
 make prog     # Program to flash (persistent)
 make prog-sram  # Program to SRAM (volatile, faster for testing)
@@ -229,11 +229,11 @@ make clean    # Clean build outputs
 
 # Program FPGA (STM32 must be disconnected, Zadig WinUSB must be set)
 openFPGALoader -b ice40_generic -f --unprotect-flash \
-  /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+  /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 
 # Verify flash contents
 openFPGALoader -b ice40_generic --dump-flash --file-size 104156 readback.bin
-md5sum /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+md5sum /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 md5sum readback.bin
 
 # Bulk erase (if programming fails due to protection)
@@ -243,7 +243,7 @@ openFPGALoader -b ice40_generic --bulk-erase --unprotect-flash
 ### Linux/macOS (Yosys/nextpnr)
 
 ```bash
-cd syn/ice40
+cd mdt_sic/syn/ice40
 make          # Full build
 make prog     # Program flash
 make prog-sram  # Program SRAM

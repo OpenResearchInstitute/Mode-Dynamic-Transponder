@@ -118,7 +118,7 @@ Both boards are powered independently via their USB connectors. Do NOT connect 3
 # Then, with STM32 board DISCONNECTED:
 
 openFPGALoader -b ice40_generic -f --unprotect-flash \
-  /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+  /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 ```
 
 ---

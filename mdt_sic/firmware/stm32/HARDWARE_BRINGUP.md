@@ -1,7 +1,7 @@
 # Hardware Bringup Checklist
 
 Step-by-step checklist for bringing up the SIC receiver prototype hardware.
-**Read `syn/ice40/WIRING_GUIDE.md` before starting** — it has critical notes
+**Read `mdt_sic/syn/ice40/WIRING_GUIDE.md` before starting** — it has critical notes
 about pin locations and the FPGA programming workflow.
 
 ## Required Hardware
@@ -36,7 +36,7 @@ about pin locations and the FPGA programming workflow.
 > You must rerun Zadig every time you reconnect the iCE40 board.
 
 ### 1.3 Build Bitstream in Radiant
-- [ ] Open `syn/radiant/sic_receiver/sic_receiver.rdf` in Lattice Radiant
+- [ ] Open `mdt_sic/syn/radiant/sic_receiver/sic_receiver.rdf` in Lattice Radiant
 - [ ] Click the green Run button to synthesize, place & route, and export
 - [ ] Wait for "Bitstream authenticated" in the log
 - [ ] Verify no errors (warnings are OK)
@@ -48,14 +48,14 @@ about pin locations and the FPGA programming workflow.
 
 ```bash
 openFPGALoader -b ice40_generic -f --unprotect-flash \
-  /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+  /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 ```
 
 If you get `ff` JEDEC ID with no progress bar, try `--cable-index 1`:
 
 ```bash
 openFPGALoader -b ice40_generic --cable-index 1 -f --unprotect-flash \
-  /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+  /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 ```
 
 **Successful programming output:**
@@ -75,7 +75,7 @@ Wait for CDONE DONE
 ### 1.5 Verify MD5 (Optional but Recommended)
 ```bash
 openFPGALoader -b ice40_generic --dump-flash --file-size 104156 readback.bin
-md5sum /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+md5sum /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 md5sum readback.bin
 # Both hashes must match
 ```
@@ -96,7 +96,7 @@ md5sum readback.bin
 ### 2.1 Open the Firmware Project
 - [ ] Open STM32CubeIDE
 - [ ] **File → Import → General → Existing Projects into Workspace**
-- [ ] Browse to `firmware/stm32/sic_receiver/`
+- [ ] Browse to `mdt_sic/firmware/stm32/sic_receiver/`
 - [ ] Uncheck "Copy projects into workspace"
 - [ ] Click Finish
 

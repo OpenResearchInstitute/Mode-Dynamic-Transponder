@@ -49,7 +49,7 @@ Use openFPGALoader via MSYS2 instead. See `TOOLCHAIN_SETUP.md` for setup.
 **Program command:**
 ```bash
 openFPGALoader -b ice40_generic -f --unprotect-flash \
-  /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+  /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 ```
 
 If you get `ff` JEDEC ID, try adding `--cable-index 1`.
@@ -57,7 +57,7 @@ If you get `ff` JEDEC ID, try adding `--cable-index 1`.
 **Verify programming:**
 ```bash
 openFPGALoader -b ice40_generic --dump-flash --file-size 104156 readback.bin
-md5sum /c/Mode-Dynamic-Transponder/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
+md5sum /c/Mode-Dynamic-Transponder/mdt_sic/syn/radiant/sic_receiver/impl_1/sic_receiver_impl_1.bin
 md5sum readback.bin
 # Hashes must match
 ```
