@@ -1,1 +1,8 @@
 haifuraiya/sim/haifuraiya_sim_project/
+
+# Vivado xsim per-run artifacts
+**/vivado.jou
+**/vivado.log
+**/vivado_pid*.str
+**/*.wdb
+**/.Xil/
