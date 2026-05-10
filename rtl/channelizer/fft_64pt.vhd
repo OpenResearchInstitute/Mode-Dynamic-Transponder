@@ -264,18 +264,40 @@ begin
     end process;
 
     ---------------------------------------------------------------------------
-    -- Input Loading (bit-reversed order)
+    -- Buffer Write (merged LOADING input + COMPUTING butterfly results)
+    --
+    -- Both LOADING input samples and COMPUTING butterfly results write to
+    -- buf_a. Originally these were two separate processes, but in VHDL
+    -- each process maintains its own driver on a resolved signal, and the
+    -- std_logic resolution function produces 'X' bits at every position
+    -- where the two drivers disagree. Test 1 didn't expose this because
+    -- both drivers happened to hold zero (zero input -> zero outputs).
+    -- Test 2 with non-zero input made LOADING's driver disagree with
+    -- COMPUTING's stale-zero driver, producing the X-bit pattern observed
+    -- in buf_a.
+    --
+    -- The two operations are mutually exclusive (LOADING/IDLE vs COMPUTING
+    -- state), so merging them into a single clocked process gives a single
+    -- driver per buffer with no semantic change.
     ---------------------------------------------------------------------------
     process(clk)
         variable br_idx : unsigned(5 downto 0);
     begin
         if rising_edge(clk) then
-            if state = LOADING or state = IDLE then
-                if x_valid = '1' then
-                    br_idx := bit_reverse(unsigned(x_idx));
-                    buf_a(to_integer(br_idx)).re <= signed(x_re);
-                    buf_a(to_integer(br_idx)).im <= signed(x_im);
+            if bf_valid = '1' then
+                -- COMPUTING: butterfly writes to the destination buffer
+                if use_buf_a = '1' then
+                    buf_b(to_integer(idx_a)) <= bf_out_a;
+                    buf_b(to_integer(idx_b)) <= bf_out_b;
+                else
+                    buf_a(to_integer(idx_a)) <= bf_out_a;
+                    buf_a(to_integer(idx_b)) <= bf_out_b;
                 end if;
+            elsif (state = LOADING or state = IDLE) and x_valid = '1' then
+                -- LOADING/IDLE: bit-reversed input write to buf_a
+                br_idx := bit_reverse(unsigned(x_idx));
+                buf_a(to_integer(br_idx)).re <= signed(x_re);
+                buf_a(to_integer(br_idx)).im <= signed(x_im);
             end if;
         end if;
     end process;
@@ -346,21 +368,9 @@ begin
         bf_out_b.im <= prod_im(DATA_WIDTH + TWIDDLE_WIDTH - 3 downto TWIDDLE_WIDTH - 2);
     end process;
     
-    -- Write results to destination buffer
-    process(clk)
-    begin
-        if rising_edge(clk) then
-            if bf_valid = '1' then
-                if use_buf_a = '1' then
-                    buf_b(to_integer(idx_a)) <= bf_out_a;
-                    buf_b(to_integer(idx_b)) <= bf_out_b;
-                else
-                    buf_a(to_integer(idx_a)) <= bf_out_a;
-                    buf_a(to_integer(idx_b)) <= bf_out_b;
-                end if;
-            end if;
-        end if;
-    end process;
+    -- (COMPUTING butterfly writes are now handled in the merged buffer-write
+    -- process above, alongside LOADING input writes, to ensure a single
+    -- driver per buffer.)
 
     ---------------------------------------------------------------------------
     -- Output
