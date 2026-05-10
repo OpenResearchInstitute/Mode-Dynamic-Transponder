@@ -85,7 +85,6 @@ puts "========================================"
 # Shared package
 puts "\n--- Package ---"
 safe_add_files sources_1 {
-    ../rtl/pkg/channelizer_pkg.vhd
 }
 
 # Channelizer building blocks (must compile before the top wrapper)
