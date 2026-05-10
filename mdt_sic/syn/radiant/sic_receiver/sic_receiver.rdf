@@ -15,8 +15,8 @@
         <Source name="../../../rtl/channelizer/fft_4pt.vhd" type="VHDL" type_short="VHDL">
             <Options/>
         </Source>
-        <Source name="../../../rtl/channelizer/fft_64pt.vhd" type="VHDL" type_short="VHDL">
-            <Options top_module="fft_64pt"/>
+        <Source name="../../../rtl/channelizer/fft_64pt.vhd" type="VHDL" type_short="VHDL" excluded="TRUE">
+            <Options/>
         </Source>
         <Source name="../../../rtl/channelizer/fir_branch.vhd" type="VHDL" type_short="VHDL">
             <Options/>
