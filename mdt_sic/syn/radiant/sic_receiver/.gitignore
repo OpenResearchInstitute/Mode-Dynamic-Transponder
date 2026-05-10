@@ -41,3 +41,10 @@ promote.xml
 # Hidden Radiant settings
 .ng_run_manager.ini
 .setting.ini
+
+# Radiant per-machine state
+.recovery
+impl_1/.synthesis_touch
+
+# LSE-generated package files (regenerated each synthesis)
+impl_1/._*.vhd
