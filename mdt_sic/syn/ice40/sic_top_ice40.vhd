@@ -217,6 +217,16 @@ architecture rtl of sic_top_ice40 is
     -- 1 command byte + 4 channels * (2 bytes I + 2 bytes Q) = 17 bytes
     constant IQ_BYTES        : positive := 16;
     constant TOTAL_BYTES     : positive := 17;
+		
+	-- ---- Complex test pattern: sweep through 4 bin centers ----
+	-- Each frequency held for HOLD_SAMPLES samples (~2 s at Fs=40 kHz).
+	-- 50% of full scale leaves 6 dB of headroom against filter gain.
+	constant TEST_AMPLITUDE : integer := 2**(DATA_WIDTH - 2);
+	constant HOLD_SAMPLES   : integer := 80_000;
+
+	signal phase_idx    : unsigned(1 downto 0)  := (others => '0');
+	signal freq_idx     : unsigned(1 downto 0)  := (others => '0');
+	signal hold_counter : unsigned(16 downto 0) := (others => '0');
 
     ---------------------------------------------------------------------------
     -- Clocks and Reset
@@ -417,30 +427,99 @@ begin
     --
     -- TODO: Replace with real I2S receiver for production use.
     ---------------------------------------------------------------------------
-    process(clk_sys)
-        variable sample_cnt : unsigned(DATA_WIDTH - 1 downto 0) := (others => '0');
-        variable div_cnt    : unsigned(9 downto 0) := (others => '0');
-    begin
-        if rising_edge(clk_sys) then
-            if reset = '1' then
-                sample_cnt       := (others => '0');
-                div_cnt          := (others => '0');
-                i2s_sample_valid <= '0';
-            else
-                i2s_sample_valid <= '0';
-                -- Divide 12 MHz by 300 -> ~40 kHz sample rate
-                if div_cnt = 299 then
-                    div_cnt          := (others => '0');
-                    i2s_sample_valid <= '1';
-                    i2s_sample_re    <= std_logic_vector(sample_cnt);
-                    i2s_sample_im    <= std_logic_vector(not sample_cnt);
-                    sample_cnt       := sample_cnt + 1;
-                else
-                    div_cnt := div_cnt + 1;
-                end if;
-            end if;
-        end if;
-    end process;
+    --process(clk_sys)
+        --variable sample_cnt : unsigned(DATA_WIDTH - 1 downto 0) := (others => '0');
+        --variable div_cnt    : unsigned(9 downto 0) := (others => '0');
+    --begin
+        --if rising_edge(clk_sys) then
+            --if reset = '1' then
+                --sample_cnt       := (others => '0');
+                --div_cnt          := (others => '0');
+                --i2s_sample_valid <= '0';
+            --else
+                --i2s_sample_valid <= '0';
+                ---- Divide 12 MHz by 300 -> ~40 kHz sample rate
+                --if div_cnt = 299 then
+                    --div_cnt          := (others => '0');
+                    --i2s_sample_valid <= '1';
+                    --i2s_sample_re    <= std_logic_vector(sample_cnt);
+                    --i2s_sample_im    <= std_logic_vector(not sample_cnt);
+                    --sample_cnt       := sample_cnt + 1;
+                --else
+                    --div_cnt := div_cnt + 1;
+                --end if;
+            --end if;
+        --end if;
+    --end process;
+	
+	
+	
+	-- ---- Complex Test Pattern Generator ----
+	-- Sweeps through 4 frequencies, each held for HOLD_SAMPLES samples:
+	--   freq_idx=0: DC      (phase advances by 0/sample)  → energy in CH0
+	--   freq_idx=1: +Fs/4   (phase advances by 90° CCW)   → energy in CH1
+	--   freq_idx=2: Fs/2    (phase alternates 0°↔180°)    → energy in CH2 (real, Nyquist)
+	--   freq_idx=3: -Fs/4   (phase advances by 90° CW)    → energy in CH3
+	--
+	-- The phase increment per sample happens to equal freq_idx (in 2-bit
+	-- modular arithmetic), so no per-frequency phase-lookup is needed.
+	-- Output uses only the 4 corners of the unit circle: no multipliers,
+	-- no sin/cos ROM.
+	test_pattern : process(clk_sys)
+		variable div_cnt : unsigned(9 downto 0) := (others => '0');
+	begin
+		if rising_edge(clk_sys) then
+			if reset = '1' then
+				phase_idx        <= (others => '0');
+				freq_idx         <= (others => '0');
+				hold_counter     <= (others => '0');
+				div_cnt          := (others => '0');
+				i2s_sample_valid <= '0';
+				i2s_sample_re    <= (others => '0');
+				i2s_sample_im    <= (others => '0');
+			else
+				i2s_sample_valid <= '0';
+	
+				-- Sample-rate divider: 12 MHz / 300 to ~40 kHz
+				if div_cnt = 299 then
+					div_cnt := (others => '0');
+					i2s_sample_valid <= '1';
+	
+					-- 4-corner sin/cos lookup at the current rotation phase
+					case to_integer(phase_idx) is
+						when 0 =>  -- 0°:    (+A,  0)
+							i2s_sample_re <= std_logic_vector(to_signed( TEST_AMPLITUDE, DATA_WIDTH));
+							i2s_sample_im <= (others => '0');
+						when 1 =>  -- +90°:  (0, +A)
+							i2s_sample_re <= (others => '0');
+							i2s_sample_im <= std_logic_vector(to_signed( TEST_AMPLITUDE, DATA_WIDTH));
+						when 2 =>  -- 180°:  (-A,  0)
+							i2s_sample_re <= std_logic_vector(to_signed(-TEST_AMPLITUDE, DATA_WIDTH));
+							i2s_sample_im <= (others => '0');
+						when 3 =>  -- +270°: (0, -A)
+							i2s_sample_re <= (others => '0');
+							i2s_sample_im <= std_logic_vector(to_signed(-TEST_AMPLITUDE, DATA_WIDTH));
+						when others => null;
+					end case;
+
+					-- Advance phase for next sample
+					phase_idx <= phase_idx + freq_idx;
+	
+					-- Step to next frequency after HOLD_SAMPLES samples
+					if hold_counter = HOLD_SAMPLES - 1 then
+						hold_counter <= (others => '0');
+						freq_idx     <= freq_idx + 1;
+					else
+						hold_counter <= hold_counter + 1;
+					end if;
+				else
+					div_cnt := div_cnt + 1;
+				end if;
+			end if;
+		end if;
+	end process;
+	
+		
 
     ---------------------------------------------------------------------------
     -- Polyphase Channelizer
