@@ -1,7 +1,7 @@
 -------------------------------------------------------------------------------
 -- polyphase_channelizer_top.vhd
 -- Top-Level Polyphase Channelizer
--- (Option 3: coeff_loader split out from filterbank; single filterbank still)
+-- (Path A complete: complex I/Q via two polyphase_filterbank instances)
 -------------------------------------------------------------------------------
 -- Open Research Institute
 -- Project: Polyphase Channelizer (MDT / Haifuraiya)
@@ -11,44 +11,58 @@
 -------------------------------------------------------------------------------
 -- This is the top-level module that integrates the channelizer components:
 --
---   1. Coefficient ROM            - stores filter coefficients
---   2. Coefficient Loader (NEW)   - reads ROM, presents wide coeff bus
---   3. Polyphase Filterbank       - N branches of FIR filters
---   4. FFT                        - converts filtered outputs to channels
+--   1. Coefficient ROM      - stores filter coefficients
+--   2. Coefficient Loader   - reads ROM, presents wide coeff bus to all filterbanks
+--   3. Polyphase Filterbank (RE) - N branches filtering the real input
+--   4. Polyphase Filterbank (IM) - N branches filtering the imaginary input
+--   5. FFT                  - converts filtered I+jQ outputs to frequency channels
 --
--- The channelizer takes streaming input samples and produces N frequency
--- channel outputs.
---
--- NOTE: Still real-only at this commit. sample_im is wired to the entity
--- but currently ignored downstream; the FFT receives zero on its imaginary
--- input. The second filterbank (for the Q path) will land in a follow-up
--- commit and connect sample_im through to the FFT imag.
+-- With both real and imaginary paths feeding the FFT, the channelizer can
+-- now distinguish positive and negative frequencies (e.g., +Fs/4 vs -Fs/4),
+-- which the real-only version could not.
 --
 -------------------------------------------------------------------------------
 -- BLOCK DIAGRAM
 -------------------------------------------------------------------------------
 --
---                 ┌────────────────────────────────────────────────────────┐
---                 │           polyphase_channelizer_top                    │
---                 │                                                        │
---                 │  ┌───────────┐    ┌──────────────┐                     │
---                 │  │           │    │              │                     │
---                 │  │ coeff_rom │◄──►│ coeff_loader │                     │
---                 │  │           │    │              │                     │
---                 │  └───────────┘    └──────┬───────┘                     │
---                 │                          │ branch_coeffs (wide)        │
---                 │                          │ coeffs_ready                │
---                 │                          ▼                             │
---   sample_re ───►│                  ┌──────────────────┐    ┌───────┐    │
---                 │                  │ polyphase_       │───►│  FFT  │────┼─► channel_out
---   sample_im ────┼─── (unused, Q    │ filterbank       │ ┌─►│       │    │
---                 │     filterbank   │  N fir_branches  │ │  │ 4pt   │    │
---                 │     coming soon) │                  │ │  │       │    │
---                 │                  └──────────────────┘ │  └───────┘    │
---                 │                                       │               │
---                 │                                      '0' (placeholder)│
---                 │                            channel_valid ─────────────►│
---                 └────────────────────────────────────────────────────────┘
+--                 ┌──────────────────────────────────────────────────────────┐
+--                 │           polyphase_channelizer_top                      │
+--                 │                                                          │
+--                 │  ┌───────────┐    ┌──────────────┐                       │
+--                 │  │           │    │              │                       │
+--                 │  │ coeff_rom │◄──►│ coeff_loader │                       │
+--                 │  │           │    │              │                       │
+--                 │  └───────────┘    └──────┬───────┘                       │
+--                 │                          │ branch_coeffs (wide)          │
+--                 │                          ├──────────────┐                │
+--                 │                          │              │                │
+--                 │                          ▼              ▼                │
+--                 │                  ┌─────────────┐ ┌─────────────┐         │
+--   sample_re ───►│─────────────────►│ filterbank  │ │ filterbank  │         │
+--                 │                  │   (RE)      │ │   (IM)      │◄────────┼─── sample_im
+--                 │                  └──────┬──────┘ └──────┬──────┘         │
+--                 │                         │ fb_re        │ fb_im           │
+--                 │                         ▼              ▼                 │
+--                 │                  ┌─────────────────────────┐             │
+--                 │                  │     4-Point FFT         │             │
+--                 │                  │   (complex I + jQ)      │             │
+--                 │                  └────────────┬────────────┘             │
+--                 │                               │                          │
+--                 │                               ▼                          │
+--                 │                          channel_out  ───────────────────►
+--                 │                          channel_valid ──────────────────►
+--                 └──────────────────────────────────────────────────────────┘
+--
+-------------------------------------------------------------------------------
+-- RESOURCE NOTES
+-------------------------------------------------------------------------------
+-- Adding the second filterbank doubles the channelizer's MAC count:
+--   N_CHANNELS branches in RE + N_CHANNELS branches in IM = 2*N MACs total.
+-- For MDT (N=4), this exactly fills the iCE40UP5K's 8 MAC16 DSP blocks
+-- (100% DSP utilization). For Haifuraiya, ZCU102 has ample DSP slices.
+--
+-- EBR usage grows by N_CHANNELS (one EBR per delay_line in the new filterbank):
+--   MDT: 5 -> 9 of 30 EBRs used.
 --
 -------------------------------------------------------------------------------
 
@@ -77,8 +91,7 @@ entity polyphase_channelizer_top is
         clk             : in  std_logic;
         reset           : in  std_logic;
 
-        -- Input sample stream (sample_im currently unused; second filterbank
-        -- in a follow-up commit will connect it through)
+        -- Input sample stream (complex)
         sample_re       : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
         sample_im       : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
         sample_valid    : in  std_logic;
@@ -121,17 +134,20 @@ architecture rtl of polyphase_channelizer_top is
     signal coeff_data : std_logic_vector(COEFF_WIDTH - 1 downto 0);
 
     ---------------------------------------------------------------------------
-    -- Signals: Loader -> Filterbank
+    -- Signals: Loader -> Filterbanks (shared)
     ---------------------------------------------------------------------------
     signal branch_coeffs_bus : std_logic_vector(
         N_CHANNELS * TAPS_PER_BRANCH * COEFF_WIDTH - 1 downto 0);
     signal coeffs_ready      : std_logic;
 
     ---------------------------------------------------------------------------
-    -- Signals: Filterbank
+    -- Signals: Filterbank outputs (RE and IM paths)
     ---------------------------------------------------------------------------
-    signal fb_outputs       : std_logic_vector(N_CHANNELS * ACCUM_WIDTH - 1 downto 0);
-    signal fb_outputs_valid : std_logic;
+    signal fb_re_outputs       : std_logic_vector(N_CHANNELS * ACCUM_WIDTH - 1 downto 0);
+    signal fb_re_outputs_valid : std_logic;
+
+    signal fb_im_outputs       : std_logic_vector(N_CHANNELS * ACCUM_WIDTH - 1 downto 0);
+    signal fb_im_outputs_valid : std_logic;
 
     ---------------------------------------------------------------------------
     -- Signals: FFT (4-point for MDT)
@@ -161,11 +177,7 @@ begin
         );
 
     ---------------------------------------------------------------------------
-    -- Coefficient Loader (NEW)
-    ---------------------------------------------------------------------------
-    -- Owns the LOAD_COEFFS state machine extracted from polyphase_filterbank.
-    -- Drives coeff_rom address and presents a wide coefficient bus that one
-    -- or more filterbanks can slice. coeffs_ready stays high after loading.
+    -- Coefficient Loader (shared by both filterbanks)
     ---------------------------------------------------------------------------
     u_coeff_loader : entity work.coeff_loader
         generic map (
@@ -184,12 +196,11 @@ begin
         );
 
     ---------------------------------------------------------------------------
-    -- Polyphase Filterbank (real path only at this commit)
+    -- Polyphase Filterbank - Real path
     ---------------------------------------------------------------------------
-    -- For complex input, a second filterbank will handle sample_im in the
-    -- next commit. For now, sample_im is ignored downstream.
+    -- Filters sample_re. Outputs feed the FFT's real inputs.
     ---------------------------------------------------------------------------
-    u_filterbank : entity work.polyphase_filterbank
+    u_filterbank_re : entity work.polyphase_filterbank
         generic map (
             N_CHANNELS      => N_CHANNELS,
             TAPS_PER_BRANCH => TAPS_PER_BRANCH,
@@ -204,26 +215,56 @@ begin
             sample_valid     => sample_valid,
             branch_coeffs_in => branch_coeffs_bus,
             coeffs_ready     => coeffs_ready,
-            branch_outputs   => fb_outputs,
-            outputs_valid    => fb_outputs_valid
+            branch_outputs   => fb_re_outputs,
+            outputs_valid    => fb_re_outputs_valid
         );
 
     ---------------------------------------------------------------------------
-    -- Prepare FFT Input
+    -- Polyphase Filterbank - Imaginary path (NEW)
     ---------------------------------------------------------------------------
-    -- Pack filterbank outputs for FFT.
-    -- Imaginary inputs are zero for now (second filterbank will fill these).
+    -- Filters sample_im. Outputs feed the FFT's imaginary inputs.
+    -- Shares clk, reset, sample_valid, and coefficients with u_filterbank_re,
+    -- so its state machine is cycle-synchronous with the RE filterbank.
+    ---------------------------------------------------------------------------
+    u_filterbank_im : entity work.polyphase_filterbank
+        generic map (
+            N_CHANNELS      => N_CHANNELS,
+            TAPS_PER_BRANCH => TAPS_PER_BRANCH,
+            DATA_WIDTH      => DATA_WIDTH,
+            COEFF_WIDTH     => COEFF_WIDTH,
+            ACCUM_WIDTH     => ACCUM_WIDTH
+        )
+        port map (
+            clk              => clk,
+            reset            => reset,
+            sample_in        => sample_im,
+            sample_valid     => sample_valid,
+            branch_coeffs_in => branch_coeffs_bus,
+            coeffs_ready     => coeffs_ready,
+            branch_outputs   => fb_im_outputs,
+            outputs_valid    => fb_im_outputs_valid
+        );
+
+    ---------------------------------------------------------------------------
+    -- Prepare FFT Input (complex)
+    ---------------------------------------------------------------------------
+    -- Pack filterbank outputs for FFT:
+    --   real(channel i) = u_filterbank_re.branch_outputs(i)
+    --   imag(channel i) = u_filterbank_im.branch_outputs(i)
     ---------------------------------------------------------------------------
     gen_fft_input : for i in 0 to N_CHANNELS - 1 generate
-        -- Real part from the (only) filterbank
+        -- Real part from RE filterbank
         fft_in((i * 2 + 1) * ACCUM_WIDTH - 1 downto i * 2 * ACCUM_WIDTH)
-            <= fb_outputs((i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
-        -- Imaginary part = 0 (placeholder until second filterbank lands)
+            <= fb_re_outputs((i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
+        -- Imaginary part from IM filterbank (was zero before this commit)
         fft_in((i * 2 + 2) * ACCUM_WIDTH - 1 downto (i * 2 + 1) * ACCUM_WIDTH)
-            <= (others => '0');
+            <= fb_im_outputs((i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
     end generate gen_fft_input;
 
-    fft_valid_in <= fb_outputs_valid;
+    -- Both filterbanks are cycle-synchronous (same clk/reset/sample_valid,
+    -- identical FSMs), so either outputs_valid signal can trigger the FFT.
+    -- We pick RE arbitrarily; IM goes high in the same cycle.
+    fft_valid_in <= fb_re_outputs_valid;
 
     ---------------------------------------------------------------------------
     -- 4-Point FFT (MDT configuration)
