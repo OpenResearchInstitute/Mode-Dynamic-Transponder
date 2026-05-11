@@ -1,6 +1,6 @@
 -------------------------------------------------------------------------------
 -- delay_line.vhd
--- Sample Delay Line for Polyphase Channelizer
+-- Sample Delay Line for Polyphase Channelizer (EBR/BRAM ring buffer)
 -------------------------------------------------------------------------------
 -- Open Research Institute
 -- Project: Polyphase Channelizer (MDT / Haifuraiya)
@@ -8,94 +8,77 @@
 -------------------------------------------------------------------------------
 -- OVERVIEW
 -------------------------------------------------------------------------------
--- A delay line is a shift register that stores sample history. In an FIR 
--- filter, we compute:
+-- Stores the last DELAY_DEPTH samples in a ring buffer backed by block RAM
+-- (EBR on iCE40, BRAM on Xilinx). Replaces the previous shift-register
+-- implementation that stored all taps in flip-flops and exposed them as a
+-- wide parallel 'taps' vector.
 --
---   y[n] = h[0]·x[n] + h[1]·x[n-1] + h[2]·x[n-2] + ... + h[M-1]·x[n-(M-1)]
+-- The parent fir_branch's MAC unit already accesses taps sequentially (one
+-- per cycle, indexed by tap_idx). The previous parallel-taps interface forced
+-- the MAC to instantiate a DELAY_DEPTH:1 multiplexer in LUTs to do that
+-- sequential selection. This module exposes the natural sequential read
+-- directly: the MAC drives tap_idx, this module returns one tap_out per cycle
+-- with 1-cycle read latency.
 --
--- The delay line provides x[n], x[n-1], x[n-2], etc. - the current sample
--- and its history - so each coefficient h[k] multiplies the correct sample.
---
--------------------------------------------------------------------------------
--- ROLE IN POLYPHASE CHANNELIZER  
--------------------------------------------------------------------------------
--- In a polyphase channelizer with N channels, input samples are distributed
--- round-robin across N branches:
---
---   Sample index:  0  1  2  3  4  5  6  7  8  9  10 11 ...
---   Goes to branch: 0  1  2  3  0  1  2  3  0  1  2  3 ...  (for N=4)
---
--- Each branch has its own delay line. Branch 0 sees samples 0, 4, 8, 12...
--- Branch 1 sees samples 1, 5, 9, 13... and so on.
---
--- This module implements ONE delay line for ONE branch. The top-level 
--- channelizer instantiates N of these (4 for MDT, 64 for Haifuraiya).
+-- The net architectural win: both the FF storage AND the wide LUT mux that
+-- were sitting in the MAC's inner loop disappear. The storage moves to one
+-- block RAM per branch (cheap, plentiful on iCE40 EBR and Xilinx BRAM).
 --
 -------------------------------------------------------------------------------
--- OPERATION
+-- INTERFACE
 -------------------------------------------------------------------------------
--- When 'shift_en' is asserted:
---   1. All values shift down by one position
---   2. 'data_in' enters at position 0 (newest)
---   3. The oldest value falls off the end (discarded)
+-- Write side (sample insertion):
+--   On rising_edge(clk) with shift_en='1', data_in is stored at the current
+--   write pointer and the pointer advances (modulo DELAY_DEPTH).
 --
--- Example with M=4 taps, showing shift operation:
+-- Read side (tap access by index):
+--   tap_idx is sampled on rising_edge(clk). The block-RAM read result appears
+--   on tap_out one cycle later (1-cycle synchronous read latency, mandatory
+--   on both iCE40 EBR and Xilinx BRAM — no async-read block RAM exists on
+--   either platform).
 --
---   Before shift (shift_en=0):
---   ┌────────┬────────┬────────┬────────┐
---   │ x[n-3] │ x[n-2] │ x[n-1] │  x[n]  │
---   └────────┴────────┴────────┴────────┘
---     tap[3]   tap[2]   tap[1]   tap[0]    ← Output indices
---     oldest                     newest
---
---   After shift with new sample x[n+1] (shift_en=1):
---   ┌────────┬────────┬────────┬────────┐
---   │ x[n-2] │ x[n-1] │  x[n]  │ x[n+1] │
---   └────────┴────────┴────────┴────────┘
---     tap[3]   tap[2]   tap[1]   tap[0]
---              ← everything shifts left, new sample enters at tap[0]
---
--- The 'taps' output provides all M values simultaneously, allowing
--- parallel multiplication with coefficients.
+--   Convention:
+--     tap_idx = 0             -> newest sample (most recently written)
+--     tap_idx = 1             -> previous sample
+--     tap_idx = DELAY_DEPTH-1 -> oldest sample still in the ring
 --
 -------------------------------------------------------------------------------
--- TIMING
+-- RESET BEHAVIOR
 -------------------------------------------------------------------------------
---        ____      ____      ____      ____
--- clk   |    |____|    |____|    |____|    |____
+-- Synchronous reset clears the write pointer to 0. The RAM contents themselves
+-- are not cleared at runtime — block RAMs on iCE40/Xilinx don't have a runtime
+-- reset for their storage. Initial RAM contents are zero, set at bitstream-
+-- configuration time via the signal-level initializer (see 'ram' below).
 --
---       ─────────┐         ┌─────────
--- shift_en      │         │           (pulse when new sample for this branch)
---       ────────┴─────────┴─────────
+-- Behavioral difference from the previous shift-register version:
+--   - Cold boot:  identical behavior (RAM initialized to zero in bitstream).
+--   - Hot reset:  previous version cleared taps to zero immediately. This
+--                 version retains EBR contents but restarts the write pointer.
+--                 Any pre-reset data will be overwritten by the next
+--                 DELAY_DEPTH samples.
 --
---       ══════════════════╳═══════════════════
--- data_in    (old)        │    (new sample)
---       ══════════════════╪═══════════════════
---                         │
---                         ▼
---       ══════════════════╳═══════════════════
--- taps      (old values)  │  (shifted, includes new sample)
---       ══════════════════╪═══════════════════
---
--- Output 'taps' updates on the clock edge when shift_en=1.
--- When shift_en=0, taps holds its previous value.
+-- For the polyphase channelizer, a hot reset always coincides with the parent
+-- filterbank entering LOAD_COEFFS state, during which no taps are read.
+-- By the time the filterbank begins computing again, the ring has been
+-- refilled or the stale data has been overwritten, so the difference is
+-- invisible at the channel outputs.
 --
 -------------------------------------------------------------------------------
 -- RESOURCE USAGE
 -------------------------------------------------------------------------------
--- This module uses flip-flops (registers), not Block RAM.
+-- One block RAM per instance. For DELAY_DEPTH=16, DATA_WIDTH=16, the actual
+-- storage is 256 bits, or about 6% of one 4-kbit iCE40 EBR. Remaining EBR
+-- capacity is unused for simplicity (granularity = one EBR per branch).
 --
---   Flip-flops = DELAY_DEPTH × DATA_WIDTH
+-- Previous version (per branch):  16 FFs * 16 bits = 256 FFs + parent's 16:1 mux
+-- This version (per branch):      1 EBR + tiny address arithmetic
 --
---   MDT (one branch):        16 × 16 = 256 FFs
---   Haifuraiya (one branch): 24 × 16 = 384 FFs
+--   MDT (4 branches):       trades 4 * 256 = 1024 FFs + 4 muxes for 4 EBRs
+--                           (4 of 30 EBRs used on iCE40UP5K)
+--   Haifuraiya (64 branches): 64 EBRs (well within ZCU102 BRAM budget)
 --
---   Total for all branches:
---     MDT:        4 branches × 256 = 1,024 FFs
---     Haifuraiya: 64 branches × 384 = 24,576 FFs
---
--- For Haifuraiya on ZCU102 (548K FFs available), this is < 5% utilization.
--- For MDT on iCE40 UP (~5K FFs available), this is ~20% utilization.
+-- Net effect on iCE40: significant LUT4 and slice-register reduction (the
+-- bottleneck), trading abundant EBR for scarce LUTs.
 --
 -------------------------------------------------------------------------------
 
@@ -108,85 +91,129 @@ entity delay_line is
         -- Number of taps (delay depth)
         -- MDT: 16, Haifuraiya: 24
         DELAY_DEPTH : positive := 16;
-        
+
         -- Width of each sample (bits)
-        -- Typically 16 for complex I or Q component
         DATA_WIDTH  : positive := 16
     );
     port (
-        -- Clock
         clk      : in  std_logic;
-        
-        -- Synchronous reset (active high)
-        -- Clears all taps to zero
         reset    : in  std_logic;
-        
-        -- Shift enable
-        -- Assert for one clock cycle when a new sample arrives for this branch
-        -- When low, delay line holds its current values
+
+        -- Write side: insert new sample
         shift_en : in  std_logic;
-        
-        -- Input sample (newest)
-        -- Valid when shift_en is high
         data_in  : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-        
-        -- All tap outputs (directly accessible for parallel multiply)
-        -- taps(0) = newest sample (just entered)
-        -- taps(DELAY_DEPTH-1) = oldest sample
-        taps     : out std_logic_vector(DELAY_DEPTH * DATA_WIDTH - 1 downto 0)
+
+        -- Read side: tap index in, sample out (1-cycle read latency)
+        -- tap_idx width is unconstrained; the connecting signal sets it.
+        -- The caller is responsible for passing a vector of clog2(DELAY_DEPTH)
+        -- bits or wider.
+        tap_idx  : in  std_logic_vector;
+        tap_out  : out std_logic_vector(DATA_WIDTH - 1 downto 0)
     );
 end entity delay_line;
 
 architecture rtl of delay_line is
 
     ---------------------------------------------------------------------------
-    -- Types
+    -- Functions
     ---------------------------------------------------------------------------
-    type delay_array_t is array (0 to DELAY_DEPTH - 1) of 
+    function clog2(n : positive) return positive is
+        variable r : positive := 1;
+        variable v : positive := 2;
+    begin
+        while v < n loop
+            r := r + 1;
+            v := v * 2;
+        end loop;
+        return r;
+    end function;
+
+    ---------------------------------------------------------------------------
+    -- Constants
+    ---------------------------------------------------------------------------
+    constant ADDR_WIDTH : positive := clog2(DELAY_DEPTH);
+
+    ---------------------------------------------------------------------------
+    -- Storage
+    ---------------------------------------------------------------------------
+    -- The ring buffer. Canonical pattern for inferring synchronous-read block
+    -- RAM on both Lattice LSE (iCE40 EBR) and Xilinx Vivado (BRAM):
+    --   - Single clocked process containing both write and registered read.
+    --   - No reset on the storage itself.
+    --   - Initial value via signal initializer (set in bitstream).
+    --
+    -- Synthesis attributes below are hints to each toolchain's RAM inference.
+    -- LSE looks at syn_ramstyle; Vivado looks at ram_style. They coexist
+    -- harmlessly; each tool ignores the attribute meant for the other.
+    ---------------------------------------------------------------------------
+    type ram_t is array (0 to DELAY_DEPTH - 1) of
         std_logic_vector(DATA_WIDTH - 1 downto 0);
-    
+    signal ram : ram_t := (others => (others => '0'));
+
+    attribute syn_ramstyle : string;
+    attribute syn_ramstyle of ram : signal is "block_ram";
+    attribute ram_style    : string;
+    attribute ram_style    of ram : signal is "block";
+
     ---------------------------------------------------------------------------
-    -- Signals
+    -- Pointers
     ---------------------------------------------------------------------------
-    signal delay_reg : delay_array_t := (others => (others => '0'));
+    signal wr_ptr  : unsigned(ADDR_WIDTH - 1 downto 0) := (others => '0');
+    signal rd_addr : unsigned(ADDR_WIDTH - 1 downto 0);
 
 begin
 
     ---------------------------------------------------------------------------
-    -- Shift Register Process
+    -- Read address calculation (combinational)
     ---------------------------------------------------------------------------
-    -- On each clock edge with shift_en=1:
-    --   - Shift all values toward higher indices (older)
-    --   - Load new sample at index 0 (newest)
+    -- After a write, wr_ptr has advanced past the newly-written slot. So the
+    -- most-recent sample sits at wr_ptr - 1, and the sample N positions older
+    -- sits at wr_ptr - 1 - N. Modulo-DELAY_DEPTH is implicit in unsigned
+    -- wrap-around for power-of-two depths; for non-power-of-two depths the
+    -- caller must use a depth that matches the address width.
+    ---------------------------------------------------------------------------
+    rd_addr <= wr_ptr - resize(unsigned(tap_idx), ADDR_WIDTH) - 1;
+
+    ---------------------------------------------------------------------------
+    -- Block-RAM process: write port + registered read port
+    ---------------------------------------------------------------------------
+    -- Canonical inference pattern. Both write and read inside one clocked
+    -- process. No reset on 'ram'. Read result lands on tap_out one cycle
+    -- after rd_addr is presented.
+    --
+    -- Note on write/read collision: write and read may occur in the same
+    -- cycle to the same address only if the MAC reads the slot we're
+    -- currently writing. In the polyphase channelizer, the MAC's COMPUTING
+    -- pass and the parent's commutator-driven write to this branch are
+    -- temporally separated (writes happen during WAIT_SAMPLES, reads happen
+    -- during COMPUTING). So the collision case doesn't occur and the RAM's
+    -- write-first vs read-first mode doesn't matter.
+    ---------------------------------------------------------------------------
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if shift_en = '1' then
+                ram(to_integer(wr_ptr)) <= data_in;
+            end if;
+            tap_out <= ram(to_integer(rd_addr));
+        end if;
+    end process;
+
+    ---------------------------------------------------------------------------
+    -- Write pointer
+    ---------------------------------------------------------------------------
+    -- Kept in a separate process so it can have synchronous-reset semantics
+    -- without contaminating the RAM-inference pattern above.
     ---------------------------------------------------------------------------
     process(clk)
     begin
         if rising_edge(clk) then
             if reset = '1' then
-                -- Clear all taps to zero
-                delay_reg <= (others => (others => '0'));
+                wr_ptr <= (others => '0');
             elsif shift_en = '1' then
-                -- Shift toward higher indices
-                for i in DELAY_DEPTH - 1 downto 1 loop
-                    delay_reg(i) <= delay_reg(i - 1);
-                end loop;
-                -- Load new sample at index 0
-                delay_reg(0) <= data_in;
+                wr_ptr <= wr_ptr + 1;
             end if;
-            -- When shift_en='0', hold current values (implicit)
         end if;
     end process;
-
-    ---------------------------------------------------------------------------
-    -- Output Assignment
-    ---------------------------------------------------------------------------
-    -- Pack all taps into a single vector for easy connection to MAC units
-    -- taps(DATA_WIDTH-1 downto 0) = tap 0 (newest)
-    -- taps(2*DATA_WIDTH-1 downto DATA_WIDTH) = tap 1
-    -- etc.
-    ---------------------------------------------------------------------------
-    gen_taps: for i in 0 to DELAY_DEPTH - 1 generate
-        taps((i + 1) * DATA_WIDTH - 1 downto i * DATA_WIDTH) <= delay_reg(i);
-    end generate gen_taps;
 
 end architecture rtl;
