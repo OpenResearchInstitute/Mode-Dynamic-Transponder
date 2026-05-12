@@ -1,0 +1,50 @@
+# Radiant build artifacts
+impl_1/*.bin
+impl_1/*.udb
+impl_1/*.mrp
+impl_1/*.mrp.html
+impl_1/*.twr
+impl_1/*.twr.html
+impl_1/*.par
+impl_1/*.pad
+impl_1/*.bgn
+impl_1/*.drc
+impl_1/*.arearep
+impl_1/*.srp
+impl_1/*.synproj
+impl_1/*.html
+impl_1/*.vm
+impl_1/*.psn
+impl_1/*.p2t
+impl_1/*.t2b
+impl_1/*.pwrprd
+impl_1/*.hrr
+impl_1/*.lsedata
+impl_1/*.tcl
+impl_1/*.txt
+impl_1/*.log
+impl_1/*.xml
+impl_1/readback*.bin
+impl_1/.vdbs/
+impl_1/incr/
+impl_1/*_par.dir/
+impl_1/.build_status
+
+# Radiant log/report files
+*.log
+*.html
+sic_receiver_tcr.dir/
+reportview.xml
+promote.pfl
+promote.xml
+
+# Hidden Radiant settings
+.ng_run_manager.ini
+.setting.ini
+
+# Radiant per-machine state
+.recovery
+impl_1/.synthesis_touch
+
+# LSE-generated package files (regenerated each synthesis)
+impl_1/._*.vhd
