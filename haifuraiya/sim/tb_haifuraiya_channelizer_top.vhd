@@ -231,6 +231,7 @@ begin
             while frame_seq < target loop
                 wait until rising_edge(clk);
             end loop;
+            wait until falling_edge(clk);  -- step off the rising edge, try to fix stall at test 2
         end procedure;
 
         -- Compute power (re^2 + im^2) per bin from current frame snapshot
