@@ -41,23 +41,23 @@
 -- BLOCK DIAGRAM
 -------------------------------------------------------------------------------
 --
---                ┌──────────────────────────────────────────────────────┐
---                │           haifuraiya_channelizer_top                 │
---                │                                                      │
---                │   ┌────────────────────────┐                         │
---                │   │ polyphase_filterbank_  │                         │
---   sample_re ──►│──►│ parallel (I)           │── parallel bus (I) ──┐  │
---                │   │ 64 branches × 24 taps  │                      │  │
---                │   │ coeffs from .hex       │                      │  │
---                │   └────────────────────────┘                      ▼  │
---                │   ┌────────────────────────┐         ┌───────────────┐
---                │   │ polyphase_filterbank_  │         │ parallel-to-  │
---   sample_im ──►│──►│ parallel (Q)           │── parallel bus (Q) ──►│   sequential  │── ► fft_64pt
---                │   │ 64 branches × 24 taps  │         │   adapter     │     ──►  channel out
---                │   │ coeffs from .hex       │         │               │
---                │   └────────────────────────┘         └───────────────┘
---                │                                                      │
---                └──────────────────────────────────────────────────────┘
+--                ????????????????????????????????????????????????????????
+--                ?           haifuraiya_channelizer_top                 ?
+--                ?                                                      ?
+--                ?   ??????????????????????????                         ?
+--                ?   ? polyphase_filterbank_  ?                         ?
+--   sample_re ???????? parallel (I)           ??? parallel bus (I) ???  ?
+--                ?   ? 64 branches × 24 taps  ?                      ?  ?
+--                ?   ? coeffs from .hex       ?                      ?  ?
+--                ?   ??????????????????????????                      ?  ?
+--                ?   ??????????????????????????         ?????????????????
+--                ?   ? polyphase_filterbank_  ?         ? parallel-to-  ?
+--   sample_im ???????? parallel (Q)           ??? parallel bus (Q) ????   sequential  ??? ? fft_64pt
+--                ?   ? 64 branches × 24 taps  ?         ?   adapter     ?     ???  channel out
+--                ?   ? coeffs from .hex       ?         ?               ?
+--                ?   ??????????????????????????         ?????????????????
+--                ?                                                      ?
+--                ????????????????????????????????????????????????????????
 --
 -------------------------------------------------------------------------------
 
@@ -272,8 +272,9 @@ begin
     ---------------------------------------------------------------------------
     -- 64-Point FFT
     ---------------------------------------------------------------------------
-    u_fft : entity work.fft_64pt
+    u_fft : entity work.fft_n_pt
         generic map (
+            N          => N_CHANNELS,
             DATA_WIDTH => ACCUM_WIDTH
         )
         port map (

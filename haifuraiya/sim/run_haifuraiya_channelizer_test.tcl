@@ -90,9 +90,10 @@ safe_add_files sources_1 {
 # Channelizer building blocks (must compile before the top wrapper)
 puts "\n--- Channelizer Building Blocks ---"
 safe_add_files sources_1 {
+    ../rtl/channelizer/fft_pkg.vhd
+    ../rtl/channelizer/fft_n_pt.vhd
     ../rtl/channelizer/fir_branch_parallel.vhd
     ../rtl/channelizer/polyphase_filterbank_parallel.vhd
-    ../rtl/channelizer/fft_64pt.vhd
 }
 
 # Haifuraiya top wrapper
@@ -221,7 +222,6 @@ add_wave -into {FFT} /tb_haifuraiya_channelizer_top/dut/u_fft/state
 add_wave -into {FFT} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft/stage_cnt
 add_wave -into {FFT} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft/butterfly_cnt
 add_wave -into {FFT} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft/out_cnt
-add_wave -into {FFT} /tb_haifuraiya_channelizer_top/dut/u_fft/use_buf_a
 add_wave -into {FFT} /tb_haifuraiya_channelizer_top/dut/fft_busy
 
 # Output Capture: easier to read the captured frame than the raw stream
