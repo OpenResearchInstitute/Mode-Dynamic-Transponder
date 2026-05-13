@@ -210,7 +210,23 @@ begin
         end if;
     end process p_fsm;
 
-    busy <= '0' when state = IDLE else '1';
+    -- Busy = high during all active states. We anticipate IDLE by one cycle:
+    -- when state=OUTPUTTING and out_cnt=N-1, the FSM transitions to IDLE on
+    -- the next edge, and the buffers will be available. Signaling busy='0'
+    -- here lets a downstream arbiter pre-arm a new frame, eliminating the
+    -- one-cycle gap between back-to-back FFT uses (needed for the dual-FFT
+    -- parallel channelizer at M = N_CHANNELS/2 or smaller).
+    --
+    -- This is safe because:
+    --   - The last OUTPUTTING cycle's read of buf is already in flight
+    --     (registered via p_output), so the buffer is no longer being read
+    --     for the current frame on the next cycle.
+    --   - LOADING for the new frame starts two cycles later (1 cycle for
+    --     P2S to latch, 1 cycle for the FFT to see x_valid in IDLE), by
+    --     which time state has transitioned to IDLE.
+    busy <= '0' when state = IDLE else
+            '0' when state = OUTPUTTING and out_cnt = N - 1 else
+            '1';
 
     ---------------------------------------------------------------------------
     -- Combinational butterfly address generation.

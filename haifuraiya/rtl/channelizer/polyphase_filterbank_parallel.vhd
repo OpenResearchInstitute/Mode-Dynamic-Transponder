@@ -78,6 +78,11 @@ use ieee.numeric_std.all;
 entity polyphase_filterbank_parallel is
     generic (
         N_CHANNELS       : positive := 64;
+        -- Decimation factor M (samples consumed per output frame).
+        --   M = N_CHANNELS: critically sampled (original behavior).
+        --   M < N_CHANNELS: oversampled / guard-band mode.
+        -- For cleanest channel response, M should divide N_CHANNELS.
+        M_DECIMATION     : positive := 64;
         TAPS_PER_BRANCH  : positive := 24;
         DATA_WIDTH       : positive := 16;
         COEFF_WIDTH      : positive := 16;
@@ -111,6 +116,7 @@ end entity polyphase_filterbank_parallel;
 architecture rtl of polyphase_filterbank_parallel is
 
     constant BRANCH_IDX_WIDTH : positive := clog2(N_CHANNELS);
+    constant M_IDX_WIDTH      : positive := clog2(M_DECIMATION);
 
     type result_array_t is array (0 to N_CHANNELS - 1) of
         std_logic_vector(ACCUM_WIDTH - 1 downto 0);
@@ -119,8 +125,13 @@ architecture rtl of polyphase_filterbank_parallel is
     signal branch_results       : result_array_t;
     -- One-hot sample_valid distribution (commutator output)
     signal branch_sample_valid  : std_logic_vector(N_CHANNELS - 1 downto 0);
-    -- Commutator counter
+    -- Commutator counter: free-runs 0..N-1, wraps independently of M.
+    -- Drives which branch receives each input sample.
     signal branch_select        : unsigned(BRANCH_IDX_WIDTH - 1 downto 0)
+                                  := (others => '0');
+    -- Frame counter: counts 0..M-1, wraps and fires frame_complete.
+    -- Independent of branch_select; drives output frame timing.
+    signal samples_since_fc     : unsigned(M_IDX_WIDTH - 1 downto 0)
                                   := (others => '0');
     -- Frame-complete pipeline
     signal frame_complete_d0    : std_logic := '0';
@@ -164,20 +175,27 @@ begin
     end generate gen_branches;
 
     ---------------------------------------------------------------------------
-    -- Branch-select counter and frame-complete pipeline
-    --   - branch_select wraps from N-1 back to 0 on the Nth sample of a
-    --     round, marking the moment all N branches have new data
-    --   - frame_complete_d0 captures that wrap event
-    --   - frame_complete_d1 = d0 delayed by one clock, giving the last
-    --     branch's MAC time to settle into its output register before
-    --     we tell downstream the frame is ready
-    --   - outputs_valid drives directly from d1 (one-clock pulse)
+    -- Counters and frame-complete pipeline
+    --
+    --   branch_select   : free-runs 0..N-1, wrapping naturally.  Decoupled
+    --                     from frame_complete because for M<N the commutator
+    --                     does not align with frame boundaries.
+    --
+    --   samples_since_fc: counts 0..M-1.  When it wraps (was M-1 and a new
+    --                     sample arrives) we fire frame_complete_d0.
+    --
+    --   frame_complete_d1: one-clock pipeline of d0, giving the last branch
+    --                     MAC time to settle before signalling downstream.
+    --
+    -- For M = N_CHANNELS the two counters wrap on the same cycle, giving
+    -- behaviour identical to the original M=N implementation.
     ---------------------------------------------------------------------------
     p_select : process(clk)
     begin
         if rising_edge(clk) then
             if reset = '1' then
                 branch_select     <= (others => '0');
+                samples_since_fc  <= (others => '0');
                 frame_complete_d0 <= '0';
                 frame_complete_d1 <= '0';
             else
@@ -185,11 +203,19 @@ begin
                 frame_complete_d0 <= '0';
 
                 if sample_valid = '1' then
+                    -- Commutator wheel: wraps at N
                     if branch_select = N_CHANNELS - 1 then
-                        branch_select     <= (others => '0');
-                        frame_complete_d0 <= '1';
+                        branch_select <= (others => '0');
                     else
                         branch_select <= branch_select + 1;
+                    end if;
+
+                    -- Frame counter: wraps at M, asserts frame_complete
+                    if samples_since_fc = M_DECIMATION - 1 then
+                        samples_since_fc  <= (others => '0');
+                        frame_complete_d0 <= '1';
+                    else
+                        samples_since_fc <= samples_since_fc + 1;
                     end if;
                 end if;
 

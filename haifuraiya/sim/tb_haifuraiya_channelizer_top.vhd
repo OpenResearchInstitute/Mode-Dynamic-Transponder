@@ -69,8 +69,13 @@ architecture sim of tb_haifuraiya_channelizer_top is
 
     ---------------------------------------------------------------------------
     -- Configuration constants (Haifuraiya defaults)
+    --
+    -- M_DECIMATION = N_CHANNELS: critically sampled (regression).
+    -- M_DECIMATION = 16        : Haifuraiya production (4x oversampled).
+    -- M_DECIMATION = 32        : 2x oversampled.
     ---------------------------------------------------------------------------
     constant N_CHANNELS      : positive := 64;
+    constant M_DECIMATION    : positive := 16;   -- flip to 16 for production
     constant TAPS_PER_BRANCH : positive := 24;
     constant DATA_WIDTH      : positive := 16;
     constant COEFF_WIDTH     : positive := 16;
@@ -152,6 +157,7 @@ begin
     dut : entity work.haifuraiya_channelizer_top
         generic map (
             N_CHANNELS      => N_CHANNELS,
+            M_DECIMATION    => M_DECIMATION,
             TAPS_PER_BRANCH => TAPS_PER_BRANCH,
             DATA_WIDTH      => DATA_WIDTH,
             COEFF_WIDTH     => COEFF_WIDTH,
@@ -224,14 +230,28 @@ begin
         end procedure;
 
         -- Wait until at least 'n' new complete output frames have passed
+        -- Bounded by a generous timeout so a stalled DUT can't hang the
+        -- entire test run; on timeout we print a diagnostic and continue.
         procedure wait_frames(n : positive) is
             variable target : natural;
+            constant TIMEOUT_CYCLES : positive := 200_000;  -- 2 ms at 100 MHz
+            variable cycles : natural := 0;
         begin
             target := frame_seq + n;
             while frame_seq < target loop
                 wait until rising_edge(clk);
+                cycles := cycles + 1;
+                if cycles >= TIMEOUT_CYCLES then
+                    report "wait_frames TIMEOUT after " &
+                           integer'image(cycles) &
+                           " cycles. target=" & integer'image(target) &
+                           " frame_seq=" & integer'image(frame_seq) &
+                           " frame_dropped_count=" &
+                           integer'image(frame_dropped_count)
+                        severity warning;
+                    exit;
+                end if;
             end loop;
-            wait until falling_edge(clk);  -- step off the rising edge, try to fix stall at test 2
         end procedure;
 
         -- Compute power (re^2 + im^2) per bin from current frame snapshot

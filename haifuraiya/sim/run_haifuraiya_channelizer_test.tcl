@@ -211,18 +211,18 @@ add_wave -into {Filterbank_Q} -radix hex /tb_haifuraiya_channelizer_top/dut/fb_q
 # Parallel-to-Sequential adapter
 add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/p2s_state
 add_wave -into {P2S_Adapter} -radix unsigned /tb_haifuraiya_channelizer_top/dut/p2s_idx
-add_wave -into {P2S_Adapter} -radix dec /tb_haifuraiya_channelizer_top/dut/fft_x_re
-add_wave -into {P2S_Adapter} -radix dec /tb_haifuraiya_channelizer_top/dut/fft_x_im
-add_wave -into {P2S_Adapter} -radix unsigned /tb_haifuraiya_channelizer_top/dut/fft_x_idx
-add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/fft_x_valid
-add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/fft_x_last
+#add_wave -into {P2S_Adapter} -radix dec /tb_haifuraiya_channelizer_top/dut/fft_x_re
+#add_wave -into {P2S_Adapter} -radix dec /tb_haifuraiya_channelizer_top/dut/fft_x_im
+#add_wave -into {P2S_Adapter} -radix unsigned /tb_haifuraiya_channelizer_top/dut/fft_x_idx
+#add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/fft_x_valid
+#add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/fft_x_last
 
 # FFT internals
-add_wave -into {FFT} /tb_haifuraiya_channelizer_top/dut/u_fft/state
-add_wave -into {FFT} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft/stage_cnt
-add_wave -into {FFT} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft/butterfly_cnt
-add_wave -into {FFT} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft/out_cnt
-add_wave -into {FFT} /tb_haifuraiya_channelizer_top/dut/fft_busy
+#add_wave -into {FFT} /tb_haifuraiya_channelizer_top/dut/u_fft/state
+#add_wave -into {FFT} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft/stage_cnt
+#add_wave -into {FFT} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft/butterfly_cnt
+#add_wave -into {FFT} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft/out_cnt
+#add_wave -into {FFT} /tb_haifuraiya_channelizer_top/dut/fft_busy
 
 # Output Capture: easier to read the captured frame than the raw stream
 add_wave -into {Output_Capture} -radix unsigned /tb_haifuraiya_channelizer_top/frame_seq_at_last_capture
