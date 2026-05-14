@@ -210,22 +210,29 @@ begin
         end if;
     end process p_fsm;
 
-    -- Busy = high during all active states. We anticipate IDLE by one cycle:
-    -- when state=OUTPUTTING and out_cnt=N-1, the FSM transitions to IDLE on
-    -- the next edge, and the buffers will be available. Signaling busy='0'
-    -- here lets a downstream arbiter pre-arm a new frame, eliminating the
-    -- one-cycle gap between back-to-back FFT uses (needed for the dual-FFT
-    -- parallel channelizer at M = N_CHANNELS/2 or smaller).
+    -- Busy = high during all active states. We anticipate IDLE by TWO cycles:
+    -- when state=OUTPUTTING and out_cnt >= N-2 (the last two OUTPUTTING
+    -- cycles), the FSM will finish OUTPUTTING and the buffers will be
+    -- available before any new LOADING write conflicts with an old
+    -- OUTPUTTING read.
     --
-    -- This is safe because:
-    --   - The last OUTPUTTING cycle's read of buf is already in flight
-    --     (registered via p_output), so the buffer is no longer being read
-    --     for the current frame on the next cycle.
-    --   - LOADING for the new frame starts two cycles later (1 cycle for
-    --     P2S to latch, 1 cycle for the FFT to see x_valid in IDLE), by
-    --     which time state has transitioned to IDLE.
+    -- Why two cycles, not one: the downstream P2S adapter is registered,
+    -- so when it sees busy='0' at cycle X it can only latch on edge X+1
+    -- and start driving x_valid='1' at cycle X+2. The FFT then sees that
+    -- x_valid at edge X+3 and writes buf_a(0). For dual-FFT operation at
+    -- M = N_CHANNELS/2, we need the in-flight FFT to free up busy at
+    -- cycle X = (next_frame_arrival - 1), which is two cycles before
+    -- the last OUTPUTTING cycle.
+    --
+    -- Safety: LOADING for the new frame writes buf_a(0), buf_a(1), ... in
+    -- sequence at edges X+3, X+4, .... OUTPUTTING during cycles X and X+1
+    -- reads buf_a(bit_reverse(N-2)) and buf_a(bit_reverse(N-1)). For
+    -- N=64 these are buf_a(31) and buf_a(63), which never collide with
+    -- the new LOADING writes at low indices. State transitions to IDLE
+    -- at edge X+2, so by the time LOADING starts writing, OUTPUTTING is
+    -- no longer reading buf_a at all.
     busy <= '0' when state = IDLE else
-            '0' when state = OUTPUTTING and out_cnt = N - 1 else
+            '0' when state = OUTPUTTING and out_cnt >= N - 2 else
             '1';
 
     ---------------------------------------------------------------------------
