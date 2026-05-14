@@ -19,11 +19,11 @@
 --   * The COMPUTING / OUTPUT_READY 2-state output dance
 --   * All branch-coefficient packed registers
 --
--- Each branch reads its own coefficient slice from COEFF_FILE at
--- elaboration time. Each branch finishes its MAC 1 clock after its
--- sample arrives; the filterbank pulses outputs_valid 2 clocks after
--- the Nth sample of a frame (1 clock to let the last branch's MAC
--- register settle, 1 clock of pipeline register on the pulse itself).
+-- Each branch finishes its MAC 3 clocks after its sample arrives (a
+-- 3-stage pipeline: taps -> two 12-tap half-MACs -> final add).  The
+-- filterbank pulses outputs_valid 3 clocks after the Nth sample of a
+-- frame (one for the d0 wrap-detect, two more to let the last branch's
+-- MAC pipeline drain into mac_reg).
 --
 -- The output interface (branch_outputs packed bus + outputs_valid
 -- pulse) is identical to polyphase_filterbank.vhd, so the downstream
@@ -32,9 +32,9 @@
 -------------------------------------------------------------------------------
 -- TIMING
 -------------------------------------------------------------------------------
---   Latency from first sample to first outputs_valid: N + 2 clocks
---     (N samples to fill the commutator, 1 for last branch MAC, 1 for
---      the pulse pipeline register)
+--   Latency from first sample to first outputs_valid: N + 3 clocks
+--     (N samples to fill the commutator, 3 for the pipelined MAC
+--      stages: half-MAC_a/half-MAC_b in parallel, then mac_reg)
 --
 --   With Haifuraiya at 100 MHz / 10 Msps (10 clk/sample):
 --     - Sample period:        100 ns
@@ -65,7 +65,7 @@
 --                       │   │  with own COEFFS    │                   │
 --                       │   └─────────────────────┘                   │
 --                       │                                             │
---                       │   wrap-detect ──► d0 ──► d1 ────────────────│──► outputs_valid
+--                       │   wrap-detect ──► d0 ──► d1 ──► d2 ─────────│──► outputs_valid
 --                       │                                             │
 --                       └─────────────────────────────────────────────┘
 --
@@ -136,6 +136,9 @@ architecture rtl of polyphase_filterbank_parallel is
     -- Frame-complete pipeline
     signal frame_complete_d0    : std_logic := '0';
     signal frame_complete_d1    : std_logic := '0';
+    -- d2 added so outputs_valid matches the now-3-cycle MAC pipeline
+    -- inside fir_branch_parallel.
+    signal frame_complete_d2    : std_logic := '0';
 
 begin
 
@@ -184,8 +187,15 @@ begin
     --   samples_since_fc: counts 0..M-1.  When it wraps (was M-1 and a new
     --                     sample arrives) we fire frame_complete_d0.
     --
-    --   frame_complete_d1: one-clock pipeline of d0, giving the last branch
-    --                     MAC time to settle before signalling downstream.
+    --   frame_complete_d1: one-clock pipeline of d0.
+    --
+    --   frame_complete_d2: another one-clock pipeline so outputs_valid
+    --                     fires exactly when the last branch's mac_reg
+    --                     latches the new partial-MAC sum.  With
+    --                     fir_branch_parallel's 3-stage pipeline the
+    --                     last branch's MAC settles 3 clocks after its
+    --                     sample arrives, so outputs_valid lives 3
+    --                     clocks downstream of the d0 wrap pulse.
     --
     -- For M = N_CHANNELS the two counters wrap on the same cycle, giving
     -- behaviour identical to the original M=N implementation.
@@ -198,6 +208,7 @@ begin
                 samples_since_fc  <= (others => '0');
                 frame_complete_d0 <= '0';
                 frame_complete_d1 <= '0';
+                frame_complete_d2 <= '0';
             else
                 -- Default deassertion (gets overridden on wrap)
                 frame_complete_d0 <= '0';
@@ -219,8 +230,11 @@ begin
                     end if;
                 end if;
 
-                -- One-clock pipeline register for the pulse
+                -- Two-stage pulse pipeline so outputs_valid fires 3
+                -- clocks after the M-th sample (last branch's pipelined
+                -- MAC has settled by then).
                 frame_complete_d1 <= frame_complete_d0;
+                frame_complete_d2 <= frame_complete_d1;
             end if;
         end if;
     end process p_select;
@@ -233,6 +247,6 @@ begin
             <= branch_results(i);
     end generate gen_pack;
 
-    outputs_valid <= frame_complete_d1;
+    outputs_valid <= frame_complete_d2;
 
 end architecture rtl;

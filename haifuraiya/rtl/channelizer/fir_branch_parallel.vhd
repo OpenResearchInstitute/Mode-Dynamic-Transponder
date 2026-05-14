@@ -29,20 +29,32 @@
 -------------------------------------------------------------------------------
 -- TIMING
 -------------------------------------------------------------------------------
---   Latency: 1 clock from sample_valid to result_valid
+--   Latency: 3 clocks from sample_valid to result_valid.
+--
+--   The 24-tap MAC is split into two parallel 12-tap halves so the DSP
+--   cascade depth in each cycle is roughly half what a single
+--   combinational 24-tap MAC would be.  Mult+add fusion is preserved
+--   within each half (one DSP48E2 per tap with PCIN/PCOUT cascade),
+--   which is what closes timing at 100 MHz on ZCU102 -2.
 --
 --   Cycle T   : sample arrives (sample_valid=1, sample_in=X)
 --               -> delay line shift queued
 --               -> valid_d <= 1
 --   Cycle T+1 : taps register reflects new sample
---               -> mac_comb (combinational MAC) settles to MAC of new taps
---               -> mac_reg <= mac_comb at T+1's edge
---               -> valid_q <= valid_d (=1) at T+1's edge
---   Cycle T+1 (after edge) : result_valid='1', result=MAC of new taps
+--               -> two 12-tap half-MACs combinational settle
+--               -> mac_partial_a <= sum of taps[0..11]  * COEFFS[0..11]
+--               -> mac_partial_b <= sum of taps[12..23] * COEFFS[12..23]
+--               -> valid_dd <= valid_d (=1)
+--   Cycle T+2 : mac_reg <= mac_partial_a + mac_partial_b (final add)
+--               -> valid_q <= valid_dd (=1)
+--   Cycle T+2 (after edge) : result_valid='1', result=MAC of new taps
 --
 -- For Haifuraiya at 100 MHz with 10 Msps input (10 clk/sample), each
--- branch sees its sample once every N*10 = 640 clocks. 1-clock MAC
--- latency is comfortable in that envelope.
+-- branch sees its sample once every N*10 = 640 clocks. 3-clock MAC
+-- latency is comfortable in that envelope.  The parent filterbank
+-- already pipelines frame_complete through three stages (d0->d1->d2)
+-- so outputs_valid is aligned with the last branch's mac_reg without
+-- any further filterbank change.
 --
 -------------------------------------------------------------------------------
 -- BLOCK DIAGRAM
@@ -59,17 +71,29 @@
 --                         │               │ M parallel taps          │
 --                         │               ▼                          │
 --                         │      ┌─────────────────┐                 │
---                         │      │ M parallel mults│  (DSP48E2)      │
---                         │      │  taps × COEFFS  │                 │
+--                         │      │ 12-tap half-MAC │  (DSP48E2       │
+--                         │      │ taps[0..11]     │   cascade with  │
+--                         │      │   * COEFFS      │   mult+add      │
+--                         │      └────────┬────────┘   fusion)       │
+--                         │               ▼                          │
+--                         │      ┌─────────────────┐                 │
+--                         │      │ mac_partial_a   │ (pipeline reg)  │
 --                         │      └────────┬────────┘                 │
 --                         │               │                          │
+--                         │      (in parallel)                       │
 --                         │      ┌─────────────────┐                 │
---                         │      │   adder tree    │  (DSP cascade   │
---                         │      │   (synth-built) │   or LUT)       │
+--                         │      │ 12-tap half-MAC │  (DSP48E2       │
+--                         │      │ taps[12..23]    │   cascade with  │
+--                         │      │   * COEFFS      │   mult+add      │
+--                         │      └────────┬────────┘   fusion)       │
+--                         │               ▼                          │
+--                         │      ┌─────────────────┐                 │
+--                         │      │ mac_partial_b   │ (pipeline reg)  │
 --                         │      └────────┬────────┘                 │
 --                         │               │                          │
 --                         │      ┌────────▼────────┐                 │
---                         │      │ output register │────► result     │
+--                         │      │  final add reg  │────► result     │
+--                         │      │    (mac_reg)    │                 │
 --                         │      └─────────────────┘                 │
 --                         │                                          │
 --                         │   COEFFS read from COEFF_FILE at         │
@@ -186,10 +210,20 @@ architecture rtl of fir_branch_parallel is
     ---------------------------------------------------------------------------
     -- Internal signals
     ---------------------------------------------------------------------------
-    signal taps     : sample_array_t := (others => (others => '0'));
-    signal mac_comb : signed(ACCUM_WIDTH - 1 downto 0);
-    signal mac_reg  : signed(ACCUM_WIDTH - 1 downto 0) := (others => '0');
+    signal taps          : sample_array_t := (others => (others => '0'));
+    -- Two registered 12-tap partial-MAC results.  Vivado collapses the
+    -- multiplier and the per-tap add of each half into a DSP48E2
+    -- PCIN/PCOUT cascade, so the critical path inside each half is one
+    -- DSP-cascade hop per tap (12 hops) instead of all 24 in series.
+    signal mac_partial_a : signed(ACCUM_WIDTH - 1 downto 0) := (others => '0');
+    signal mac_partial_b : signed(ACCUM_WIDTH - 1 downto 0) := (others => '0');
+    signal mac_reg       : signed(ACCUM_WIDTH - 1 downto 0) := (others => '0');
+    -- Three-stage valid pipeline tracks the three MAC pipeline stages:
+    --   valid_d  : sample_valid registered (matches taps update)
+    --   valid_dd : valid_d registered      (matches mac_partial_{a,b} update)
+    --   valid_q  : valid_dd registered     (matches mac_reg update)
     signal valid_d  : std_logic := '0';
+    signal valid_dd : std_logic := '0';
     signal valid_q  : std_logic := '0';
 
 begin
@@ -213,40 +247,80 @@ begin
     end process p_shift;
 
     ---------------------------------------------------------------------------
-    -- Stage 2: Combinational parallel MAC
-    -- Synthesis flattens the for-loop into TAPS_PER_BRANCH multipliers and
-    -- an adder tree. Vivado folds mult+add pairs into DSP48E2 slices
-    -- automatically when patterns match (use_dsp = "yes" attribute can be
-    -- added if the tool gets shy).
+    -- Stage 2: Two parallel 12-tap half-MACs (DSP48E2 cascades)
+    -- Owns: mac_partial_a, mac_partial_b.  Each half is a combinational
+    -- 12-tap MAC computed inside one clock period and registered at the
+    -- output.  The for-loops written as variable accumulators steer
+    -- Vivado toward PCIN/PCOUT cascades inside the DSP48E2 chain, with
+    -- mult+add fused per tap.  Splitting at TAPS_PER_BRANCH/2 cuts the
+    -- cascade depth roughly in half compared to a 24-tap MAC tree,
+    -- which is what makes 100 MHz close on ZCU102 -2.
+    --
+    -- COEFFS are elaboration-time constants, so trivial coefficients
+    -- (zero, +/-1, small powers of two) still get folded away and
+    -- reduce DSP count below the naive TAPS_PER_BRANCH per branch.
     ---------------------------------------------------------------------------
-    p_mac : process(taps)
-        variable acc_v : signed(ACCUM_WIDTH - 1 downto 0);
+    p_mac_halves : process(clk)
+        variable acc_a : signed(ACCUM_WIDTH - 1 downto 0);
+        variable acc_b : signed(ACCUM_WIDTH - 1 downto 0);
     begin
-        acc_v := (others => '0');
-        for i in 0 to TAPS_PER_BRANCH - 1 loop
-            acc_v := acc_v + resize(taps(i) * COEFFS(i), ACCUM_WIDTH);
-        end loop;
-        mac_comb <= acc_v;
-    end process p_mac;
+        if rising_edge(clk) then
+            if reset = '1' then
+                mac_partial_a <= (others => '0');
+                mac_partial_b <= (others => '0');
+            else
+                -- First half: taps[0 .. TAPS_PER_BRANCH/2 - 1]
+                acc_a := (others => '0');
+                for i in 0 to (TAPS_PER_BRANCH / 2) - 1 loop
+                    acc_a := acc_a + resize(taps(i) * COEFFS(i), ACCUM_WIDTH);
+                end loop;
+                mac_partial_a <= acc_a;
+
+                -- Second half: taps[TAPS_PER_BRANCH/2 .. TAPS_PER_BRANCH - 1]
+                acc_b := (others => '0');
+                for i in TAPS_PER_BRANCH / 2 to TAPS_PER_BRANCH - 1 loop
+                    acc_b := acc_b + resize(taps(i) * COEFFS(i), ACCUM_WIDTH);
+                end loop;
+                mac_partial_b <= acc_b;
+            end if;
+        end if;
+    end process p_mac_halves;
 
     ---------------------------------------------------------------------------
-    -- Stage 3: Register output and pipeline valid
-    -- Owns: mac_reg, valid_d, valid_q
+    -- Stage 3: Final add of the two half-MAC results
+    -- Owns: mac_reg.  Single ACCUM_WIDTH-wide adder; trivially fast.
     ---------------------------------------------------------------------------
-    p_out : process(clk)
+    p_final_sum : process(clk)
     begin
         if rising_edge(clk) then
             if reset = '1' then
                 mac_reg <= (others => '0');
-                valid_d <= '0';
-                valid_q <= '0';
             else
-                mac_reg <= mac_comb;
-                valid_d <= sample_valid;
-                valid_q <= valid_d;
+                mac_reg <= mac_partial_a + mac_partial_b;
             end if;
         end if;
-    end process p_out;
+    end process p_final_sum;
+
+    ---------------------------------------------------------------------------
+    -- Stage 4: Valid pipeline
+    -- Owns: valid_d, valid_dd, valid_q.  Three stages track the three
+    -- data pipeline stages above (taps update, mac_partial_* update,
+    -- mac_reg update).
+    ---------------------------------------------------------------------------
+    p_valid : process(clk)
+    begin
+        if rising_edge(clk) then
+            if reset = '1' then
+                valid_d  <= '0';
+                valid_dd <= '0';
+                valid_q  <= '0';
+            else
+                valid_d  <= sample_valid;
+                valid_dd <= valid_d;
+                valid_q  <= valid_dd;
+            end if;
+        end if;
+    end process p_valid;
 
     result       <= std_logic_vector(mac_reg);
     result_valid <= valid_q;
