@@ -1,0 +1,6 @@
+[submodule "haifuraiya/third_party/power_detector"]
+	path = haifuraiya/third_party/power_detector
+	url = https://github.com/OpenResearchInstitute/power_detector.git
+[submodule "haifuraiya/third_party/lowpass_ema"]
+	path = haifuraiya/third_party/lowpass_ema
+	url = https://github.com/OpenResearchInstitute/lowpass_ema.git
