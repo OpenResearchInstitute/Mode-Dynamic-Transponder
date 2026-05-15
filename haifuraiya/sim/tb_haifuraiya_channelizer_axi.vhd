@@ -294,17 +294,39 @@ begin
         ---------------------------------------------------------------------
         -- Drive one input sample via AXIS
         ---------------------------------------------------------------------
-        procedure send_sample(constant re_val : in integer;
-                              constant im_val : in integer) is
-        begin
-            s_axis_data_tdata(DATA_WIDTH - 1 downto 0) <=
-                std_logic_vector(to_signed(re_val, DATA_WIDTH));
-            s_axis_data_tdata(31 downto 32 - DATA_WIDTH) <=
-                std_logic_vector(to_signed(im_val, DATA_WIDTH));
-            s_axis_data_tvalid <= '1';
-            wait until rising_edge(aclk) and s_axis_data_tready = '1';
-            s_axis_data_tvalid <= '0';
-        end procedure;
+        --procedure send_sample(constant re_val : in integer;
+        --                      constant im_val : in integer) is
+        --begin
+        --    s_axis_data_tdata(DATA_WIDTH - 1 downto 0) <=
+        --        std_logic_vector(to_signed(re_val, DATA_WIDTH));
+        --    s_axis_data_tdata(31 downto 32 - DATA_WIDTH) <=
+        --        std_logic_vector(to_signed(im_val, DATA_WIDTH));
+        --    s_axis_data_tvalid <= '1';
+        --    wait until rising_edge(aclk) and s_axis_data_tready = '1';
+        --    s_axis_data_tvalid <= '0';
+        --end procedure;
+
+
+
+	procedure send_sample(constant re_val : in integer;
+	                  constant im_val : in integer) is
+	begin
+	    report "send_sample call: re=" & integer'image(re_val) severity note;
+	    -- Drive new data and assert tvalid
+	    s_axis_data_tdata(DATA_WIDTH - 1 downto 0) <=
+	        std_logic_vector(to_signed(re_val, DATA_WIDTH));
+	    s_axis_data_tdata(31 downto 32 - DATA_WIDTH) <=
+	        std_logic_vector(to_signed(im_val, DATA_WIDTH));
+	    s_axis_data_tvalid <= '1';
+	
+	    -- Wait one clock for the DUT to sample, then loop until handshake
+	    loop
+	        wait until rising_edge(aclk);
+	        exit when s_axis_data_tready = '1';
+	    end loop;
+
+	    s_axis_data_tvalid <= '0';
+	end procedure;
 
         ---------------------------------------------------------------------
         -- Pass/fail helpers
