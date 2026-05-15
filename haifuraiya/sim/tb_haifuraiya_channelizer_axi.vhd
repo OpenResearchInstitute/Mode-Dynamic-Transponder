@@ -308,25 +308,41 @@ begin
 
 
 
+	--procedure send_sample(constant re_val : in integer;
+	--                  constant im_val : in integer) is
+	--begin
+	--    report "send_sample call: re=" & integer'image(re_val) severity note;
+	--    -- Drive new data and assert tvalid
+	--    s_axis_data_tdata(DATA_WIDTH - 1 downto 0) <=
+	--        std_logic_vector(to_signed(re_val, DATA_WIDTH));
+	--    s_axis_data_tdata(31 downto 32 - DATA_WIDTH) <=
+	--        std_logic_vector(to_signed(im_val, DATA_WIDTH));
+	--    s_axis_data_tvalid <= '1';
+	--
+	--    -- Wait one clock for the DUT to sample, then loop until handshake
+	--    loop
+	--        wait until rising_edge(aclk);
+	--        exit when s_axis_data_tready = '1';
+	--    end loop;
+
+	--    s_axis_data_tvalid <= '0';
+	--end procedure;
+
+
 	procedure send_sample(constant re_val : in integer;
-	                  constant im_val : in integer) is
+                      constant im_val : in integer) is
 	begin
-	    report "send_sample call: re=" & integer'image(re_val) severity note;
-	    -- Drive new data and assert tvalid
+	    wait until rising_edge(aclk);                 -- align to clock edge
 	    s_axis_data_tdata(DATA_WIDTH - 1 downto 0) <=
 	        std_logic_vector(to_signed(re_val, DATA_WIDTH));
 	    s_axis_data_tdata(31 downto 32 - DATA_WIDTH) <=
 	        std_logic_vector(to_signed(im_val, DATA_WIDTH));
 	    s_axis_data_tvalid <= '1';
-	
-	    -- Wait one clock for the DUT to sample, then loop until handshake
-	    loop
-	        wait until rising_edge(aclk);
-	        exit when s_axis_data_tready = '1';
-	    end loop;
-
+	    wait until rising_edge(aclk);                 -- hold for one full cycle
 	    s_axis_data_tvalid <= '0';
 	end procedure;
+
+
 
         ---------------------------------------------------------------------
         -- Pass/fail helpers
@@ -428,7 +444,8 @@ begin
             fail("OUTPUT_SHIFT=20 readback got " & integer'image(rdata));
         end if;
         -- Restore default
-        axi_write(ADDR_OUTPUT_SHIFT, DATA_WIDTH);
+        --axi_write(ADDR_OUTPUT_SHIFT, DATA_WIDTH);
+        axi_write(ADDR_OUTPUT_SHIFT, 4); -- do not shift away our entire value
 
         ---------------------------------------------------------------------
         -- Test 4: STATUS readable, ready bit should be high
@@ -451,9 +468,13 @@ begin
         report "--- Test 5: DC input, expect channel 0 hot ---";
         -- Send DC samples for long enough to fill the FIR delay line
         -- and produce many output frames so the EMA filters settle.
+
+        -- DEBUG: try without shifting — show where the signal actually lives
+        axi_write(ADDR_OUTPUT_SHIFT, 0);
+
         for i in 0 to 5000 loop
             send_sample(DC_LEVEL, 0);
-            wait for (SMP_PERIOD - 1) * CLK_PERIOD;
+            wait for (SMP_PERIOD - 2) * CLK_PERIOD;
         end loop;
 
         -- Read all 64 channel powers and find the peak channel
@@ -489,7 +510,7 @@ begin
                 sin(2.0 * MATH_PI * real(TONE_BIN) * real(i) /
                     real(N_CHANNELS)));
             send_sample(tone_re, tone_im);
-            wait for (SMP_PERIOD - 1) * CLK_PERIOD;
+            wait for (SMP_PERIOD - 2) * CLK_PERIOD;
         end loop;
 
         max_power := 0;
