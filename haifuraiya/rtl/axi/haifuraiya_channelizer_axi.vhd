@@ -243,7 +243,8 @@ begin
             if core_reset = '1' then
                 chan_re_q <= (others => '0');
                 chan_im_q <= (others => '0');
-            else
+            --else
+            elsif chan_valid = '1' then
                 -- Clamp the shift amount to the valid range
                 if to_integer(ctrl_output_shift) > ACCUM_WIDTH - DATA_WIDTH then
                     shift_amt := ACCUM_WIDTH - DATA_WIDTH;

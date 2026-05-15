@@ -444,8 +444,8 @@ begin
             fail("OUTPUT_SHIFT=20 readback got " & integer'image(rdata));
         end if;
         -- Restore default
-        --axi_write(ADDR_OUTPUT_SHIFT, DATA_WIDTH);
-        axi_write(ADDR_OUTPUT_SHIFT, 4); -- do not shift away our entire value
+        axi_write(ADDR_OUTPUT_SHIFT, DATA_WIDTH);
+        --axi_write(ADDR_OUTPUT_SHIFT, 4); -- do not shift away our entire value
 
         ---------------------------------------------------------------------
         -- Test 4: STATUS readable, ready bit should be high
@@ -469,8 +469,8 @@ begin
         -- Send DC samples for long enough to fill the FIR delay line
         -- and produce many output frames so the EMA filters settle.
 
-        -- DEBUG: try without shifting — show where the signal actually lives
-        axi_write(ADDR_OUTPUT_SHIFT, 0);
+        -- DEBUG: try a shift of 16
+        axi_write(ADDR_OUTPUT_SHIFT, 16);
 
         for i in 0 to 5000 loop
             send_sample(DC_LEVEL, 0);
