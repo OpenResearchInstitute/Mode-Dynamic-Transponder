@@ -152,13 +152,15 @@ architecture rtl of haifuraiya_channelizer_axi is
     signal sample_valid_int : std_logic;
 
     -- Channelizer outputs (from haifuraiya_channelizer_top)
-    signal chan_re_acc   : std_logic_vector(ACCUM_WIDTH - 1 downto 0);
-    signal chan_im_acc   : std_logic_vector(ACCUM_WIDTH - 1 downto 0);
-    signal chan_idx_int  : std_logic_vector(5 downto 0);
-    signal chan_valid    : std_logic;
-    signal chan_last     : std_logic;
-    signal core_ready    : std_logic;
-    signal core_dropped  : std_logic;
+    signal chan_re_acc    : std_logic_vector(ACCUM_WIDTH - 1 downto 0);
+    signal chan_im_acc    : std_logic_vector(ACCUM_WIDTH - 1 downto 0);
+    signal chan_idx_int   : std_logic_vector(5 downto 0);
+    signal chan_valid_r   : std_logic;
+    signal chan_idx_int_r : std_logic_vector(chan_idx_int'range);  -- match chan_idx_int's type
+    signal chan_valid     : std_logic;
+    signal chan_last      : std_logic;
+    signal core_ready     : std_logic;
+    signal core_dropped   : std_logic;
 
     -- Requantized channelizer outputs (40 -> 16 bit via output_shift)
     signal chan_re_q  : std_logic_vector(DATA_WIDTH - 1 downto 0);
@@ -277,6 +279,24 @@ begin
         end if;
     end process p_quantize;
 
+-------------------------------------------------------------------
+-- put this near p_quantize
+-- it is the dispatch's mirror of what p_quantize does for the data
+-------------------------------------------------------------------
+
+p_dispatch_align : process(aclk)
+begin
+    if rising_edge(aclk) then
+        if core_reset = '1' then
+            chan_valid_r   <= '0';
+            chan_idx_int_r <= (others => '0');
+        else
+            chan_valid_r   <= chan_valid;
+            chan_idx_int_r <= chan_idx_int;
+        end if;
+    end if;
+end process p_dispatch_align;
+
     ---------------------------------------------------------------------------
     -- Output AXIS adapter
     -- The channelizer's channel_valid/idx/last already produces a clean
@@ -310,10 +330,11 @@ begin
     -- its own channel index. Generate-for-loop creates one decoder per
     -- instance; synthesis collapses to a single 6-bit-index decoder
     -- fanning out to 64 enables.
+    -- Point the dispatch to the registered copies to resolve off-by-one.
     ---------------------------------------------------------------------------
     gen_pd_ena : for k in 0 to N_CHANNELS - 1 generate
-        pd_data_ena(k) <= chan_valid when
-            unsigned(chan_idx_int) = to_unsigned(k, chan_idx_int'length)
+        pd_data_ena(k) <= chan_valid_r when
+            unsigned(chan_idx_int_r) = to_unsigned(k, chan_idx_int'length)
             else '0';
     end generate;
 
