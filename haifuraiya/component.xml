@@ -249,11 +249,7 @@
       <spirit:parameters>
         <spirit:parameter>
           <spirit:name>POLARITY</spirit:name>
-          <spirit:value spirit:id="BUSIFPARAM_VALUE.ARESETN.POLARITY" spirit:choiceRef="choice_list_74b5137e">ACTIVE_LOW</spirit:value>
-        </spirit:parameter>
-        <spirit:parameter>
-          <spirit:name>ASSOCIATED_BUSIF</spirit:name>
-          <spirit:value spirit:id="BUSIFPARAM_VALUE.ARESETN.ASSOCIATED_BUSIF">m_axis_chans:s_axis_data:s_axi_ctrl</spirit:value>
+          <spirit:value spirit:id="BUSIFPARAM_VALUE.ARESETN.POLARITY" spirit:choiceRef="choice_list_9d8b0d81">ACTIVE_LOW</spirit:value>
         </spirit:parameter>
       </spirit:parameters>
     </spirit:busInterface>
@@ -1286,32 +1282,32 @@
       <spirit:modelParameter xsi:type="spirit:nameValueTypeType" spirit:dataType="integer">
         <spirit:name>N_CHANNELS</spirit:name>
         <spirit:displayName>N Channels</spirit:displayName>
-        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.N_CHANNELS" spirit:minimum="0">64</spirit:value>
+        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.N_CHANNELS" spirit:minimum="0" spirit:rangeType="long">64</spirit:value>
       </spirit:modelParameter>
       <spirit:modelParameter spirit:dataType="integer">
         <spirit:name>M_DECIMATION</spirit:name>
         <spirit:displayName>M Decimation</spirit:displayName>
-        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.M_DECIMATION" spirit:minimum="0">16</spirit:value>
+        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.M_DECIMATION" spirit:minimum="0" spirit:rangeType="long">16</spirit:value>
       </spirit:modelParameter>
       <spirit:modelParameter spirit:dataType="integer">
         <spirit:name>TAPS_PER_BRANCH</spirit:name>
         <spirit:displayName>Taps Per Branch</spirit:displayName>
-        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.TAPS_PER_BRANCH" spirit:minimum="0">24</spirit:value>
+        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.TAPS_PER_BRANCH" spirit:minimum="0" spirit:rangeType="long">24</spirit:value>
       </spirit:modelParameter>
       <spirit:modelParameter spirit:dataType="integer">
         <spirit:name>DATA_WIDTH</spirit:name>
         <spirit:displayName>Data Width</spirit:displayName>
-        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.DATA_WIDTH" spirit:minimum="0">16</spirit:value>
+        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.DATA_WIDTH" spirit:minimum="0" spirit:rangeType="long">16</spirit:value>
       </spirit:modelParameter>
       <spirit:modelParameter spirit:dataType="integer">
         <spirit:name>COEFF_WIDTH</spirit:name>
         <spirit:displayName>Coeff Width</spirit:displayName>
-        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.COEFF_WIDTH" spirit:minimum="0">16</spirit:value>
+        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.COEFF_WIDTH" spirit:minimum="0" spirit:rangeType="long">16</spirit:value>
       </spirit:modelParameter>
       <spirit:modelParameter spirit:dataType="integer">
         <spirit:name>ACCUM_WIDTH</spirit:name>
         <spirit:displayName>Accum Width</spirit:displayName>
-        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.ACCUM_WIDTH" spirit:minimum="0">40</spirit:value>
+        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.ACCUM_WIDTH" spirit:minimum="0" spirit:rangeType="long">40</spirit:value>
       </spirit:modelParameter>
       <spirit:modelParameter spirit:dataType="string">
         <spirit:name>COEFF_FILE</spirit:name>
@@ -1321,18 +1317,18 @@
       <spirit:modelParameter spirit:dataType="integer">
         <spirit:name>POWER_ALPHA_W</spirit:name>
         <spirit:displayName>Power Alpha W</spirit:displayName>
-        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.POWER_ALPHA_W" spirit:minimum="0">18</spirit:value>
+        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.POWER_ALPHA_W" spirit:minimum="0" spirit:rangeType="long">18</spirit:value>
       </spirit:modelParameter>
       <spirit:modelParameter spirit:dataType="integer">
         <spirit:name>C_S_AXI_CTRL_ADDR_WIDTH</spirit:name>
         <spirit:displayName>C S Axi Ctrl Addr Width</spirit:displayName>
-        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.C_S_AXI_CTRL_ADDR_WIDTH" spirit:minimum="0">12</spirit:value>
+        <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.C_S_AXI_CTRL_ADDR_WIDTH" spirit:minimum="0" spirit:rangeType="long">12</spirit:value>
       </spirit:modelParameter>
     </spirit:modelParameters>
   </spirit:model>
   <spirit:choices>
     <spirit:choice>
-      <spirit:name>choice_list_74b5137e</spirit:name>
+      <spirit:name>choice_list_9d8b0d81</spirit:name>
       <spirit:enumeration>ACTIVE_HIGH</spirit:enumeration>
       <spirit:enumeration>ACTIVE_LOW</spirit:enumeration>
     </spirit:choice>
@@ -1573,7 +1569,7 @@
       <xilinx:vendorDisplayName>Open Research Institute</xilinx:vendorDisplayName>
       <xilinx:vendorURL>https://www.openresearch.institute/</xilinx:vendorURL>
       <xilinx:coreRevision>2</xilinx:coreRevision>
-      <xilinx:coreCreationDateTime>2026-05-17T05:36:08Z</xilinx:coreCreationDateTime>
+      <xilinx:coreCreationDateTime>2026-05-17T18:49:20Z</xilinx:coreCreationDateTime>
     </xilinx:coreExtensions>
     <xilinx:packagingInfo>
       <xilinx:xilinxVersion>2022.2</xilinx:xilinxVersion>
