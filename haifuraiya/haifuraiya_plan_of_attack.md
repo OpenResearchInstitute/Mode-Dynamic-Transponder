@@ -12,19 +12,20 @@ Quick orientation when you come back to this doc weeks later:
 | Status | Item | Notes |
 |:-:|---|---|
 | ✅ | Haifuraiya channelizer RTL | Closes 100 MHz on ZCU102, route clean, bit-true tests pass |
-| ✅ | **Phase 1 AXI-Stream + AXI-Lite wrapper** | **9/9 testbench PASS. DC → ch0 (639M power) and tone bin 32 → ch32 (266M power) with clean inter-test reset and bounded EMA arithmetic. 7 bugs found and fixed during bring-up (see Bug Hunt section).** |
+| ✅ | **Phase 1 AXI-Stream + AXI-Lite wrapper** | **10/10 testbench PASS (incl. Test 10 sustained-DC regression). DC → ch0 (639M power) and tone bin 32 → ch32 (266M power) with clean inter-test reset and bounded EMA arithmetic. 7 bugs found and fixed during bring-up (see Bug Hunt section).** |
+| ✅ | **Phase 1 IP-XACT packaging** | **`openresearch.institute:ip:haifuraiya_channelizer_axi:0.1` published to local IP catalog. Integrity check passed. 3 AXI interfaces, 72-register memory map, 2 user-tunable generics. Visible in Vivado IP Catalog as "Haifuraiya Channelizer (AXI)".** |
 | ✅ | DVB-S2 encoder | ORI's `dvb_fpga` repo, tested vs GNU Radio, runs on zcu106 |
 | ✅ | OPV demodulator RTL | `pluto_msk`, working on LibreSDR; would need 64× or time-shared |
 | ✅ | OPV demodulator software | `opv-cxx-demod`, real-time on Pluto's A9 |
 | ⏳ | lowpass_ema upstream PRs | **TWO open PRs** to `OpenResearchInstitute/lowpass_ema`: `fix/data-ena-gate` (multiplexed-stream gating) and `fix/sum-saturation` (PROD_W-range clamping). Local builds use `ori/integration` branch until both merge. |
-| 🎯 | **Next session focus** | **IP-XACT packaging, block-design smoke test, sustained-amplitude regression test, Friedrichshafen demo prep** |
+| 🎯 | **Next session focus** | **Phase 1 Task 8: block-design smoke test. Then start Phase 2 / Friedrichshafen demo prep.** |
 | ⏳ | ADRV9002 + ZCU102 board | Hardware exists; state of bring-up unknown |
 | ⏳ | Yocto Linux on ZCU102 PS | Migration from Petalinux underway; Takadono observability lives here too |
 | ❓ | HD.CLK_SRC OOC clock prop | Unresolved; cosmetic for now |
 
 If you only have 5 minutes when returning to this doc, read this section,
-then jump to **Phase 1** (next session focus) and **Open Quests** (decisions
-you owe yourself).
+then jump to **Phase 1** (Task 8 is what remains) and **Open Quests**
+(decisions you owe yourself).
 
 ---
 
@@ -36,16 +37,16 @@ you owe yourself).
 ADRV9002 RX
    │
    ▼ AXIS @ 10 MSps complex
-┌────────────────┐
+┌─────────────────┐
 │  Haifuraiya    │  PL — closes 100 MHz, 53% DSPs
 │  channelizer   │  64 channels @ 625 kSps each (10 MSps / M=16)
-│  ✅ DONE       │
-└────────────────┘
+│  ✅ DONE       │  ✅ IP-XACT packaged as VLNV 0.1
+└─────────────────┘
    │
    ▼ AXIS w/ TDEST = channel index, 0..63
-┌────────────────┐
+┌─────────────────┐
 │  AXI-DMA       │  PL → PS DDR
-└────────────────┘
+└─────────────────┘
    │
    ▼
 ┌──────────────────────────────────────────┐
@@ -61,11 +62,11 @@ ADRV9002 RX
 └──────────────────────────────────────────┘
    │
    ▼ AXIS BBFRAMEs to PL
-┌────────────────┐
+┌─────────────────┐
 │  dvb_fpga      │  PL — ~6.5K LUT, tiny next to channelizer
 │  DVB-S2 enc    │
 │  ✅ HAVE IT    │
-└────────────────┘
+└─────────────────┘
    │
    ▼ I/Q to DAC
 ADRV9002 TX
@@ -79,7 +80,8 @@ ADRV9002 TX
 - **dvb_fpga** = the DVB-S2 encoder (bitstream in → modulated signal out)
 
 The two heavy DSP pieces (channelizer + DVB-S2 encoder) are *done*. What
-remains is integration glue, drivers, and software.
+remains is integration glue, drivers, and software. **As of tonight,
+Haifuraiya is also IP-XACT packaged and drag-droppable into any block design.**
 
 ---
 
@@ -89,7 +91,7 @@ remains is integration glue, drivers, and software.
 
 | Component | Type | Source | Resource cost | License |
 |---|---|---|---|---|
-| Haifuraiya channelizer | PL IP | this session | 1346 DSP / 116K LUT / 0 BRAM @ 100 MHz | ORI internal (CERN-OHL-S-2.0 standard) |
+| Haifuraiya channelizer | PL IP (IP-XACT v0.1) | this session | 1346 DSP / 116K LUT / 0 BRAM @ 100 MHz | ORI internal (CERN-OHL-S-2.0 standard) |
 | `dvb_fpga` DVB-S2 encoder | PL IP | `github.com/OpenResearchInstitute/dvb_fpga` | ~6.5K LUT / 64 DSP / 20 BRAM @ 300 MHz | CERN-OHL-W-2 |
 | `pluto_msk` OPV TX+RX modem | PL IP | ORI / LibreSDR build | ~48K LUT total (TX+RX+infra), ~10K LUT for RX only (estimate) | CERN-OHL-S-2.0 |
 | `opv-cxx-demod` | PS software | C++, working stack | per-stream small on A53 | (verify license) |
@@ -98,8 +100,10 @@ remains is integration glue, drivers, and software.
 
 | Item | Type | Estimated effort | Phase |
 |---|---|---|---|
-| Channelizer AXI-Stream wrapper | PL RTL + packaging | 1-2 sessions | 1 |
-| Output serializer (parallel 64-ch → AXIS with TDEST) | PL RTL | included in P1 | 1 |
+| ~~Channelizer AXI-Stream wrapper~~ ✅ DONE | PL RTL + packaging | ~~1-2 sessions~~ | 1 |
+| ~~Output serializer (parallel 64-ch → AXIS with TDEST)~~ ✅ DONE | PL RTL | ~~included in P1~~ | 1 |
+| ~~IP-XACT packaging~~ ✅ DONE | Vivado | ~~1 session~~ | 1 |
+| Block-design smoke test | Vivado | 1 session | 1 |
 | ADRV9002 reference design integration | Vivado + Linux driver | hours-weeks (depends on starting state) | 2 |
 | Yocto Linux on ZCU102 PS | Build system + recipes | unknown | 2 |
 | First-light block design | Vivado | hours | 3 |
@@ -148,7 +152,7 @@ reference receiver software.
 ---
 
 ## 🏰 Phase 1: AXI Wrap the Channelizer
-**✅ RTL complete — IP-XACT packaging and block-design smoke test remain**
+**✅ RTL complete, IP-XACT packaged — block-design smoke test (Task 8) remains**
 
 ### Goal
 Package `haifuraiya_channelizer_top` as a drop-in Vivado IP with AXI-Stream
@@ -166,20 +170,20 @@ in any ZCU102 block design.
 2. **(skipped — already done inside the channelizer).** The channelizer's existing `haifuraiya_channelizer_top` entity already exposes one-channel-per-clock outputs via `channel_re / channel_im / channel_idx / channel_valid / channel_last`. The internal dual-FFT arbitration takes care of serialization. The AXI wrapper just renames these to AXIS pins — no separate serializer block needed.
 
 3. **Per-channel power detector (existing component reused).** Two ORI submodules under `haifuraiya/third_party/`:
-   - `power_detector` from https://github.com/OpenResearchInstitute/power_detector (the per-channel power calculator)
+   - `power_detector` from https://github.com/OpenResearchInstitute/power_detector
    - `lowpass_ema` from https://github.com/OpenResearchInstitute/lowpass_ema (transitive — `power_detector` instantiates `entity work.lowpass_ema(rtl)` for its filtering stages)
 
    Both CERN-OHL-W-2. URLs are captured in `.gitmodules` and documented in `haifuraiya/third_party/README.md` to satisfy CERN-OHL-W §4 Source Location requirements.
 
    Instantiate **64 copies of `power_detector` in parallel**, one per channel, all reading the streaming `channel_re/im` (requantized to 16-bit). Each instance's `data_ena` fires when `channel_idx == k AND channel_valid='1'` — selector logic decoded from the channel index. Generics: `DATA_W=16, IQ_MOD=True, I_USED=True, Q_USED=True, EMA_CASCADE=True`. *Why this matters operationally:* channels see substantial power variation from orbit — edge-of-coverage channels and band-edge channels where the satellite transponder gain rolls off are significantly weaker than channels in the satellite's sweet spot. Power detection per channel becomes a real operational signal for AGC, squelch, and dynamic compute allocation. The dual-stage EMA handles fast scintillation/fading and slower geometry-driven variation simultaneously. Cost: ~4 DSPs per channel × 64 = ~256 DSPs (about 10% of the ZCU102 budget).
 
-4. **AXI-Stream + AXI-Lite shell.** Write `haifuraiya_channelizer_axi.vhd` that instantiates `haifuraiya_channelizer_top`, adds the AXIS pin-renaming, the requantization stage, the 64 power detectors, and the AXI-Lite register block.
+4. **AXI-Stream + AXI-Lite shell.** `haifuraiya_channelizer_axi.vhd` instantiates `haifuraiya_channelizer_top`, adds the AXIS pin-renaming, the requantization stage, the 64 power detectors, and the AXI-Lite register block.
 
 5. **AXI-Lite control plane.** Register map:
 
    | Offset | Name | Type | Description |
    |---|---|---|---|
-   | 0x00 | VERSION | RO | major.minor.patch |
+   | 0x00 | VERSION | RO | major.minor.patch (reads 0x00010000 = v0.1.0) |
    | 0x04 | CONTROL | RW | bit 0: soft reset (sticky); bit 1: enable |
    | 0x08 | STATUS | RO | bit 0: ready; bit 1: overflow sticky; bit 2: backpressure sticky |
    | 0x0C | FRAME_COUNT | RO | output frames since reset (32-bit) |
@@ -189,45 +193,150 @@ in any ZCU102 block design.
    | 0x1C | POWER_ALPHA2 | RW | second-stage EMA α (default: slower smoother, e.g. α=2^-12) |
    | 0x100-0x1FC | CHANNEL_POWER[0..63] | RO | per-channel latest integrated power, 32-bit each |
 
-   Stable offsets — treated as a versioned interface for Takadono telemetry.
+   Stable offsets — treated as a versioned interface for Takadono telemetry. **As of IP-XACT v0.1: all 72 registers are encoded in the IP-XACT memory map and visible to Vivado's Address Editor / Vitis header generation / Petalinux device tree.**
 
-6. **Testbench.** Write `tb_haifuraiya_channelizer_axi.vhd` that drives AXIS in, reads AXIS out, and exercises AXI-Lite reads/writes. Verify bit-true output against the existing standalone channelizer testbench (all 6 tests should pass with bit-identical channel data when accounting for the requantization shift). Add a smoke test that reads back channel power values via AXI-Lite.
+6. **Testbench.** `tb_haifuraiya_channelizer_axi.vhd` drives AXIS in, reads AXIS out, exercises AXI-Lite reads/writes, and verifies bit-true output behavior. 10/10 PASS with inter-test reset between Test 5 and Test 6 (Test 10 is the sustained-DC stress regression).
 
-7. **Vivado IP-XACT packaging.** Use the "Create IP" flow; set up the XGui for AXI ports; configure register map.
+7. **Vivado IP-XACT packaging.** ✅ **COMPLETE.** VLNV `openresearch.institute:ip:haifuraiya_channelizer_axi:0.1`. Integrity check passed. Catalog rendering verified. See "IP-XACT Packaging Lessons" section below.
 
-8. **Smoke test in a tiny block design** — channelizer IP between AXIS BFMs and an AXI-Lite master BFM. Just confirms it instantiates cleanly. Doesn't require hardware.
+8. **Smoke test in a tiny block design** — channelizer IP between AXIS BFMs and an AXI-Lite master BFM. Just confirms it instantiates cleanly. Doesn't require hardware. 🎯 **NEXT SESSION.**
 
 ### Deliverable
 A versioned Vivado IP that downstream phases can instantiate. Bit-true vs
-current channelizer behavior. Self-contained.
+current channelizer behavior. Self-contained. **Achieved as of tonight.**
 
-### Status after all bring-up + overflow-debug sessions
+### Status after all Phase 1 sessions
 
 | Task | Status | Notes |
 |---|:-:|---|
 | 1. Interface design | ✅ | All decisions held up under load |
 | 2. (skipped, internal to channelizer) | ✅ | Channelizer's existing outputs renamed cleanly |
 | 3. 64× power_detector instantiation | ✅ | Works correctly with both upstream lowpass_ema fixes in place |
-| 4. AXIS + AXI-Lite shell (`haifuraiya_channelizer_axi.vhd`) | ✅ | Committed; passes 9/9 |
-| 5. AXI-Lite register block (`axi_lite_regs.vhd`) | ✅ | Committed; passes 9/9 |
-| 6. Testbench (`tb_haifuraiya_channelizer_axi.vhd`) | ✅ | 9 tests, all PASS, with inter-test reset between Test 5 and Test 6 |
-| 7. Vivado IP-XACT packaging | 🎯 | Remaining |
-| 8. Block-design smoke test | 🎯 | Remaining |
+| 4. AXIS + AXI-Lite shell (`haifuraiya_channelizer_axi.vhd`) | ✅ | Committed; passes 10/10 |
+| 5. AXI-Lite register block (`axi_lite_regs.vhd`) | ✅ | Committed; passes 10/10 |
+| 6. Testbench (`tb_haifuraiya_channelizer_axi.vhd`) | ✅ | 10 tests all PASS, with inter-test reset between Test 5 and Test 6 |
+| **7. Vivado IP-XACT packaging** | **✅** | **VLNV 0.1, 72 registers encoded, integrity check passed, catalog verified** |
+| 8. Block-design smoke test | 🎯 | NEXT SESSION |
 | Bonus: DROPPED_FRAMES=0 in Test 9 | ✅ | Resolved in dispatch-alignment session |
 | Bonus: EMA arithmetic bounded (no overflow) | ✅ | `fix/sum-saturation` PR open to upstream lowpass_ema |
-| Bonus: Sustained-amplitude regression test | 🎯 | Test 10 to add — assert sum MSB never flips under max-DC stress |
+| Bonus: Sustained-amplitude regression test | ✅ | Test 10 added; asserts ch 0 in [500M, 800M] under max-DC stress |
 
-**Measured results after the full bring-up + overflow-debug arc:**
+**Measured results after the full Phase 1 arc:**
 - DC at amplitude 20000 → peak at channel 0 (**639M power**, real value, no wraparound), 1ms test runtime
 - Tone at FFT bin 32 → peak at channel 32 (**266M power**), with inter-test reset clearing prior DC state
 - u_ema_2 `sum` MSB stays 0 throughout the entire 1ms simulation — no signed-range wraps
 - DROPPED_FRAMES = 0, all 311 captured frames in Test 6 had correct TDEST/TLAST sequence
 - Channel-0 leakage during the tone test peaks at ~2.2M (~100× below ch 32) — consistent with the polyphase filter's ~−60 dB stopband prediction
+- Test 10 (sustained DC stress): ch 0 = 651M, within 2% of Test 5's value, MSB stays 0 throughout
+
+---
+
+## 🏛️ IP-XACT Packaging Lessons
+*Vivado packager gotchas learned the hard way. Future-you and any
+collaborator packaging an ORI IP should read this section first.*
+
+### What worked beautifully
+
+- **Naming conventions buy auto-inference.** `s_axi_*`, `m_axis_*`, `s_axis_*`,
+  `aclk`, `aresetn` prefixes let Vivado correctly identify all three AXI bus
+  interfaces in a single pass — TDATA/TVALID/TREADY/TDEST/TLAST grouped without
+  a single manual click. Discipline upstream saves 20 minutes of fiddly
+  port-by-port grouping downstream.
+
+- **Tcl bulk register encoding.** 72 registers (8 control + 64 channel power)
+  went from "hours of GUI clicking" to a 30-second loop:
+  ```tcl
+  proc add_reg {abi name offset access desc} { ... }
+  for {set k 0} {$k < 64} {incr k} { ... }
+  ```
+  Pattern is reusable for the next ORI IP's register map.
+
+- **The `ori/integration` submodule branch.** Carrying both upstream PR
+  fixes on a local branch let packaging proceed without blocking on Matthew's
+  merge timing. Component.xml ships with known-good submodule pointers.
+
+### What bit us
+
+- **`ipx::infer_core` silently fails without project context.** Returns empty
+  error from `catch{}`. Component.xml never appears. The actual diagnostic
+  came from `ipx::package_project`, which loudly reported "no source files
+  from the current project to package."
+
+- **The wizard's "Package a specified directory" mode doesn't actually
+  package the directory.** It still needs files to be added to the current
+  project first via `add_files`, plus `set_property top` to declare the entry
+  point. The wizard implied this would be automatic; it isn't.
+
+- **`ipx::` and `ipgui::` are NOT interchangeable.**
+  `ipx::` manipulates IP-XACT metadata (vendor, library, ports, register map).
+  `ipgui::` manipulates the customization GUI layout. Hiding parameters from
+  users requires `ipgui::remove_param`, not `set_property enablement_value`.
+  My first attempt to hide the 7 coefficient-coupled generics set
+  `enablement_value=false` and the GUI happily showed them anyway.
+
+- **The "Display name" field on Review and Package is misleading.** It shows
+  the IP module name (e.g., `haifuraiya_channelizer_axi_v1_0`), not the
+  IP-XACT `<spirit:displayName>` we entered on Identification. The IP-XACT
+  metadata is correct; only the Review page renders it confusingly. Verify
+  by inspecting component.xml directly.
+
+- **Clock and reset `ASSOCIATED_BUSIF` must be set explicitly for multi-bus
+  IPs.** Auto-inference associates `aclk` with ONLY the first bus interface
+  it finds (`m_axis_chans` in our case). For an IP with multiple AXI
+  interfaces sharing a clock domain, the parameter value must be a
+  colon-separated list: `m_axis_chans:s_axis_data:s_axi_ctrl`. For
+  `aresetn`, the parameter doesn't exist by default and must be created
+  via `ipx::add_bus_parameter` first.
+
+- **Empty packaging project = empty IP.** If `current_project` returns a
+  project with no files, `ipx::package_project` reports
+  `CRITICAL WARNING: There are no source files from the current project
+  to package.` Always verify file count with
+  `llength [get_files -of_objects [get_filesets sources_1]]` before
+  invoking the packager.
+
+- **The hex coefficient file must be added explicitly to both Synthesis
+  AND Simulation file groups.** Vivado's auto-population picks up .vhd files
+  but misses .hex data files. Symptom on a downstream user: IP instantiates
+  but synthesis fails at elaboration time with "cannot open file
+  haifuraiya_coeffs.hex". Add via the GUI `+` button or via Tcl:
+  ```tcl
+  ipx::add_file rtl/coeffs/haifuraiya_coeffs.hex \
+      [ipx::get_file_groups xilinx_anylanguagesynthesis -of [ipx::current_core]]
+  ```
+
+### Workflow recipe (for the next ORI IP)
+
+```tcl
+# 1. Open or create an empty Vivado project (any part will do for packaging)
+create_project package_<ip_name> /tmp/package_<ip_name> -part xczu9eg-ffvb1156-2-e
+
+# 2. Add ALL files that should be part of the IP
+add_files /path/to/ip/rtl
+add_files /path/to/ip/third_party
+add_files /path/to/ip/rtl/coeffs   ;# don't forget data files
+
+# 3. Tell Vivado the top entity
+set_property top <top_entity_name> [current_fileset]
+
+# 4. Package
+ipx::package_project -root_dir /path/to/ip \
+    -vendor openresearch.institute \
+    -library ip \
+    -taxonomy /OpenResearchInstitute/<IP_Family>
+
+# 5. Fill in metadata: vendor display name, company URL, descriptions...
+# 6. Fix multi-bus clock/reset associations
+# 7. Bulk-encode register map via Tcl loop
+# 8. ipgui::remove_param for locked generics (NOT set_property enablement_value)
+# 9. ipx::save_core; update_ip_catalog
+```
 
 ---
 
 ## 🐲 Bug Hunt Trophy Case
-*Seven bosses slain over the two bring-up sessions. Documented for future-you and for anyone else encountering the same patterns.*
+*Seven bosses slain over the bring-up sessions. Documented for future-you
+and for anyone else encountering the same patterns.*
 
 ### 1. Testbench `tvalid` sub-delta scheduling collision
 
@@ -281,7 +390,7 @@ current channelizer behavior. Self-contained.
 
 ### 6. lowpass_ema `sum` arithmetic overflow under sustained input *(upstream fix)*
 
-**Symptom:** After fixes #1–5 produced a clean dispatch and correct per-channel routing, channel-0 power register read back as `1,785,562,731` (unsigned). Reinterpreted signed: `-361 million`. Clearly wrong for a power magnitude. Test 6 then "passed" by accident — channel 0 read negative, so channel 32 won as peak by default.
+**Symptom:** After fixes #1–5 produced a clean dispatch and correct per-channel routing, channel-0 power register read back as `1,785,562,731` (unsigned). Reinterpreted signed: `−361 million`. Clearly wrong for a power magnitude. Test 6 then "passed" by accident — channel 0 read negative, so channel 32 won as peak by default.
 
 **Root cause:** `lowpass_ema`'s combinational `sum` assignment summed two `shift_left`'d signed terms without saturation:
 ```vhdl
@@ -325,7 +434,8 @@ The wraparound bug in fix #6 had been *masking* this design flaw: pre-fix, chann
 - **A passing test may be masking two bugs at once.** Fixing the upstream one can expose the downstream one. Don't assume tests that pass before a fix will keep passing after — verify all assertions still hold and that the *reasons* they hold are the intended ones.
 - **Methodical per-cycle Tcl probing beats waveform-viewer scrubbing for state that evolves slowly.** A `restart; for { } { run 10us; get_value }` loop catches MSB-flip events that wouldn't draw the eye in a 1ms waveform window.
 - **Third-party doesn't mean trustworthy.** Even well-tested upstream modules can have edge-case bugs. Use them, but verify them in your own test rig under your specific operating conditions.
-- **D&D analogies belong in commit messages.** Heralds, vampires, wizards, dungeons, *Cast PROTECTION FROM OVERFLOW*. Future-you will remember the bug because of the metaphor when nothing else stuck.
+- **Vivado IP packager has two parallel layers (`ipx::` and `ipgui::`) that look interchangeable but aren't.** Always check which layer your operation actually targets.
+- **D&D analogies belong in commit messages.** Heralds, vampires, wizards, dungeons, *Cast PROTECTION FROM OVERFLOW*, *Cast PACKAGE OBJECT*. Future-you will remember the bug because of the metaphor when nothing else stuck.
 
 ---
 
@@ -358,7 +468,7 @@ Just enough scaffolding to validate that the observability path works
 end-to-end. Defers the dashboard work until Phase 4 when there's more to
 observe.
 
-1. Tiny C program that mmaps the channelizer registers, prints to stdout in a loop
+1. Tiny C program that mmaps the channelizer registers, prints to stdout in a loop. **Bonus thanks to Phase 1 Task 7:** since the IP-XACT memory map is encoded, this C program can be auto-generated from `component.xml` via the IP-XACT-to-C tooling. No hand-maintained register address constants needed.
 2. Wrap in an MQTT publisher (publishes register values to topics like `haifuraiya/channelizer/frame_count`)
 3. **No HTML/CSS yet** — that comes when Phase 4 has interesting state worth visualizing
 
@@ -512,6 +622,8 @@ decodes any subset of the 64 streams.
 
 10. **Upstream PR merge timing.** Both lowpass_ema PRs (`fix/data-ena-gate` and `fix/sum-saturation`) sit with Matthew. If they merge before Friedrichshafen, we revert the submodule to upstream main; if not, we ship from `ori/integration`. Either is fine, but worth tracking.
 
+11. **IP-XACT versioning policy.** v0.1 ships with broad family compatibility (zynquplus + kintexuplus + virtexuplus + others). Should we narrow to just zynquplus for v0.2 since that's the only family we've actually tested on? Or keep broad on the theory that other UltraScale+ families will work without intervention?
+
 ---
 
 ## ⚠️ Monsters to Watch For
@@ -526,7 +638,8 @@ decodes any subset of the 64 streams.
 | dvb_fpga → ZCU102 port surprises | Low | Low | Repo already supports zcu106; difference is mostly board constraint files |
 | Per-channel demod processing latency adding up | Low | Medium | Voice latency tolerance is generous (~100ms); measure during Phase 4 |
 | GSE library bugs in `libgse` | Low | Low | OpenSAND-derived implementations are well-tested; we control encapsulation order |
-| Other latent EMA overflows under different operating conditions | Low | Medium | Add Test 10 (sustained-amplitude regression): MSB-doesn't-flip assertion. Run before every release. |
+| Other latent EMA overflows under different operating conditions | Low | Medium | Test 10 (sustained-amplitude regression) now in CI; MSB-doesn't-flip assertion. Run before every release. |
+| IP-XACT package breaks on a future Vivado version | Low | Medium | component.xml is plain XML; readable/editable across versions. Re-package if needed using the recipe in "IP-XACT Packaging Lessons." |
 
 ---
 
@@ -562,26 +675,38 @@ reciprocity on the strong components.
 ### Wrapper bring-up session (earlier)
 - `haifuraiya/rtl/axi/haifuraiya_channelizer_axi.vhd` — AXIS + AXI-Lite wrapper with 64 power detectors
 - `haifuraiya/rtl/axi/axi_lite_regs.vhd` — AXI-Lite register block (stable offsets, Takadono-versioned)
-- `haifuraiya/sim/tb_haifuraiya_channelizer_axi.vhd` — testbench (later expanded to 9 tests with inter-test reset)
+- `haifuraiya/sim/tb_haifuraiya_channelizer_axi.vhd` — testbench (later expanded to 9 tests + Test 10 with inter-test reset)
 - `haifuraiya/third_party/lowpass_ema/` — submodule, initially on branch `fix/data-ena-gate`, SHA `ee5879a`
 - **Upstream PR #1 open:** `OpenResearchInstitute/lowpass_ema` — "Gate EMA accumulator on data_ena for multiplexed-stream use cases"
 
-### Overflow-debug session (this update)
-- `haifuraiya/rtl/channelizer/haifuraiya_channelizer_top.vhd` — output mux defaults to '0' on inter-frame gaps (defensive, prevents U propagation through ch_re/ch_im on quiescent cycles)
-- `haifuraiya/sim/tb_haifuraiya_channelizer_axi.vhd` — added `aresetn` pulse between Test 5 and Test 6 to clear EMA state between tests
-- `haifuraiya/third_party/lowpass_ema/` — submodule now tracks `ori/integration` branch (SHA `5327d83`), which carries both upstream fixes cherry-picked onto upstream main
-- Parent repo commit: `467dcc3` "Phase 1 closeout: all 9 testbench tests pass"
-- **Upstream PR #2 open:** `OpenResearchInstitute/lowpass_ema` `fix/sum-saturation` — "Saturate EMA sum to PROD_W range to prevent arithmetic overflow on sustained inputs"
+### Overflow-debug + regression session (earlier)
+- `haifuraiya/rtl/channelizer/haifuraiya_channelizer_top.vhd` — output mux defaults to '0' on inter-frame gaps
+- `haifuraiya/sim/tb_haifuraiya_channelizer_axi.vhd` — added `aresetn` pulse between Test 5 and Test 6, plus Test 10 sustained-DC regression
+- `haifuraiya/third_party/lowpass_ema/` — submodule now tracks `ori/integration` branch (SHA `5327d83`)
+- Parent repo commit: `467dcc3` "Phase 1 closeout: all 9 testbench tests pass", then `f931200`/`05de4db` "Cast DETECT REGRESSION: add Test 10 sustained-DC stress assertion"
+- **Upstream PR #2 open:** `OpenResearchInstitute/lowpass_ema` `fix/sum-saturation`
+
+### IP-XACT packaging session (this update)
+- `haifuraiya/component.xml` — IP-XACT manifest, 78 KB, integrity-checked
+- `haifuraiya/xgui/haifuraiya_channelizer_axi_v0_1.tcl` — customization GUI (auto-generated from component.xml)
+- **VLNV:** `openresearch.institute:ip:haifuraiya_channelizer_axi:0.1`
+- **Categories:** `/OpenResearchInstitute/Haifuraiya`
+- **Memory map:** 72 registers (8 control + 64 channel power) encoded as IP-XACT
+- **Bus interfaces:** 3 — `m_axis_chans` (AXIS master), `s_axis_data` (AXIS slave), `s_axi_ctrl` (AXI-Lite slave)
+- **User-exposed generics:** `POWER_ALPHA_W` (default 18, range 8-32), `C_S_AXI_CTRL_ADDR_WIDTH` (default 12, range 8-32)
+- **Hidden generics:** N_CHANNELS, M_DECIMATION, TAPS_PER_BRANCH, DATA_WIDTH, COEFF_WIDTH, ACCUM_WIDTH, COEFF_FILE (coupled to bundled coefficient hex)
+- Parent repo commit: pending — `Cast PACKAGE OBJECT (level 5 spell)`
 
 ### Key results to remember
 - Synth-stage critical path: **9.684 ns** (≈ 100 MHz closes; ~0.3 ns slack)
 - Post-route data path delay essentially preserved (DSP cascade routing is silicon-fixed)
 - Resource baseline: **1346 DSPs (53%), 116K LUTs (42%), 0 BRAMs, 93K FFs (17%)** *(channelizer only — wrapper adds 64 power_detector instances, ~256 DSPs)*
-- **Wrapper testbench: 9/9 PASS.** DC → channel 0 (**639M real power**, no wraparound), tone bin 32 → channel 32 (**266M power**), with inter-test reset clearing prior state. Channel-0 leakage during tone test peaks at ~2.2M (~100× rejection, consistent with filter's −60 dB stopband)
+- **Wrapper testbench: 10/10 PASS.** DC → channel 0 (**639M real power**, no wraparound), tone bin 32 → channel 32 (**266M power**), with inter-test reset clearing prior state. Channel-0 leakage during tone test peaks at ~2.2M (~100× rejection, consistent with filter's −60 dB stopband). Test 10 sustained-DC stress: ch 0 = 651M.
 - u_ema_2 `sum` MSB stays 0 throughout the entire 1ms simulation across all 64 EMA cascades — arithmetic is bounded
 - DROPPED_FRAMES = 0
+- **IP catalog rendering:** `Haifuraiya Channelizer (AXI)` under `/OpenResearchInstitute/Haifuraiya`, Status `Production`, License `Included`, AXI4 + AXI4-Stream classified
 - HD.CLK_SRC issue causes WNS=inf, 16.5 ns artifact paths, and 1.2 kW absurd power estimate (all the same root cause; not a real design issue)
 
 ---
 
-*Last updated: end of overflow-debug session (7 bugs slain total, 9/9 PASS with bounded arithmetic, two upstream PRs open to `OpenResearchInstitute/lowpass_ema`). When you come back, start at "You Are Here" and update statuses as items move between ⏳ / 🎯 / ✅.*
+*Last updated: end of IP-XACT packaging session (Phase 1 Task 7 complete; VLNV 0.1 published to local catalog; integrity check passed; catalog rendering verified; ready for Task 8 block-design smoke test). When you come back, start at "You Are Here" and update statuses as items move between ⏳ / 🎯 / ✅.*
