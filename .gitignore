@@ -6,3 +6,10 @@ haifuraiya/sim/haifuraiya_sim_project/
 **/vivado_pid*.str
 **/*.wdb
 **/.Xil/
+
+# Vivado / XSim build artifacts
+haifuraiya/sim/haifuraiya_axi_sim_project/
+haifuraiya/sim/vivado_*.jou
+haifuraiya/sim/vivado_*.log
+haifuraiya/sim/vivado_*.backup.*
+haifuraiya/syn/zcu102/synth_project/

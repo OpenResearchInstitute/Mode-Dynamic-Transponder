@@ -434,11 +434,29 @@ begin
     -- OUTPUTTING phases never overlap (offset by inter-frame period > 64
     -- cycles), so at most one out_valid is '1' at any time.
     ---------------------------------------------------------------------------
-    channel_re    <= fft0_out_re    when fft0_out_valid = '1' else fft1_out_re;
-    channel_im    <= fft0_out_im    when fft0_out_valid = '1' else fft1_out_im;
-    channel_idx   <= fft0_out_idx   when fft0_out_valid = '1' else fft1_out_idx;
+ 
+   --channel_re    <= fft0_out_re    when fft0_out_valid = '1' else fft1_out_re;
+
+channel_re   <= fft0_out_re   when fft0_out_valid = '1'
+           else fft1_out_re   when fft1_out_valid = '1'
+           else (others => '0');
+channel_im   <= fft0_out_im   when fft0_out_valid = '1'
+           else fft1_out_im   when fft1_out_valid = '1'
+           else (others => '0');
+channel_idx  <= fft0_out_idx  when fft0_out_valid = '1'
+           else fft1_out_idx  when fft1_out_valid = '1'
+           else (others => '0');
+channel_last <= fft0_out_last when fft0_out_valid = '1'
+           else fft1_out_last when fft1_out_valid = '1'
+           else '0';
+
+    --channel_im    <= fft0_out_im    when fft0_out_valid = '1' else fft1_out_im;
+    --channel_idx   <= fft0_out_idx   when fft0_out_valid = '1' else fft1_out_idx;
+
     channel_valid <= fft0_out_valid or fft1_out_valid;
-    channel_last  <= fft0_out_last  when fft0_out_valid = '1' else fft1_out_last;
+
+    --channel_last  <= fft0_out_last  when fft0_out_valid = '1' else fft1_out_last;
+
     ready         <= ready_r;
     frame_dropped <= frame_dropped_r;
 

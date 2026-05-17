@@ -329,19 +329,31 @@ begin
 	--end procedure;
 
 
+	--procedure send_sample(constant re_val : in integer;
+        --              constant im_val : in integer) is
+	--begin
+	--    wait until rising_edge(aclk);                 -- align to clock edge
+	--    s_axis_data_tdata(DATA_WIDTH - 1 downto 0) <=
+	--        std_logic_vector(to_signed(re_val, DATA_WIDTH));
+	--    s_axis_data_tdata(31 downto 32 - DATA_WIDTH) <=
+	--        std_logic_vector(to_signed(im_val, DATA_WIDTH));
+	--    s_axis_data_tvalid <= '1';
+	--    wait until rising_edge(aclk);                 -- hold for one full cycle
+	--    s_axis_data_tvalid <= '0';
+	--end procedure;
+
+
 	procedure send_sample(constant re_val : in integer;
                       constant im_val : in integer) is
 	begin
-	    wait until rising_edge(aclk);                 -- align to clock edge
 	    s_axis_data_tdata(DATA_WIDTH - 1 downto 0) <=
 	        std_logic_vector(to_signed(re_val, DATA_WIDTH));
 	    s_axis_data_tdata(31 downto 32 - DATA_WIDTH) <=
 	        std_logic_vector(to_signed(im_val, DATA_WIDTH));
 	    s_axis_data_tvalid <= '1';
-	    wait until rising_edge(aclk);                 -- hold for one full cycle
+	    wait for CLK_PERIOD;            -- tvalid high for exactly 1 cycle
 	    s_axis_data_tvalid <= '0';
 	end procedure;
-
 
 
         ---------------------------------------------------------------------
@@ -370,8 +382,8 @@ begin
         variable tone_phase     : real;
         variable tone_re        : integer;
         variable tone_im        : integer;
-        constant TONE_BIN       : integer := 16;          -- known bin
-        constant TONE_AMP       : integer := 30000;       -- ~92% full scale
+        constant TONE_BIN       : integer := 32;          -- known bin 16
+        constant TONE_AMP       : integer := 30000;       -- ~92% full scale 30000
         constant DC_LEVEL       : integer := 20000;
         -- Cycles between samples at 10 MSps with 100 MHz clock
         constant SMP_PERIOD     : integer := 10;
@@ -472,10 +484,19 @@ begin
         -- DEBUG: try a shift of 16
         axi_write(ADDR_OUTPUT_SHIFT, 16);
 
-        for i in 0 to 5000 loop
-            send_sample(DC_LEVEL, 0);
-            wait for (SMP_PERIOD - 2) * CLK_PERIOD;
-        end loop;
+
+
+        --for i in 0 to 5000 loop
+        --    send_sample(DC_LEVEL, 0);
+        --    wait for (SMP_PERIOD - 2) * CLK_PERIOD;
+        --end loop;
+
+
+	for i in 0 to 5000 loop
+	    send_sample(DC_LEVEL, 0);
+	    wait for (SMP_PERIOD - 1) * CLK_PERIOD;  -- 9 cycles ? 10 total
+	end loop;
+
 
         -- Read all 64 channel powers and find the peak channel
         max_power := 0;
@@ -496,6 +517,19 @@ begin
                  " (expected 0)");
         end if;
 
+
+
+
+-- Clear EMA state between tests so prior signal content doesn't bleed in
+aresetn <= '0';
+wait for 200 ns;  -- a few clock cycles
+aresetn <= '1';
+wait for 1 us;    -- let the design come back up
+
+
+
+
+
         ---------------------------------------------------------------------
         -- Test 6: Tone at TONE_BIN -> energy in matching channel
         ---------------------------------------------------------------------
@@ -510,7 +544,7 @@ begin
                 sin(2.0 * MATH_PI * real(TONE_BIN) * real(i) /
                     real(N_CHANNELS)));
             send_sample(tone_re, tone_im);
-            wait for (SMP_PERIOD - 2) * CLK_PERIOD;
+            wait for (SMP_PERIOD - 1) * CLK_PERIOD;
         end loop;
 
         max_power := 0;
