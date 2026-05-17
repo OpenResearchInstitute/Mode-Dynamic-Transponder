@@ -12,20 +12,21 @@ Quick orientation when you come back to this doc weeks later:
 | Status | Item | Notes |
 |:-:|---|---|
 | ✅ | Haifuraiya channelizer RTL | Closes 100 MHz on ZCU102, route clean, bit-true tests pass |
-| ✅ | **Phase 1 AXI-Stream + AXI-Lite wrapper** | **10/10 testbench PASS (incl. Test 10 sustained-DC regression). DC → ch0 (639M power) and tone bin 32 → ch32 (266M power) with clean inter-test reset and bounded EMA arithmetic. 7 bugs found and fixed during bring-up (see Bug Hunt section).** |
+| ✅ | **Phase 1 AXI-Stream + AXI-Lite wrapper** | **10/10 testbench PASS. DC → ch0 (639M power) and tone bin 32 → ch32 (266M power) with clean inter-test reset and bounded EMA arithmetic. 8 bugs found and fixed during bring-up (see Bug Hunt section).** |
 | ✅ | **Phase 1 IP-XACT packaging** | **`openresearch.institute:ip:haifuraiya_channelizer_axi:0.1` published to local IP catalog. Integrity check passed. 3 AXI interfaces, 72-register memory map, 2 user-tunable generics. Visible in Vivado IP Catalog as "Haifuraiya Channelizer (AXI)".** |
+| ✅ | **Phase 1 Task 8 block-design smoke test** | **BD with AXI/AXIS/clock/reset VIPs validates without warnings. 72-register memory map auto-maps at 0x0000_0000 [4K]. Reusable smoke-test script at `bd/smoke_test/`. PHASE 1 IS CLOSED.** |
 | ✅ | DVB-S2 encoder | ORI's `dvb_fpga` repo, tested vs GNU Radio, runs on zcu106 |
 | ✅ | OPV demodulator RTL | `pluto_msk`, working on LibreSDR; would need 64× or time-shared |
 | ✅ | OPV demodulator software | `opv-cxx-demod`, real-time on Pluto's A9 |
 | ⏳ | lowpass_ema upstream PRs | **TWO open PRs** to `OpenResearchInstitute/lowpass_ema`: `fix/data-ena-gate` (multiplexed-stream gating) and `fix/sum-saturation` (PROD_W-range clamping). Local builds use `ori/integration` branch until both merge. |
-| 🎯 | **Next session focus** | **Phase 1 Task 8: block-design smoke test. Then start Phase 2 / Friedrichshafen demo prep.** |
+| 🎯 | **Next session focus** | **Phase 2: ADRV9002 bring-up + Yocto on PS. OR Friedrichshafen demo prep specifically — depends on time-horizon decision (Open Quest #8).** |
 | ⏳ | ADRV9002 + ZCU102 board | Hardware exists; state of bring-up unknown |
 | ⏳ | Yocto Linux on ZCU102 PS | Migration from Petalinux underway; Takadono observability lives here too |
 | ❓ | HD.CLK_SRC OOC clock prop | Unresolved; cosmetic for now |
 
 If you only have 5 minutes when returning to this doc, read this section,
-then jump to **Phase 1** (Task 8 is what remains) and **Open Quests**
-(decisions you owe yourself).
+then jump to **Phase 2** and **Open Quests** (decisions you owe yourself).
+**Phase 1 is now done — RTL complete, IP packaged, BD-integratable.**
 
 ---
 
@@ -41,6 +42,7 @@ ADRV9002 RX
 │  Haifuraiya    │  PL — closes 100 MHz, 53% DSPs
 │  channelizer   │  64 channels @ 625 kSps each (10 MSps / M=16)
 │  ✅ DONE       │  ✅ IP-XACT packaged as VLNV 0.1
+│                │  ✅ BD smoke-tested
 └─────────────────┘
    │
    ▼ AXIS w/ TDEST = channel index, 0..63
@@ -80,8 +82,9 @@ ADRV9002 TX
 - **dvb_fpga** = the DVB-S2 encoder (bitstream in → modulated signal out)
 
 The two heavy DSP pieces (channelizer + DVB-S2 encoder) are *done*. What
-remains is integration glue, drivers, and software. **As of tonight,
-Haifuraiya is also IP-XACT packaged and drag-droppable into any block design.**
+remains is integration glue, drivers, and software. **Phase 1 closed today:
+Haifuraiya is now IP-XACT packaged, BD-validated, and drag-droppable into any
+ZCU102 block design.**
 
 ---
 
@@ -91,7 +94,7 @@ Haifuraiya is also IP-XACT packaged and drag-droppable into any block design.**
 
 | Component | Type | Source | Resource cost | License |
 |---|---|---|---|---|
-| Haifuraiya channelizer | PL IP (IP-XACT v0.1) | this session | 1346 DSP / 116K LUT / 0 BRAM @ 100 MHz | ORI internal (CERN-OHL-S-2.0 standard) |
+| Haifuraiya channelizer | PL IP (IP-XACT v0.1, BD-smoke-tested) | this session | 1346 DSP / 116K LUT / 0 BRAM @ 100 MHz | ORI internal (CERN-OHL-S-2.0 standard) |
 | `dvb_fpga` DVB-S2 encoder | PL IP | `github.com/OpenResearchInstitute/dvb_fpga` | ~6.5K LUT / 64 DSP / 20 BRAM @ 300 MHz | CERN-OHL-W-2 |
 | `pluto_msk` OPV TX+RX modem | PL IP | ORI / LibreSDR build | ~48K LUT total (TX+RX+infra), ~10K LUT for RX only (estimate) | CERN-OHL-S-2.0 |
 | `opv-cxx-demod` | PS software | C++, working stack | per-stream small on A53 | (verify license) |
@@ -103,7 +106,7 @@ Haifuraiya is also IP-XACT packaged and drag-droppable into any block design.**
 | ~~Channelizer AXI-Stream wrapper~~ ✅ DONE | PL RTL + packaging | ~~1-2 sessions~~ | 1 |
 | ~~Output serializer (parallel 64-ch → AXIS with TDEST)~~ ✅ DONE | PL RTL | ~~included in P1~~ | 1 |
 | ~~IP-XACT packaging~~ ✅ DONE | Vivado | ~~1 session~~ | 1 |
-| Block-design smoke test | Vivado | 1 session | 1 |
+| ~~Block-design smoke test~~ ✅ DONE | Vivado | ~~1 session~~ | 1 |
 | ADRV9002 reference design integration | Vivado + Linux driver | hours-weeks (depends on starting state) | 2 |
 | Yocto Linux on ZCU102 PS | Build system + recipes | unknown | 2 |
 | First-light block design | Vivado | hours | 3 |
@@ -111,6 +114,8 @@ Haifuraiya is also IP-XACT packaged and drag-droppable into any block design.**
 | Kabura-ya GSE MUX | C++ on PS | 1-3 sessions | 5 |
 | Manifest PDU generator | C++ on PS | 1 session | 5 |
 | dvb_fpga ZCU102 port | Vivado board files | hours | 5 |
+
+**All Phase 1 work items are complete. Phase 2 is the next quest.**
 
 ---
 
@@ -152,7 +157,7 @@ reference receiver software.
 ---
 
 ## 🏰 Phase 1: AXI Wrap the Channelizer
-**✅ RTL complete, IP-XACT packaged — block-design smoke test (Task 8) remains**
+**✅ COMPLETE — all eight tasks closed**
 
 ### Goal
 Package `haifuraiya_channelizer_top` as a drop-in Vivado IP with AXI-Stream
@@ -193,17 +198,17 @@ in any ZCU102 block design.
    | 0x1C | POWER_ALPHA2 | RW | second-stage EMA α (default: slower smoother, e.g. α=2^-12) |
    | 0x100-0x1FC | CHANNEL_POWER[0..63] | RO | per-channel latest integrated power, 32-bit each |
 
-   Stable offsets — treated as a versioned interface for Takadono telemetry. **As of IP-XACT v0.1: all 72 registers are encoded in the IP-XACT memory map and visible to Vivado's Address Editor / Vitis header generation / Petalinux device tree.**
+   Stable offsets — treated as a versioned interface for Takadono telemetry. **All 72 registers are encoded in the IP-XACT memory map and visible to Vivado's Address Editor / Vitis header generation / Petalinux device tree.**
 
 6. **Testbench.** `tb_haifuraiya_channelizer_axi.vhd` drives AXIS in, reads AXIS out, exercises AXI-Lite reads/writes, and verifies bit-true output behavior. 10/10 PASS with inter-test reset between Test 5 and Test 6 (Test 10 is the sustained-DC stress regression).
 
 7. **Vivado IP-XACT packaging.** ✅ **COMPLETE.** VLNV `openresearch.institute:ip:haifuraiya_channelizer_axi:0.1`. Integrity check passed. Catalog rendering verified. See "IP-XACT Packaging Lessons" section below.
 
-8. **Smoke test in a tiny block design** — channelizer IP between AXIS BFMs and an AXI-Lite master BFM. Just confirms it instantiates cleanly. Doesn't require hardware. 🎯 **NEXT SESSION.**
+8. **Smoke test in a tiny block design.** ✅ **COMPLETE.** Reusable Tcl script at `bd/smoke_test/bd_smoke_test.tcl` instantiates the IP with `clk_vip`, `rst_vip`, two `axi4stream_vip` instances, and one `axi_vip` master. Validates clean with zero warnings. Address segment `s_axi_ctrl/reg0` auto-maps at `0x0000_0000` with range 4K. Script is path-portable across working trees via `[info script]` resolution.
 
 ### Deliverable
 A versioned Vivado IP that downstream phases can instantiate. Bit-true vs
-current channelizer behavior. Self-contained. **Achieved as of tonight.**
+current channelizer behavior. Self-contained. BD-validated. **Achieved.**
 
 ### Status after all Phase 1 sessions
 
@@ -215,11 +220,12 @@ current channelizer behavior. Self-contained. **Achieved as of tonight.**
 | 4. AXIS + AXI-Lite shell (`haifuraiya_channelizer_axi.vhd`) | ✅ | Committed; passes 10/10 |
 | 5. AXI-Lite register block (`axi_lite_regs.vhd`) | ✅ | Committed; passes 10/10 |
 | 6. Testbench (`tb_haifuraiya_channelizer_axi.vhd`) | ✅ | 10 tests all PASS, with inter-test reset between Test 5 and Test 6 |
-| **7. Vivado IP-XACT packaging** | **✅** | **VLNV 0.1, 72 registers encoded, integrity check passed, catalog verified** |
-| 8. Block-design smoke test | 🎯 | NEXT SESSION |
+| 7. Vivado IP-XACT packaging | ✅ | VLNV 0.1, 72 registers encoded, integrity check passed, catalog verified |
+| **8. Block-design smoke test** | **✅** | **Validated clean with axi/axi4stream/clk/rst VIPs; no warnings; bd/smoke_test/bd_smoke_test.tcl is re-runnable** |
 | Bonus: DROPPED_FRAMES=0 in Test 9 | ✅ | Resolved in dispatch-alignment session |
 | Bonus: EMA arithmetic bounded (no overflow) | ✅ | `fix/sum-saturation` PR open to upstream lowpass_ema |
 | Bonus: Sustained-amplitude regression test | ✅ | Test 10 added; asserts ch 0 in [500M, 800M] under max-DC stress |
+| Bonus: aresetn ASSOCIATED_BUSIF fix | ✅ | Removed bad parameter; `fix_ipxact_aresetn.tcl` archived for posterity |
 
 **Measured results after the full Phase 1 arc:**
 - DC at amplitude 20000 → peak at channel 0 (**639M power**, real value, no wraparound), 1ms test runtime
@@ -228,6 +234,7 @@ current channelizer behavior. Self-contained. **Achieved as of tonight.**
 - DROPPED_FRAMES = 0, all 311 captured frames in Test 6 had correct TDEST/TLAST sequence
 - Channel-0 leakage during the tone test peaks at ~2.2M (~100× below ch 32) — consistent with the polyphase filter's ~−60 dB stopband prediction
 - Test 10 (sustained DC stress): ch 0 = 651M, within 2% of Test 5's value, MSB stays 0 throughout
+- **Block-design smoke test: zero warnings after the aresetn fix. 72-register memory map auto-maps at 0x0000_0000 [4K].**
 
 ---
 
@@ -255,6 +262,11 @@ collaborator packaging an ORI IP should read this section first.*
   fixes on a local branch let packaging proceed without blocking on Matthew's
   merge timing. Component.xml ships with known-good submodule pointers.
 
+- **Path-portable smoke test script.** `bd_smoke_test.tcl` derives `ip_repo_path`
+  from `[info script]`, so it works from any working tree (brown, orange,
+  burnt_sienna, etc.) without editing. Anyone who clones the repo can run
+  the smoke test out of the box.
+
 ### What bit us
 
 - **`ipx::infer_core` silently fails without project context.** Returns empty
@@ -280,13 +292,15 @@ collaborator packaging an ORI IP should read this section first.*
   metadata is correct; only the Review page renders it confusingly. Verify
   by inspecting component.xml directly.
 
-- **Clock and reset `ASSOCIATED_BUSIF` must be set explicitly for multi-bus
-  IPs.** Auto-inference associates `aclk` with ONLY the first bus interface
-  it finds (`m_axis_chans` in our case). For an IP with multiple AXI
-  interfaces sharing a clock domain, the parameter value must be a
-  colon-separated list: `m_axis_chans:s_axis_data:s_axi_ctrl`. For
-  `aresetn`, the parameter doesn't exist by default and must be created
-  via `ipx::add_bus_parameter` first.
+- **Clock and reset `ASSOCIATED_BUSIF` parameters are ASYMMETRIC.** Auto-inference
+  associates `aclk`'s `ASSOCIATED_BUSIF` with only the first bus interface it
+  finds. For multi-bus IPs, expand to a colon-separated list:
+  `m_axis_chans:s_axis_data:s_axi_ctrl`. **But do NOT mirror this onto the
+  reset** — `ASSOCIATED_BUSIF` belongs on clocks only. Adding it to the reset
+  causes Vivado to interpret the reset as a second clock-like signal on every
+  bus, producing CRITICAL WARNINGs in downstream BDs. The reset's
+  bus-association is inferred via the clock's `ASSOCIATED_RESET` parameter.
+  *(See Bug #8 in the trophy case for the full diagnosis.)*
 
 - **Empty packaging project = empty IP.** If `current_project` returns a
   project with no files, `ipx::package_project` reports
@@ -304,6 +318,20 @@ collaborator packaging an ORI IP should read this section first.*
   ipx::add_file rtl/coeffs/haifuraiya_coeffs.hex \
       [ipx::get_file_groups xilinx_anylanguagesynthesis -of [ipx::current_core]]
   ```
+
+- **AXI VIPs are named `axi4stream_vip`, not `axis_vip`.** Block-design Tcl
+  fails silently with "no cells matched" if you guess the VLNV wrong. Always
+  check the actual VLNV in the IP Catalog GUI before scripting `create_bd_cell`.
+
+- **`rst_vip` has no clock input pin.** Unlike `axi_vip` and `axi4stream_vip`
+  which have `aclk` and `aresetn` scalar pins, `rst_vip` has only `rst_in` and
+  `rst_out`. Don't try to connect a clock to it.
+
+- **BD changes are in-memory until `save_bd_design`.** If your Tcl script
+  errors out partway through BD construction, the file on disk reflects the
+  state at the last save, not the runtime state. Save checkpoints after
+  major milestones (cell instantiation, wiring complete) so partial state is
+  inspectable when something fails.
 
 ### Workflow recipe (for the next ORI IP)
 
@@ -326,17 +354,19 @@ ipx::package_project -root_dir /path/to/ip \
     -taxonomy /OpenResearchInstitute/<IP_Family>
 
 # 5. Fill in metadata: vendor display name, company URL, descriptions...
-# 6. Fix multi-bus clock/reset associations
+# 6. Fix multi-bus clock association (aclk's ASSOCIATED_BUSIF = colon-separated list)
+#    DO NOT add ASSOCIATED_BUSIF to the reset; the asymmetry is intentional.
 # 7. Bulk-encode register map via Tcl loop
 # 8. ipgui::remove_param for locked generics (NOT set_property enablement_value)
 # 9. ipx::save_core; update_ip_catalog
+# 10. Run block-design smoke test (instantiate with VIPs; validate_bd_design clean)
 ```
 
 ---
 
 ## 🐲 Bug Hunt Trophy Case
-*Seven bosses slain over the bring-up sessions. Documented for future-you
-and for anyone else encountering the same patterns.*
+*Eight bosses slain over the bring-up + packaging + integration sessions.
+Documented for future-you and for anyone else encountering the same patterns.*
 
 ### 1. Testbench `tvalid` sub-delta scheduling collision
 
@@ -424,6 +454,48 @@ The wraparound bug in fix #6 had been *masking* this design flaw: pre-fix, chann
 
 **Pattern to watch for elsewhere:** Any sequence of tests sharing state through long-time-constant filters. If a buggy fix appears to "accidentally pass" a downstream test, suspect that the bug is masking a separate testbench design issue. Fixing one layer can expose the other. Design tests with explicit state-reset semantics upfront.
 
+### 8. ASSOCIATED_BUSIF mistakenly added to reset bus interface *(IP-XACT, exposed only at block-design instantiation)*
+
+**Symptom:** Block design instantiation produces three CRITICAL WARNINGs
+([BD 41-1732]) — "Bus interface X is found to be associated with multiple
+clock-pins. List of associated clock-pins: aclk, aresetn." — one for each
+of the three AXI bus interfaces (s_axi_ctrl, m_axis_chans, s_axis_data).
+Validation passes (warnings, not errors), but the warnings would propagate
+to every downstream BD that uses the IP. Found while running Phase 1 Task 8
+(block-design smoke test) and noticing the noise during `regenerate_bd_layout`.
+
+**Root cause:** During IP-XACT packaging, the `ASSOCIATED_BUSIF` parameter
+was added to both `aclk` (correct — "this clock drives these buses") AND
+`aresetn` (incorrect — parameter belongs on clocks, not resets). Vivado
+interpreted the reset's `ASSOCIATED_BUSIF` as declaring it a second
+clock-like signal for each bus, hence the "multiple clock-pins" warning.
+
+The correct IP-XACT convention is asymmetric:
+- `aclk` has `ASSOCIATED_BUSIF` = list of buses it clocks
+- `aclk` has `ASSOCIATED_RESET` = name of the reset signal
+- `aresetn` has `POLARITY` = ACTIVE_LOW
+- `aresetn` should NOT have `ASSOCIATED_BUSIF`; its association with
+  the buses is inferred via aclk's ASSOCIATED_RESET
+
+**Fix:** Tcl one-liner removing the parameter:
+```tcl
+ipx::remove_bus_parameter ASSOCIATED_BUSIF \
+    [ipx::get_bus_interfaces aresetn -of [ipx::current_core]]
+ipx::save_core [ipx::current_core]
+```
+
+Standalone script archived at `bd/smoke_test/fix_ipxact_aresetn.tcl` for
+future reference. Verified post-fix: smoke test produces zero warnings on
+`regenerate_bd_layout`. Fix applied in-place at v0.1 (no version bump,
+since the IP hadn't been released anywhere yet).
+
+**Pattern to watch for elsewhere:** IP-XACT clock vs reset metadata is
+asymmetric. `ASSOCIATED_BUSIF` lives on clocks. `ASSOCIATED_RESET` lives
+on clocks too (pointing at the reset). Resets only declare `POLARITY`.
+Symmetry feels right but is wrong. This is a footgun for anyone packaging
+an IP with the natural-feeling "mirror what I did for the clock onto the
+reset" instinct.
+
 ### Cross-cutting lessons
 
 - **EMA feedback loops trap X permanently.** One bad cycle is enough. Never let X reach an EMA accumulator.
@@ -435,7 +507,10 @@ The wraparound bug in fix #6 had been *masking* this design flaw: pre-fix, chann
 - **Methodical per-cycle Tcl probing beats waveform-viewer scrubbing for state that evolves slowly.** A `restart; for { } { run 10us; get_value }` loop catches MSB-flip events that wouldn't draw the eye in a 1ms waveform window.
 - **Third-party doesn't mean trustworthy.** Even well-tested upstream modules can have edge-case bugs. Use them, but verify them in your own test rig under your specific operating conditions.
 - **Vivado IP packager has two parallel layers (`ipx::` and `ipgui::`) that look interchangeable but aren't.** Always check which layer your operation actually targets.
-- **D&D analogies belong in commit messages.** Heralds, vampires, wizards, dungeons, *Cast PROTECTION FROM OVERFLOW*, *Cast PACKAGE OBJECT*. Future-you will remember the bug because of the metaphor when nothing else stuck.
+- **IP-XACT clock/reset metadata is asymmetric.** The natural instinct to mirror clock parameters onto the reset (`ASSOCIATED_BUSIF` in particular) is wrong and produces CRITICAL WARNINGs at every block-design instantiation. The reset's relationship to buses is inferred through the clock's `ASSOCIATED_RESET` parameter, not declared on the reset itself.
+- **A block-design smoke test catches what IP-XACT integrity check misses.** `ipx::check_integrity` passed last night, but the multi-clock-pin association bug only surfaced at `regenerate_bd_layout` during BD instantiation. Both checks are necessary; neither is sufficient.
+- **Path-portable scripts via `[info script]`.** Hardcoded `/home/user/<colorname>/...` paths are brittle and embarrassing. Resolving paths relative to the script's own location makes scripts work in any working tree and across collaborators.
+- **D&D analogies belong in commit messages.** Heralds, vampires, wizards, dungeons, *Cast PROTECTION FROM OVERFLOW*, *Cast PACKAGE OBJECT*, *Cast PROTECTION FROM CLOCK CONFUSION*. Future-you will remember the bug because of the metaphor when nothing else stuck.
 
 ---
 
@@ -485,7 +560,7 @@ registers via MQTT.
 See the channelizer working on real RF samples for the first time.
 
 ### Tasks
-1. Build the integration block design: ADRV9002 RX → channelizer IP (from Phase 1) → AXI-DMA → PS DDR
+1. Build the integration block design: ADRV9002 RX → channelizer IP (from Phase 1) → AXI-DMA → PS DDR. **Note: the Phase 1 IP is already smoke-tested in a BD, so this step is shorter than it would have been.**
 2. PS-side capture program (Python/Octave) reads buffer, FFTs each channel, plots spectrum
 3. Inject known CW from Pluto + Interlocutor at various frequency offsets within the 10 MHz uplink band
 4. Verify peak appears in the expected channel bin
@@ -616,13 +691,15 @@ decodes any subset of the 64 streams.
 
 7. **Manifest PDU format spec.** Once Phase 5 starts, the contents and cadence of the manifest PDU is a design decision worth getting right early — it directly determines what receiver apps can show. Worth a brief design doc of its own.
 
-8. **Time horizon.** "Lab demo in N months" vs "deployable Phase 4 Ground station" — affects polish on intermediate steps. **Hard date in sight: Friedrichshafen HAM RADIO 2026 (June).**
+8. **Time horizon.** "Lab demo in N months" vs "deployable Phase 4 Ground station" — affects polish on intermediate steps. **Hard date in sight: Friedrichshafen HAM RADIO 2026 (June).** With Phase 1 done today, demo prep for Friedrichshafen is now realistic.
 
 9. **Receiver software for demo.** Will ORI publish a reference receiver to go with this, or rely on GNU Radio flowgraphs for early demos? Pivotal for the "fun and rewarding" goal.
 
 10. **Upstream PR merge timing.** Both lowpass_ema PRs (`fix/data-ena-gate` and `fix/sum-saturation`) sit with Matthew. If they merge before Friedrichshafen, we revert the submodule to upstream main; if not, we ship from `ori/integration`. Either is fine, but worth tracking.
 
 11. **IP-XACT versioning policy.** v0.1 ships with broad family compatibility (zynquplus + kintexuplus + virtexuplus + others). Should we narrow to just zynquplus for v0.2 since that's the only family we've actually tested on? Or keep broad on the theory that other UltraScale+ families will work without intervention?
+
+12. **First Friedrichshafen-targeted deliverable.** Now that Phase 1 is done: what's the most compelling single thing to demo? Live channelizer + spectrum view on a laptop hooked up to the ZCU102? Single OPV recovery (Phase 4a)? Or something else? Worth choosing soon to focus the next month or two.
 
 ---
 
@@ -639,7 +716,8 @@ decodes any subset of the 64 streams.
 | Per-channel demod processing latency adding up | Low | Medium | Voice latency tolerance is generous (~100ms); measure during Phase 4 |
 | GSE library bugs in `libgse` | Low | Low | OpenSAND-derived implementations are well-tested; we control encapsulation order |
 | Other latent EMA overflows under different operating conditions | Low | Medium | Test 10 (sustained-amplitude regression) now in CI; MSB-doesn't-flip assertion. Run before every release. |
-| IP-XACT package breaks on a future Vivado version | Low | Medium | component.xml is plain XML; readable/editable across versions. Re-package if needed using the recipe in "IP-XACT Packaging Lessons." |
+| IP-XACT package breaks on a future Vivado version | Low | Medium | component.xml is plain XML; readable/editable across versions. Re-package if needed using the recipe in "IP-XACT Packaging Lessons." Smoke test re-runnable for regression. |
+| Other latent IP-XACT metadata bugs surface at integration time | Low | Medium | Smoke test catches multi-clock association issues. Re-run after any IP-XACT modification. |
 
 ---
 
@@ -686,8 +764,8 @@ reciprocity on the strong components.
 - Parent repo commit: `467dcc3` "Phase 1 closeout: all 9 testbench tests pass", then `f931200`/`05de4db` "Cast DETECT REGRESSION: add Test 10 sustained-DC stress assertion"
 - **Upstream PR #2 open:** `OpenResearchInstitute/lowpass_ema` `fix/sum-saturation`
 
-### IP-XACT packaging session (this update)
-- `haifuraiya/component.xml` — IP-XACT manifest, 78 KB, integrity-checked
+### IP-XACT packaging session (earlier)
+- `haifuraiya/component.xml` — IP-XACT manifest, integrity-checked
 - `haifuraiya/xgui/haifuraiya_channelizer_axi_v0_1.tcl` — customization GUI (auto-generated from component.xml)
 - **VLNV:** `openresearch.institute:ip:haifuraiya_channelizer_axi:0.1`
 - **Categories:** `/OpenResearchInstitute/Haifuraiya`
@@ -695,7 +773,19 @@ reciprocity on the strong components.
 - **Bus interfaces:** 3 — `m_axis_chans` (AXIS master), `s_axis_data` (AXIS slave), `s_axi_ctrl` (AXI-Lite slave)
 - **User-exposed generics:** `POWER_ALPHA_W` (default 18, range 8-32), `C_S_AXI_CTRL_ADDR_WIDTH` (default 12, range 8-32)
 - **Hidden generics:** N_CHANNELS, M_DECIMATION, TAPS_PER_BRANCH, DATA_WIDTH, COEFF_WIDTH, ACCUM_WIDTH, COEFF_FILE (coupled to bundled coefficient hex)
-- Parent repo commit: pending — `Cast PACKAGE OBJECT (level 5 spell)`
+- Parent repo commit: "Cast PACKAGE OBJECT (level 5 spell)"
+
+### Block-design smoke test session (this update)
+- `haifuraiya/bd/smoke_test/bd_smoke_test.tcl` — reusable BD smoke test
+  - Path-portable (derives ip_repo_path from script location via `[info script]`)
+  - Instantiates clk_vip + rst_vip + 2× axi4stream_vip + axi_vip + Haifuraiya IP
+  - Wires interfaces, assigns address, validates
+  - Three save_bd_design checkpoints so partial state survives errors
+  - Re-runnable as a regression test on any future IP-XACT or RTL change
+- `haifuraiya/bd/smoke_test/fix_ipxact_aresetn.tcl` — one-shot fix script for Bug #8
+  - Archived for posterity and as a reference pattern for future IP-XACT cleanup
+- `haifuraiya/component.xml` — modified (ASSOCIATED_BUSIF removed from aresetn parameter block)
+- Parent repo commit: "Cast PROTECTION FROM CLOCK CONFUSION + close Phase 1 with a smoke test"
 
 ### Key results to remember
 - Synth-stage critical path: **9.684 ns** (≈ 100 MHz closes; ~0.3 ns slack)
@@ -705,8 +795,9 @@ reciprocity on the strong components.
 - u_ema_2 `sum` MSB stays 0 throughout the entire 1ms simulation across all 64 EMA cascades — arithmetic is bounded
 - DROPPED_FRAMES = 0
 - **IP catalog rendering:** `Haifuraiya Channelizer (AXI)` under `/OpenResearchInstitute/Haifuraiya`, Status `Production`, License `Included`, AXI4 + AXI4-Stream classified
+- **Block-design smoke test: PASS, zero warnings.** Address segment `s_axi_ctrl/reg0` auto-maps at `0x0000_0000 [4K]` on the AXI master VIP's address space. Phase 1 fully closed.
 - HD.CLK_SRC issue causes WNS=inf, 16.5 ns artifact paths, and 1.2 kW absurd power estimate (all the same root cause; not a real design issue)
 
 ---
 
-*Last updated: end of IP-XACT packaging session (Phase 1 Task 7 complete; VLNV 0.1 published to local catalog; integrity check passed; catalog rendering verified; ready for Task 8 block-design smoke test). When you come back, start at "You Are Here" and update statuses as items move between ⏳ / 🎯 / ✅.*
+*Last updated: end of Phase 1 closeout session (Task 8 block-design smoke test passes clean; 8 bugs slain total; IP-XACT v0.1 validated in a BD with zero warnings; two upstream PRs open to `OpenResearchInstitute/lowpass_ema`; smoke test re-runnable as future regression). When you come back, start at "You Are Here" — Phase 1 is done, Phase 2 (ADRV9002 + Yocto) or Friedrichshafen demo prep are next. Update statuses as items move between ⏳ / 🎯 / ✅.*
