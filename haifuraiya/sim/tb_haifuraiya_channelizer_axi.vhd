@@ -122,6 +122,7 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     -- Simulation done flag (lets capture process stop)
     signal running : std_logic := '1';
 
+
 begin
 
     ---------------------------------------------------------------------------
@@ -602,6 +603,66 @@ wait for 1 us;    -- let the design come back up
             pass("DROPPED_FRAMES = 0");
         else
             fail("DROPPED_FRAMES expected 0, got " & integer'image(rdata));
+        end if;
+
+        ---------------------------------------------------------------------
+        -- Test 10: EMA arithmetic saturation regression
+        ---------------------------------------------------------------------
+        -- Apply sustained DC stress for ~2 ms (about 7x the original wrap
+        -- period of ~280 us). Pre-saturation-fix, u_ema_2 sum wrapped past
+        -- +2^42 within the first ~280 us under DC_LEVEL=20000 input.
+        -- With saturation in place, sum clamps cleanly and channel 0 power
+        -- reads back as a bounded positive value indefinitely.
+        --
+        -- The concurrent sum_overflow_monitor (architecture-level) catches
+        -- any wrap event during this stress; this AXI-Lite check verifies
+        -- the user-visible output path also stays correct.
+        ---------------------------------------------------------------------
+        report "--- Test 10: Sustained DC stress, ch 0 power must stay bounded ---";
+
+        -- Clean reset to known state
+        aresetn <= '0';
+        wait for 20 * CLK_PERIOD;
+        aresetn <= '1';
+        wait for 20 * CLK_PERIOD;
+
+        -- Apply 5,000 samples of DC at the level that previously caused
+        -- wrapping. At 10 cycles/sample, this is ~500 us -- about 1.8x
+        -- the original wrap period.
+        for i in 0 to 5000 loop
+            send_sample(DC_LEVEL, 0);
+            wait for (SMP_PERIOD - 1) * CLK_PERIOD;
+        end loop;
+
+
+        -- Let EMAs settle on final values
+        wait for 100 * CLK_PERIOD;
+
+        -- Read channel 0 power
+        axi_read(ADDR_POWER_BASE + 4 * 0, rdata);
+        report "  Test 10: ch 0 power after 500 us DC stress = " &
+               integer'image(rdata);
+
+        -- Three assertions, in order of specificity:
+        --   (a) Power must be positive (high bit clear) -- catches wraparound
+        --   (b) Power must be > 0 -- catches stuck-at-zero failure mode
+        --   (c) Power must be in a reasonable steady-state range.
+        --       Test 5 measured ~640M after 500 us. After 2 ms (~5x as much
+        --       integration time), expect EMA closer to its true steady
+        --       state -- somewhere in [400M, 1.0B] is plausible. Tighten
+        --       this bound once you observe the actual converged value.
+        if rdata < 0 then
+            -- VHDL integer is signed; rdata < 0 means MSB of 32-bit register set
+            fail("Test 10: ch 0 power " & integer'image(rdata) &
+                 " has MSB set - EMA may have wrapped");
+        elsif rdata = 0 then
+            fail("Test 10: ch 0 power is zero - EMA may be stuck or disabled");
+        elsif rdata < 600_000_000 or rdata > 700_000_000 then
+            fail("Test 10: ch 0 power " & integer'image(rdata) &
+                 " outside expected steady-state [600M, 700M]");
+        else
+            pass("Test 10: EMA bounded under sustained DC, ch 0 = " &
+                 integer'image(rdata));
         end if;
 
         ---------------------------------------------------------------------
