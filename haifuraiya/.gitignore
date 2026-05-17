@@ -1,0 +1,9 @@
+
+# Vivado per-process simulation artifacts
+sim/vivado_pid*.zip
+sim/*.jou
+sim/*.log
+sim/.Xil/
+sim/xsim.dir/
+sim/webtalk*.jou
+sim/webtalk*.log
