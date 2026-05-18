@@ -1,0 +1,37 @@
+# boot-script.txt — U-Boot boot script source
+#
+# This text is wrapped with `mkimage` to produce boot.scr, which xsdb
+# loads to memory address 0x20000000 before letting U-Boot run.
+#
+# U-Boot's autoboot checks 0x20000000 FIRST (before MMC, QSPI, network),
+# so when our boot.scr is at that address, U-Boot runs these commands
+# automatically.
+#
+# Why this approach: PXE requires DHCP to populate serverip. Our lab is
+# now DHCP-free (the rogue Raspberry Pi was retired). Without DHCP,
+# U-Boot has no env vars, and PXE fails before our config can be reached.
+# A boot script that sets env vars explicitly is the static-IP-friendly
+# alternative.
+#
+# To regenerate boot.scr from this source:
+#   mkimage -A arm64 -O linux -T script -C none -n "Haifuraiya boot" \
+#           -d boot-script.txt boot.scr
+#
+# (mkimage is in u-boot-tools on Ubuntu: sudo apt install u-boot-tools)
+
+# Don't try to autoload anything during environment setup
+setenv autoload no
+
+# Network configuration — static IPs per ORI Remote Lab convention
+setenv serverip 10.73.1.94
+setenv ipaddr   10.73.1.16
+setenv netmask  255.255.255.0
+setenv gatewayip 10.73.1.1
+
+# Fetch kernel, device tree, initramfs via TFTP from keroppi
+tftpboot 0x80000   abraxas3d-yocto/Image
+tftpboot 0x4000000 abraxas3d-yocto/system.dtb
+tftpboot 0x4100000 abraxas3d-yocto/initramfs.cpio.gz.u-boot
+
+# Boot Linux: kernel @ 0x80000, initramfs @ 0x4100000, dtb @ 0x4000000
+booti 0x80000 0x4100000 0x4000000
