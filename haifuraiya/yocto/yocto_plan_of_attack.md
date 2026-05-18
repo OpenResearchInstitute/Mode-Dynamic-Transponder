@@ -17,15 +17,17 @@ channelizer's Linux runtime.
 |:-:|---|---|
 | ✅ | Phase 1 complete | RTL, IP-XACT v0.1, BD smoke test all done |
 | ✅ | Decision: Yocto over Petalinux | Vendor-recommended; matches "deliberate and clean" working style |
-| ✅ | Decision: Vivado 2022.2 (locked) | License constraint; pairs with Yocto Kirkstone |
+| ✅ | Decision: Vivado 2022.2 (locked) | License constraint; pairs with Yocto Honister |
 | ✅ | Decision: meta-ori layer scope | Lives at `haifuraiya/yocto/meta-ori/`; per-project (not parent-repo-wide) |
 | ✅ | Host packages installed | Ubuntu 22.04 deps via apt; en_US.UTF-8 locale generated |
 | ✅ | Build tree `repo init` + `repo sync` | At `~/yocto/haifuraiya/`; all 5 required layers populated at `xlnx-rel-v2022.2` |
 | ✅ | Version stack pinned (commit SHAs) | See "Pinned Version Stack" below — all five layers locked |
 | ✅ | **M1: vanilla zcu102 Yocto image boots** | **`uname -a`: Linux 5.15.36-xilinx-v2022.2 SMP aarch64. 4GB DDR visible. Gigabit Ethernet up. Root shell achieved via JTAG boot from keroppi.** |
 | ✅ | **JTAG deployment recipe established** | **xsdb-based boot via PMU→FSBL→ATF→U-Boot→Linux, fully documented in "JTAG Boot Procedure" below** |
-| 🎯 | **Next concrete action** | **Make meta-ori a real Yocto layer + first recipe (static IP via systemd-networkd)** |
-| ⏳ | M2: ADI-flavored image w/ ADRV9002 device tree boots | Add meta-adi-xilinx + rebuild + verify sample stream |
+| ✅ | **meta-ori is a real Yocto layer** | **conf/layer.conf, MIT license, README. Registered with bitbake at priority 10. Collection name `ori`. Forward-compat with kirkstone.** |
+| ✅ | **First meta-ori recipe: static IP via systemd-networkd** | **`ip addr show eth0` reports `inet 10.73.1.16/24`. ping from keroppi succeeds. systemd-networkd uses /etc/systemd/network/10-eth0.network installed by our recipe.** |
+| 🎯 | **Next concrete action** | **Choose: (a) openssh-server recipe in meta-ori for SSH access, OR (b) PXE boot config to eliminate manual setenv+tftpboot+booti typing, OR (c) jump to meta-adi-xilinx + ADRV9002 prep for Phase 2a integration** |
+| ⏳ | M2 remainder: add ADI/ADRV9002 layer + device tree | meta-adi-xilinx added to build, kernel includes ADRV9002 driver, `iio_info` lists device |
 | ⏳ | M3: image built against Phase 2a .xsa (Haifuraiya in PL) | Hardware design integrated; channelizer in bitstream |
 | ⏳ | M4: userspace mmap reads VERSION register = 0x00010000 | Round-trip Linux-to-IP communication confirmed |
 | ⏳ | M5: Takadono v0 MQTT publish working | First observability output |
@@ -81,9 +83,9 @@ here.
 | Layer | Pin | Rationale |
 |---|---|---|
 | Vivado | **2022.2** | License-constrained |
-| Yocto release | **Kirkstone (4.0)** | Pairs with Vivado 2022.2 |
+| Yocto release | **Honister (3.4)** | What xlnx-rel-v2022.2 actually pulls (despite Kirkstone being available at the same time). Verify with: `grep LAYERSERIES_COMPAT_core sources/core/meta/conf/layer.conf` |
 | Xilinx manifest | **`rel-v2022.2`** from `github.com/Xilinx/yocto-manifests.git` | AMD-recommended, pulls a consistent layer set |
-| Host OS | **Ubuntu 22.04 LTS** | Yocto Kirkstone's primary supported host |
+| Host OS | **Ubuntu 22.04 LTS** | Yocto Honister's primary supported host (note: 22.04's glibc 2.35 vs Honister uninative's 2.34 — handled automatically, see Trophy Case) |
 | `repo` tool | latest from Google | Self-updating |
 
 ### Layer pins (captured after first `repo sync` on 2026-05-17)
@@ -124,12 +126,15 @@ provides machine support via meta-xilinx-bsp instead.
 
 ### Caveat worth knowing
 
-Yocto Kirkstone's nominal LTS window ended in April 2026. Community-
-extended LTS continues with security patches, but upstream community focus
-has shifted to Scarthgap (2024) and Walnascar (2025). For our use case —
-an FPGA dev/deployment host with no internet-facing exposure — this is
-fine. Pin commits explicitly, document workarounds inline, treat as our
-stable platform.
+Yocto Honister was a regular (non-LTS) release that reached upstream
+end-of-life in 2022. Xilinx continued patching it through their xlnx-rel
+branches, which is what we're pinned to. Community-extended security
+patches are minimal. For our use case — an FPGA dev/deployment host with
+no internet-facing exposure — this is fine. Pin commits explicitly, document
+workarounds inline, treat as our stable platform. The next Xilinx release
+(2023.x) moved to Yocto Langdale; jumping to that would mean migrating
+all our work, so we stay on 2022.2/Honister until there's a compelling
+reason to upgrade.
 
 ---
 
@@ -214,6 +219,34 @@ curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
 chmod a+x ~/bin/repo
 export PATH="$HOME/bin:$PATH"
 ```
+
+### 📍 Path conventions (watch points)
+
+Two host-path patterns appear throughout this plan; if they change in the
+future, search-and-replace will be needed.
+
+**Color-name container directory.** The repo working tree currently lives
+under `~/brown/Mode-Dynamic-Transponder/` on `mymelody`. Earlier
+development used `~/orange/`. The color is just a container directory
+convention for development repos and may change. **If the active color
+changes, every absolute path in this document and in the scripts/
+referencing `~/brown/` needs to be updated.** Watch points:
+- `meta-ori` symlink target in `~/yocto/haifuraiya/sources/`
+- `scripts/copy_to_keroppi.sh` source paths
+- M2 layer-activation commands below
+- The example commands in JTAG Boot Procedure
+
+**Yocto build tree.** The build tree is at `~/yocto/haifuraiya/` (NOT
+under `~/brown/`). This is intentional: build artifacts are huge and
+regenerable, so they live separately from the source-controlled repo.
+
+### ⚠️ Common setupsdk pitfall
+
+**ALWAYS source setupsdk from the project root** (`~/yocto/haifuraiya/`),
+never from inside an existing `build/` directory. If you source it from
+inside `build/`, it creates a nested `build/build/` and you end up in
+the empty one with no config. Recovery: `cd` to project root, `rm -rf
+build/build`, re-source from project root.
 
 ---
 
@@ -308,6 +341,42 @@ Optional additions later:
 - **`meta-security` contribution** in Phase 5+ when going on a real public
   network
 
+### 📛 Layer collection name reference
+
+Yocto layers have TWO names: the **directory name** (visible in the filesystem
+and bblayers.conf paths) and the **collection name** (declared by each
+layer's own `BBFILE_COLLECTIONS` and used in `LAYERDEPENDS`, recipe
+overrides, etc.). These often differ. Mixing them up makes
+`bitbake-layers add-layer` fail with cryptic errors.
+
+For our active layer set:
+
+| Directory name | Collection name |
+|---|---|
+| `core/meta` | `core` |
+| `core/meta-poky` | `yocto` |
+| `meta-openembedded/meta-oe` | `openembedded-layer` |
+| `meta-openembedded/meta-python` | `meta-python` |
+| `meta-openembedded/meta-networking` | `networking-layer` |
+| `meta-openembedded/meta-webserver` | `webserver` |
+| `meta-openembedded/meta-multimedia` | `multimedia-layer` |
+| `meta-openembedded/meta-filesystems` | `filesystems-layer` |
+| `meta-openembedded/meta-perl` | `perl-layer` |
+| `meta-xilinx/meta-xilinx-core` | `xilinx` |
+| `meta-xilinx/meta-xilinx-bsp` | `xilinx-bsp` |
+| `meta-xilinx/meta-xilinx-standalone` | `xilinx-standalone` |
+| `meta-xilinx-tools` | `xilinx-tools` |
+| `meta-petalinux` | `petalinux` |
+| `meta-ori` (ours) | `ori` |
+
+To find the collection name of any layer:
+```bash
+grep BBFILE_COLLECTIONS sources/<layer>/conf/layer.conf
+```
+
+When declaring `LAYERDEPENDS_<ours>` or recipe overrides, **always use
+collection names**.
+
 ---
 
 ## 🎯 Milestones
@@ -378,87 +447,107 @@ MAC: 00:0a:35:07:eb:c1 (Xilinx OUI)
 - ✅ PSCI handshake between Linux and ATF works (3 of 4 CPUs)
 - ✅ Network up at gigabit, link autodetected
 
-### M2: meta-ori layer + static IP + ADRV9002 device tree ⏳ CURRENT FOCUS
+### M2: meta-ori layer + static IP + ADRV9002 device tree ⏳ IN PROGRESS
+
+**Status: meta-ori layer + first recipe (static IP) ✅ DONE (2026-05-18).
+Remaining: openssh-server, PXE boot config, meta-adi-xilinx integration.**
 
 **Goal:** turn `meta-ori/` into a real Yocto layer with `conf/layer.conf`,
 add static IP via systemd-networkd dropin, then add meta-adi-xilinx for
 ADRV9002 driver and proper device tree. Regression-check that sample
 stream still works.
 
-**Steps:**
+#### Step 1: meta-ori as real layer + static IP via systemd-networkd ✅
 
-1. **Create `meta-ori/conf/layer.conf`:**
-   ```
-   BBPATH .= ":${LAYERDIR}"
-   BBFILES += "${LAYERDIR}/recipes-*/*/*.bb ${LAYERDIR}/recipes-*/*/*.bbappend"
-   BBFILE_COLLECTIONS += "ori"
-   BBFILE_PATTERN_ori = "^${LAYERDIR}/"
-   BBFILE_PRIORITY_ori = "10"
-   LAYERSERIES_COMPAT_ori = "kirkstone"
-   ```
+**Files added to `meta-ori/`:**
+- `conf/layer.conf` — bitbake layer registration (collection `ori`, priority 10,
+  honister-compat + kirkstone forward-compat, hard-depends on `core`,
+  soft-recommends `openembedded-layer` + `petalinux`)
+- `COPYING.MIT` — MIT license
+- `README.md` — layer scope, activation instructions, planned contents
+- `recipes-core/systemd/systemd_%.bbappend` — extends upstream systemd recipe
+  to install our network config file
+- `recipes-core/systemd/systemd/10-eth0.network` — static IP config:
+  ```
+  [Match]
+  Name=eth0
+  
+  [Network]
+  Address=10.73.1.16/24
+  Gateway=10.73.1.1
+  ConfigureWithoutCarrier=true
+  ```
 
-2. **Symlink layer into build tree's sources/:**
-   ```bash
-   cd ~/yocto/haifuraiya/sources
-   ln -s ~/brown/Mode-Dynamic-Transponder/haifuraiya/yocto/meta-ori .
-   ```
+**Activation:**
+```bash
+cd ~/yocto/haifuraiya/sources
+ln -s ~/brown/Mode-Dynamic-Transponder/haifuraiya/yocto/meta-ori .
 
-3. **Activate in bblayers.conf:**
-   ```bash
-   cd ~/yocto/haifuraiya/build
-   bitbake-layers add-layer ../sources/meta-ori
-   ```
+cd ~/yocto/haifuraiya/build
+bitbake-layers add-layer ../sources/meta-ori
+bitbake-layers show-layers | grep ori
+# Expected: ori    /path/to/meta-ori    10
+```
 
-4. **Add static IP recipe** at `meta-ori/recipes-network/systemd-network/systemd-network_%.bbappend`:
-   ```
-   SRC_URI += "file://10-eth0.network"
-   FILES:${PN} += "${sysconfdir}/systemd/network/10-eth0.network"
-   do_install:append() {
-       install -d ${D}${sysconfdir}/systemd/network
-       install -m 0644 ${WORKDIR}/10-eth0.network ${D}${sysconfdir}/systemd/network/
-   }
-   ```
-   
-   With file `meta-ori/recipes-network/systemd-network/files/10-eth0.network`:
-   ```
-   [Match]
-   Name=eth0
-   
-   [Network]
-   Address=10.73.1.16/24
-   Gateway=10.73.1.1
-   ```
+**Build + verify file is in rootfs:**
+```bash
+MACHINE=zcu102-zynqmp bitbake petalinux-image-minimal
 
-5. **Clone meta-adi:**
-   ```bash
-   cd ~/yocto/haifuraiya/sources
-   git clone https://github.com/analogdevicesinc/meta-adi.git
-   cd meta-adi
-   git branch -a   # find branch matching 2022.2
-   git checkout <branch matching 2022.2 — TBD>
-   ```
+zcat tmp/deploy/images/zcu102-zynqmp/petalinux-image-minimal-zcu102-zynqmp.cpio.gz | \
+    cpio -ivt 2>/dev/null | grep "10-eth0"
+# Expected: -rw-r--r-- 1 root root 795 ... ./etc/systemd/network/10-eth0.network
+```
 
-6. **Add meta-adi-xilinx to bblayers.conf:**
-   ```bash
-   cd ~/yocto/haifuraiya/build
-   bitbake-layers add-layer ../sources/meta-adi/meta-adi-xilinx
-   ```
+**Verified on hardware after deploy + JTAG boot:**
+```
+root@zcu102-zynqmp:~# ip addr show eth0
+4: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ...
+    link/ether 00:0a:35:07:eb:c1
+    inet 10.73.1.16/24 brd 10.73.1.255 scope global eth0      ← OUR static IP
+       valid_lft forever preferred_lft forever
+```
 
-7. **Set kernel device tree to ADRV9002 variant** in local.conf:
-   ```
-   KERNEL_DTB = "zynqmp-zcu102-rev10-adrv9002"
-   ```
+And from keroppi: `ping 10.73.1.16` → ✅ (confirmed by Paul).
 
-8. **Build:**
-   ```bash
-   MACHINE=zcu102-zynqmp bitbake petalinux-image-minimal
-   ```
+#### Step 2: openssh-server in image ⏳ NOT STARTED
 
-9. **Deploy via JTAG** (same procedure as M1).
+Add openssh to `IMAGE_INSTALL` so we can ssh into the board from keroppi
+without going through JTAG console for routine work. Probably a single
+line in a meta-ori bbappend or in a custom image recipe.
 
-**Deliverable:** image boots, `dmesg | grep -i adrv9002` shows driver loaded,
-`iio_info` lists the ADRV9002 device. After boot, eth0 has IP 10.73.1.16,
-ping from keroppi works.
+#### Step 3: PXE boot config to eliminate manual U-Boot typing ⏳ NOT STARTED
+
+Drop a `pxelinux.cfg/default` file in `/tftpboot/` with kernel/dtb/initrd
+labels. U-Boot autoboot will load Linux automatically without the
+manual `setenv` + `tftpboot` + `booti` sequence.
+
+#### Step 4: meta-adi-xilinx + ADRV9002 device tree ⏳ NOT STARTED
+
+The big one — preparation for Phase 2a integration.
+
+```bash
+cd ~/yocto/haifuraiya/sources
+git clone https://github.com/analogdevicesinc/meta-adi.git
+cd meta-adi
+git branch -a   # find branch matching 2022.2
+git checkout <branch matching 2022.2 — TBD>
+
+cd ~/yocto/haifuraiya/build
+bitbake-layers add-layer ../sources/meta-adi/meta-adi-xilinx
+```
+
+Set kernel device tree to ADRV9002 variant in local.conf:
+```
+KERNEL_DTB = "zynqmp-zcu102-rev10-adrv9002"
+```
+
+Build, deploy, verify:
+```bash
+MACHINE=zcu102-zynqmp bitbake petalinux-image-minimal
+# JTAG boot, then on target:
+dmesg | grep -i adrv9002
+iio_info | grep -i adrv9002
+```
 
 **Pin the meta-adi commit SHA** in the Version Stack table after this step.
 
@@ -957,7 +1046,155 @@ hardware reality. Verify with `xsdb` + `targets` what's actually on the
 chain, and filter by board-specific target names rather than by cable
 identity.
 
-### Cross-cutting lessons (Phase 2b chapter)
+### 13. Yocto release name assumed from product year instead of verified
+**Symptom:** Wrote `LAYERSERIES_COMPAT_ori = "kirkstone"` based on
+assumption that Xilinx 2022.2 (released October 2022) would pair with
+Yocto Kirkstone (LTS, April 2022). `bitbake-layers add-layer` failed:
+```
+Layer ori is not compatible with the core layer which only supports
+these series: honister (layer is compatible with kirkstone)
+```
+
+**Root cause:** Xilinx 2022.2 was actually based on **Honister (3.4)**, not
+Kirkstone. The dev cycle for xlnx-rel-v2022.2 started before Kirkstone was
+finalized and stayed on Honister. (xlnx-rel-v2023.x moved to Langdale.)
+
+**Fix:** Use `LAYERSERIES_COMPAT_ori = "honister kirkstone"` — declares
+compatibility with the actual base AND keeps forward-compat for any
+future upgrade.
+
+**Pattern:** Don't assume Yocto release name from product year. **Ask the
+system:**
+```bash
+grep LAYERSERIES_COMPAT_core sources/core/meta/conf/layer.conf
+```
+That's authoritative; everything else is inference.
+
+### 14. Layer dependencies use COLLECTION names, not DIRECTORY names
+**Symptom:** Declared `LAYERDEPENDS_ori = "core openembedded-layer meta-petalinux"`.
+`bitbake-layers add-layer` failed:
+```
+Layer 'ori' depends on layer 'meta-petalinux', but this layer is not
+enabled in your configuration
+```
+But `meta-petalinux` is clearly enabled in bblayers.conf.
+
+**Root cause:** Yocto layers have two names. The directory is named
+`meta-petalinux`, but its `BBFILE_COLLECTIONS` declares the collection
+name as just `petalinux`. `LAYERDEPENDS` matches against collection names,
+not directory names. Bitbake looked for a collection literally named
+`meta-petalinux` and found nothing.
+
+**Fix:** Use the collection name:
+```
+LAYERDEPENDS_ori = "core"
+LAYERRECOMMENDS_ori = "openembedded-layer petalinux"
+```
+(Also moved most deps to RECOMMENDS to make the layer more permissive.)
+
+**Pattern:** Always verify collection names with
+`grep BBFILE_COLLECTIONS sources/<layer>/conf/layer.conf` before
+declaring dependencies. See the Layer Collection Name Reference table
+above for our common layers.
+
+### 15. `.bbappend` filename's `%` got mangled to `_` in file transfer
+**Symptom:** `bitbake-layers add-layer` succeeded (layer activated), but
+`bitbake-layers show-appends` listed our bbappend on its own line instead
+of nested under `systemd_249.7.bb`:
+```
+  /home/.../meta-ori/recipes-core/systemd/systemd__.bbappend     ← lonely
+systemd_249.7.bb:
+  /home/.../meta-xilinx/meta-microblaze/.../systemd_%.bbappend   ← properly nested
+```
+The bbappend wasn't being applied to any recipe — bitbake didn't know what to
+attach it to.
+
+**Root cause:** In Yocto, `.bbappend` filenames use `%` as a version
+wildcard. `systemd_%.bbappend` means "apply to any version of the systemd
+recipe." Our filename had `_` where the `%` should have been:
+`systemd__.bbappend` (two underscores). The `%` got mangled somewhere
+in the file transfer (URL encoding round-trip, copy-paste through web UI,
+some path normalization step — exact cause unclear, but the symptom is
+clear).
+
+**Fix:** Rename the file:
+```bash
+mv systemd__.bbappend systemd_%.bbappend
+```
+
+**Pattern:** When `.bbappend` files mysteriously don't apply, check the
+filename for `%` before checking the file content. The `%` character in
+filenames is valid on Unix but some transfer mechanisms mangle it.
+
+### 16. `setupsdk` from inside `build/` creates nested `build/build/`
+**Symptom:** Ran `source ../setupsdk` from inside the existing `build/`
+directory. Got messages like "You had no conf/local.conf file" and
+ended up in `~/yocto/haifuraiya/build/build/` (note the doubled `build/`)
+with no config. Original config seemed gone.
+
+**Root cause:** AMD's setupsdk uses the current working directory as
+TOPDIR. If you're inside `build/`, it creates a new `build/` inside it
+and cd's you there. Your ORIGINAL `build/` is still intact — you're just
+in the wrong directory now.
+
+**Fix:** 
+```bash
+cd ~/yocto/haifuraiya         # go to project root
+rm -rf build/build             # remove the empty nested directory
+source setupsdk                # source from project root (not from build/)
+```
+
+**Pattern:** ALWAYS source setupsdk from the project root, never from
+inside an existing `build/`. Already noted in the "Common setupsdk
+pitfall" section above; banked here for trophy completeness.
+
+### 17. tftpd-hpa reinstalled but service didn't auto-restart
+**Symptom:** During M1 TFTP debugging, ran `sudo apt install tftpd-hpa`
+to restore a missing binary. Binary appeared in `/usr/sbin/in.tftpd`,
+but `ps aux | grep tftpd` still showed no process. `systemctl status`
+said "active (exited) since 4 minutes ago" — the timestamp was BEFORE
+the apt install.
+
+**Root cause:** `apt install` reinstalled the package files but didn't
+restart the service. The systemd state showed the previous (failed)
+start attempt, not a new state reflecting the now-present binary.
+
+**Fix:**
+```bash
+sudo systemctl restart tftpd-hpa
+```
+After restart, ps showed the daemon, ss showed port 69 listening.
+
+**Pattern:** After any package reinstall, restart relevant services
+explicitly. Don't trust systemctl status timestamps; check process
+state directly with `ps` and `ss`.
+
+### 18. Ubuntu 22.04 glibc 2.35 vs Honister uninative glibc 2.34
+**Symptom:** During M2 image rebuild, bitbake emitted:
+```
+WARNING: Your host glibc version (2.35) is newer than that in uninative
+(2.34). Disabling uninative so that sstate is not corrupted.
+```
+Followed by sea-of-red ERROR messages about glib-2.0 setscene failures.
+
+**Root cause:** "uninative" is Yocto's mechanism for making sstate cache
+portable across hosts (it ships a fixed glibc to use instead of the
+host's). Ubuntu 22.04's glibc is newer than what Yocto Honister's
+uninative expects. Yocto disabled uninative for safety, which invalidated
+sstate cache entries that assumed uninative was active.
+
+**Recovery:** Bitbake handles this automatically — when a setscene task
+fails, bitbake says "real task will be run instead" and rebuilds from
+scratch. The build succeeded; the errors looked alarming but were
+benign.
+
+**Pattern:** Yocto's failsafe is "if cache is suspect, rebuild." When you
+see lots of `do_*_setscene` failures with "real task will be run instead"
+warnings, the build will still complete correctly. The first build on a
+fresh host always shows some of this; subsequent builds use the local
+sstate-cache which doesn't have the uninative dependency.
+
+
 
 - **xsdb command naming matters.** `mwr`/`mrd` = memory ops (with
   address). `rwr`/`rrd` = register ops (with register name). Easy typo,
@@ -1002,23 +1239,26 @@ These came up during M1 closeout and are not blocking but worth tracking:
    integration. May be related to ATF handoff context being incomplete via
    JTAG (vs full BOOT.BIN flow), or device tree CPU 1 node config.
 
-2. **No persistent IPv4 on eth0.** Currently only IPv6 link-local. The
-   Linux side doesn't get DHCP and we haven't configured static. M2 task:
-   add systemd-networkd dropin via meta-ori.
+2. ~~**No persistent IPv4 on eth0.**~~ ✅ Resolved by M2 step 1 (static IP
+   via systemd-networkd dropin in meta-ori). eth0 now comes up with
+   10.73.1.16/24 on boot.
 
-3. **ICMP / ping from outside.** Once IPv4 is set, verify ZCU102 responds
-   to ping from keroppi. If not, check ICMP firewall (unlikely on default
-   image) or routing.
+3. ~~**ICMP / ping from outside.**~~ ✅ Resolved — Paul confirmed ping
+   from keroppi succeeds once static IP is set. Default Yocto image has
+   no firewall.
 
 4. **U-Boot env doesn't persist across boots.** Every boot starts with
    default U-Boot env. To persist, would need to enable env storage
    (QSPI, EMMC, SD FAT). For JTAG-only workflow, PXE config file in
-   /tftpboot is the lighter-weight equivalent.
+   /tftpboot is the lighter-weight equivalent — that's M2 step 3.
 
 5. **PXE boot file would eliminate manual TFTP typing.** Drop a
    `pxelinux.cfg/default` file in `/tftpboot/` with kernel/dtb/initrd
-   labels. U-Boot's autoboot would then load Linux automatically. Worth
-   pursuing as M2-era polish.
+   labels. U-Boot's autoboot would then load Linux automatically. M2
+   step 3.
+
+6. **openssh-server not in default image.** We have ssh client but no
+   server, so we can't ssh INTO the board. Add to meta-ori — M2 step 2.
 
 ---
 
@@ -1026,7 +1266,7 @@ These came up during M1 closeout and are not blocking but worth tracking:
 
 | Risk | Likelihood | Mitigation |
 |---|:-:|---|
-| Yocto Kirkstone LTS sunset noise | Medium | Pin commits explicitly; document workarounds |
+| Yocto Honister upstream EOL (non-LTS, already EOL'd) | Medium | Pin commits explicitly; rely on Xilinx's xlnx-rel branches; document workarounds inline |
 | Recipe SHA drift on first build | **Hit** | Mirror config + blacklist via :remove (see M1's local.conf) |
 | meta-adi branch naming has drifted | Low | Verify branch after first clone; document |
 | First build fails with cryptic error | **Hit** | All known causes now documented in trophy case |
@@ -1041,6 +1281,12 @@ These came up during M1 closeout and are not blocking but worth tracking:
 | ATF not loaded before FSBL runs | **Hit** | Load order fixed in xsdb script |
 | `dow u-boot.elf` sets PC to U-Boot (skipping ATF) | **Hit** | Explicit `rwr pc 0xfffea000` after dow |
 | Multiple hw_servers cause connect confusion | **Hit** | Use explicit `connect -url`; keep only one server running |
+| Yocto release name confusion (Honister vs Kirkstone) | **Hit** | `grep LAYERSERIES_COMPAT_core sources/core/meta/conf/layer.conf` for ground truth, don't infer from product year |
+| Layer dependencies broken by directory-vs-collection name mixup | **Hit** | `grep BBFILE_COLLECTIONS` to find actual collection names; see Layer Collection Name Reference table |
+| `.bbappend` filename `%` mangled in file transfer | **Hit** | Verify filename ends in `_%.bbappend` (not `__.bbappend`) after copying |
+| setupsdk creates nested build/build/ when sourced from inside build/ | **Hit** | Always source setupsdk from project root |
+| tftpd-hpa reinstalled but service not auto-restarted | **Hit** | `systemctl restart` after any package reinstall; verify with `ps` and `ss` |
+| Host glibc 2.35 newer than uninative 2.34 | **Hit** | Yocto handles automatically — disables uninative, falls back to fresh builds. Harmless. |
 
 ---
 
@@ -1057,7 +1303,7 @@ These came up during M1 closeout and are not blocking but worth tracking:
 - ADRV9002 ZCU102: https://wiki.analog.com/resources/eval/user-guides/adrv9002
 
 ### Yocto Project core
-- Yocto Reference Manual (Kirkstone): https://docs.yoctoproject.org/kirkstone/
+- Yocto Reference Manual (Honister): https://docs.yoctoproject.org/honister/
 - Yocto release schedule: https://wiki.yoctoproject.org/wiki/Releases
 
 ### Community
@@ -1099,11 +1345,12 @@ $ ip addr show eth0
 
 ---
 
-*Last updated: 2026-05-18, M1 closeout. Phase 2b chapter 1 (vanilla Yocto
-JTAG boot) complete with twelve bugs slain and documented. Linux 5.15.36
-booted on ZCU102 via JTAG from keroppi, all the way to root shell. Three
-cores online, gigabit Ethernet up, ATF→EL2→U-Boot→Linux chain validated
-end-to-end. Build config templates (conf/local.conf.template,
-conf/bblayers.conf.template) committed for reproducibility. Next focus:
-meta-ori as real Yocto layer + static IP via systemd-networkd dropin (M2
-prerequisites).*
+*Last updated: 2026-05-18, M2 step 1 closeout. Phase 2b chapter 1 (vanilla
+Yocto JTAG boot, M1) banked with twelve bosses slain. Phase 2b chapter 2
+(meta-ori layer + first recipe, M2 step 1) banked with six more bosses
+slain. eth0 = 10.73.1.16/24 confirmed on hardware; ping from keroppi
+succeeds (verified by Paul). meta-ori is a real Yocto layer with one
+working recipe; from here every customization follows the same pattern.
+Yocto base correctly identified as Honister (3.4), not Kirkstone as
+previously assumed. Next focus: choose M2 step 2 (openssh-server, PXE
+boot, OR jump to meta-adi-xilinx).*
