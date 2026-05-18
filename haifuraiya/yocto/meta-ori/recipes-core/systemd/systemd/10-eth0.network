@@ -1,0 +1,25 @@
+# /etc/systemd/network/10-eth0.network
+#
+# Static IP configuration for the on-board gigabit Ethernet on the
+# ZCU102 in the ORI remote lab. The 10.x.x.x prefix is the lab's
+# private network.
+#
+# To change this for a different deployment: edit Address and Gateway
+# below, rebuild the image, redeploy.
+
+[Match]
+Name=eth0
+
+[Network]
+Address=10.73.1.16/24
+Gateway=10.73.1.1
+
+# Optional DNS; commented out by default. If the ZCU102 needs to resolve
+# external hostnames, uncomment one of these (or use a different DNS).
+#DNS=10.73.1.1
+#DNS=8.8.8.8
+
+# Tell networkd to bring this interface up at boot regardless of cable
+# status (the cable is plugged before the board is powered, but if anyone
+# unplugs/replugs during development this avoids needing manual `up` cmds)
+ConfigureWithoutCarrier=true
