@@ -1,0 +1,11 @@
+# Build trees (regenerable, huge)
+build/
+sources/
+.repo/
+
+# Per-developer host config
+local.conf
+bblayers.conf
+
+# Yocto-generated SDK installers
+*.sh.tar.gz

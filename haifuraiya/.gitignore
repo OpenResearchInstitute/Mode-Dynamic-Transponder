@@ -7,3 +7,11 @@ sim/.Xil/
 sim/xsim.dir/
 sim/webtalk*.jou
 sim/webtalk*.log
+
+# Vivado per-process journal/log artifacts (smoke test runs, etc.)
+**/vivado_*.jou
+**/vivado_*.log
+**/vivado_*.backup.jou
+**/vivado_*.backup.log
+**/vivado_*.zip
+**/.Xil/
