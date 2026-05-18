@@ -1,0 +1,164 @@
+# Haifuraiya Yocto local.conf template
+#
+# This file documents the local.conf settings that produced a working
+# vanilla ZCU102 image as of M1 (2026-05-18). It is the AMD setupsdk-
+# generated baseline + the M1-required customizations on top.
+#
+# Reproduction context:
+#   Host: Ubuntu 22.04 LTS
+#   Vivado: 2022.2
+#   Yocto release: Kirkstone (4.0)
+#   Manifest: github.com/Xilinx/yocto-manifests rel-v2022.2
+#   Build tree: ~/yocto/haifuraiya/
+#
+# Workflow: after `repo init` + `repo sync` and sourcing yocto-scripts/setupsdk,
+# AMD's setupsdk generates an initial conf/local.conf in your build tree.
+# This template captures that baseline (with brief annotations) plus the
+# M1-required customizations. Diff against your build/conf/local.conf to
+# verify reproducibility.
+
+
+# ============================================================
+# Machine and distro
+# ============================================================
+
+# Machine is overridden on the bitbake command line:
+#   MACHINE=zcu102-zynqmp bitbake petalinux-image-minimal
+# The default below is a fallback if no override is given.
+MACHINE ??= "zynqmp-generic"
+
+# DISTRO = "petalinux" activates meta-petalinux's customizations of poky
+# (kernel config defaults, init system tweaks, "PetaLinux X.Y_dev" hostname
+# branding). The image is still Yocto Kirkstone — just configured with
+# Xilinx's distro layer applied.
+DISTRO ?= "petalinux"
+
+
+# ============================================================
+# Package management
+# ============================================================
+
+PACKAGE_CLASSES ?= "package_rpm"
+
+
+# ============================================================
+# Build behavior
+# ============================================================
+
+# Don't try to interactively resolve patches; fail the build instead.
+PATCHRESOLVE = "noop"
+
+# Collect build statistics (useful for diagnosing slow builds).
+USER_CLASSES ?= "buildstats"
+
+# Disk space monitoring — stop tasks at 1GB free, abort at 100MB.
+BB_DISKMON_DIRS ??= "\
+    STOPTASKS,${TMPDIR},1G,100K \
+    STOPTASKS,${DL_DIR},1G,100K \
+    STOPTASKS,${SSTATE_DIR},1G,100K \
+    STOPTASKS,/tmp,100M,100K \
+    ABORT,${TMPDIR},100M,1K \
+    ABORT,${DL_DIR},100M,1K \
+    ABORT,${SSTATE_DIR},100M,1K \
+    ABORT,/tmp,10M,1K"
+
+
+# ============================================================
+# QEMU/runqemu support for ZynqMP
+# ============================================================
+
+PACKAGECONFIG:append:pn-qemu-system-native = " sdl"
+
+# Required for runqemu on ZU+ machines
+PMU_FIRMWARE_DEPLOY_DIR ??= "${DEPLOY_DIR_IMAGE}"
+PMU_FIRMWARE_IMAGE_NAME ??= "pmu-firmware-${MACHINE}"
+
+
+# ============================================================
+# Mirror configuration for upstream SHA drift
+# ============================================================
+#
+# CRITICAL: First Yocto builds fail without these. Upstream git repos
+# garbage-collect old SHAs that recipes pin to. Yocto's source mirror
+# preserves them.
+#
+# Trophy case: "Recipe SHA drift on git-fetch recipes"
+
+# Xilinx-flavored mirror handling (from meta-petalinux)
+INHERIT += "plnx-mirrors"
+
+# Explicit PREMIRRORS pointing at Yocto Project's archive mirror
+PREMIRRORS:prepend = "\
+    git://.*/.* https://downloads.yoctoproject.org/mirror/sources/ \n \
+    ftp://.*/.* https://downloads.yoctoproject.org/mirror/sources/ \n \
+    http://.*/.* https://downloads.yoctoproject.org/mirror/sources/ \n \
+    https://.*/.* https://downloads.yoctoproject.org/mirror/sources/ \n"
+
+# Generate local mirror tarballs so subsequent builds don't need network
+BB_GENERATE_MIRROR_TARBALLS = "1"
+
+
+# ============================================================
+# Image format selection
+# ============================================================
+#
+# wic / wic.bmap / wic.qemu-sd recipes pin to SHAs that aren't on the
+# Yocto mirror either. We don't need SD card image formats for the
+# JTAG-boot workflow, so remove them entirely.
+#
+# Trophy case: "Recipe SHA drift" — wic.qemu-sd is the easy-to-miss
+# third variant; trace with `bitbake -e <image> | grep ^IMAGE_FSTYPES=`
+
+IMAGE_FSTYPES:remove = "wic wic.bmap wic.qemu-sd"
+
+
+# ============================================================
+# Image content tweaks
+# ============================================================
+#
+# htop's recipe pins to a SHA that's been garbage-collected and isn't
+# on the Yocto mirror. Skip it; busybox `top` is in the image and works
+# fine for our purposes.
+#
+# Trophy case: "Recipe SHA drift"
+
+IMAGE_INSTALL:remove = "htop"
+
+
+# ============================================================
+# Development conveniences
+# ============================================================
+#
+# REQUIRED for any dev image. Without this:
+#   - root account is locked (asterisk in /etc/shadow → no login works)
+#   - SSH server refuses empty-password logins
+#   - serial console requires login (no autologin)
+#
+# Trophy case: "Yocto default image has root account locked"
+
+EXTRA_IMAGE_FEATURES = "debug-tweaks"
+
+
+# ============================================================
+# Conf file version
+# ============================================================
+
+# Standard Yocto incantation
+CONF_VERSION = "2"
+
+
+# ============================================================
+# Optional / commented-out settings
+# ============================================================
+
+# Tune for your host. Defaults are usually fine; uncomment to override.
+#BB_NUMBER_THREADS = "8"
+#PARALLEL_MAKE = "-j 8"
+
+# Discard intermediate stamps after successful build to save disk
+# (slower incremental builds; faster fresh builds).
+#INHERIT += "rm_work"
+
+# Uncomment if you have a custom xsct trim
+#EXTERNAL_XSCT_TARBALL = "/proj/yocto/xsct-trim/2022.2_xsct_daily_latest"
+#VALIDATE_XSCT_CHECKSUM = '0'

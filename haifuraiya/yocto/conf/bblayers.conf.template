@@ -1,0 +1,76 @@
+# Haifuraiya Yocto bblayers.conf template
+#
+# This file documents the bblayers.conf that produced a working vanilla
+# ZCU102 image as of M1 (2026-05-18). It is the AMD setupsdk-generated
+# layer activation list, with absolute paths abstracted to ${BSPDIR}
+# for portability.
+#
+# To use: copy to your build's conf/bblayers.conf and set BSPDIR to point
+# at your sources/ directory.
+#
+# NOTE: most of these layers don't contribute recipes to petalinux-image-
+# minimal, but their .bbappend files DO affect the build. Activating only
+# a subset is a regression risk; we activate the full AMD-pulled set.
+
+LCONF_VERSION = "7"
+
+BBPATH = "${TOPDIR}"
+BBFILES ?= ""
+
+# BSPDIR points to the directory containing sources/. Set this to match
+# your environment. For ~/yocto/haifuraiya/build/ build tree, BSPDIR is
+# ~/yocto/haifuraiya/.
+BSPDIR := "${@os.path.abspath(os.path.dirname(d.getVar('FILE')) + '/../..')}"
+
+BBLAYERS ?= " \
+    ${BSPDIR}/sources/core/meta \
+    ${BSPDIR}/sources/core/meta-poky \
+    ${BSPDIR}/sources/meta-openembedded/meta-perl \
+    ${BSPDIR}/sources/meta-openembedded/meta-python \
+    ${BSPDIR}/sources/meta-openembedded/meta-filesystems \
+    ${BSPDIR}/sources/meta-openembedded/meta-gnome \
+    ${BSPDIR}/sources/meta-openembedded/meta-multimedia \
+    ${BSPDIR}/sources/meta-openembedded/meta-networking \
+    ${BSPDIR}/sources/meta-openembedded/meta-webserver \
+    ${BSPDIR}/sources/meta-openembedded/meta-xfce \
+    ${BSPDIR}/sources/meta-openembedded/meta-initramfs \
+    ${BSPDIR}/sources/meta-openembedded/meta-oe \
+    ${BSPDIR}/sources/meta-clang \
+    ${BSPDIR}/sources/meta-browser/meta-chromium \
+    ${BSPDIR}/sources/meta-qt5 \
+    ${BSPDIR}/sources/meta-xilinx/meta-microblaze \
+    ${BSPDIR}/sources/meta-xilinx/meta-xilinx-core \
+    ${BSPDIR}/sources/meta-xilinx/meta-xilinx-bsp \
+    ${BSPDIR}/sources/meta-xilinx/meta-xilinx-pynq \
+    ${BSPDIR}/sources/meta-xilinx/meta-xilinx-contrib \
+    ${BSPDIR}/sources/meta-xilinx/meta-xilinx-standalone \
+    ${BSPDIR}/sources/meta-xilinx/meta-xilinx-vendor \
+    ${BSPDIR}/sources/meta-xilinx-tools \
+    ${BSPDIR}/sources/meta-petalinux \
+    ${BSPDIR}/sources/meta-virtualization \
+    ${BSPDIR}/sources/meta-openamp \
+    ${BSPDIR}/sources/meta-jupyter \
+    ${BSPDIR}/sources/meta-vitis \
+    ${BSPDIR}/sources/meta-python2 \
+    ${BSPDIR}/sources/meta-som \
+    ${BSPDIR}/sources/meta-security \
+    ${BSPDIR}/sources/meta-security/meta-tpm \
+    ${BSPDIR}/sources/meta-xilinx-tsn \
+    ${BSPDIR}/sources/meta-ros/meta-ros-common \
+    ${BSPDIR}/sources/meta-ros/meta-ros2 \
+    ${BSPDIR}/sources/meta-ros/meta-ros2-humble \
+"
+
+BBLAYERS_NON_REMOVABLE ?= " \
+    ${BSPDIR}/sources/core/meta \
+"
+
+# Layers added in later milestones:
+#
+# M2: meta-ori (this repo's custom layer)
+#   ${BSPDIR}/sources/meta-ori
+#
+# M2: meta-adi-xilinx (ADRV9002 driver, device trees)
+#   ${BSPDIR}/sources/meta-adi/meta-adi-xilinx
+#
+# Add with: bitbake-layers add-layer <path>
