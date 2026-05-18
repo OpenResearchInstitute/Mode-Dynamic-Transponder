@@ -9,3 +9,4 @@ bblayers.conf
 
 # Yocto-generated SDK installers
 *.sh.tar.gz
+scripts/boot.scr
