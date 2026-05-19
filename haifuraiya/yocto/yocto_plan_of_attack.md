@@ -26,8 +26,9 @@ channelizer's Linux runtime.
 | ✅ | **JTAG deployment recipe established** | **xsdb-based boot via PMU→FSBL→ATF→U-Boot→Linux, fully documented in "JTAG Boot Procedure" below** |
 | ✅ | **meta-ori is a real Yocto layer** | **conf/layer.conf, MIT license, README. Registered with bitbake at priority 10. Collection name `ori`. Forward-compat with kirkstone.** |
 | ✅ | **First meta-ori recipe: static IP via systemd-networkd** | **`ip addr show eth0` reports `inet 10.73.1.16/24`. ping from keroppi succeeds. systemd-networkd uses /etc/systemd/network/10-eth0.network installed by our recipe.** |
-| 🎯 | **Next concrete action** | **Choose: (a) openssh-server recipe in meta-ori for SSH access, OR (b) PXE boot config to eliminate manual setenv+tftpboot+booti typing, OR (c) jump to meta-adi-xilinx + ADRV9002 prep for Phase 2a integration** |
-| ⏳ | M2 remainder: add ADI/ADRV9002 layer + device tree | meta-adi-xilinx added to build, kernel includes ADRV9002 driver, `iio_info` lists device |
+| ✅ | **openssh-server in image** | **`ssh root@10.73.1.16` from keroppi succeeds (empty password via debug-tweaks). Dev workflow no longer requires JTAG console for interactive work.** |
+| ✅ | **Auto-boot via boot.scr at 0x20000000** | **Zero keystrokes during boot. U-Boot's autoboot finds boot.scr (loaded by xsdb via `dow -data`), runs setenv + tftpboot + booti automatically.** |
+| 🎯 | **Next concrete action** | **meta-adi-xilinx + ADRV9002 driver (M2 step 5), preparation for Phase 2a hardware integration** |
 | ⏳ | M3: image built against Phase 2a .xsa (Haifuraiya in PL) | Hardware design integrated; channelizer in bitstream |
 | ⏳ | M4: userspace mmap reads VERSION register = 0x00010000 | Round-trip Linux-to-IP communication confirmed |
 | ⏳ | M5: Takadono v0 MQTT publish working | First observability output |
@@ -447,15 +448,15 @@ MAC: 00:0a:35:07:eb:c1 (Xilinx OUI)
 - ✅ PSCI handshake between Linux and ATF works (3 of 4 CPUs)
 - ✅ Network up at gigabit, link autodetected
 
-### M2: meta-ori layer + static IP + ADRV9002 device tree ⏳ IN PROGRESS
+### M2: meta-ori layer + static IP + openssh + auto-boot + ADRV9002 device tree ⏳ IN PROGRESS
 
-**Status: meta-ori layer + first recipe (static IP) ✅ DONE (2026-05-18).
-Remaining: openssh-server, PXE boot config, meta-adi-xilinx integration.**
+**Status: 4 of 5 sub-steps complete (2026-05-18). Remaining:
+meta-adi-xilinx integration for ADRV9002.**
 
 **Goal:** turn `meta-ori/` into a real Yocto layer with `conf/layer.conf`,
-add static IP via systemd-networkd dropin, then add meta-adi-xilinx for
-ADRV9002 driver and proper device tree. Regression-check that sample
-stream still works.
+add static IP via systemd-networkd dropin, add openssh for non-JTAG
+interactive access, eliminate manual typing during boot, then add
+meta-adi-xilinx for ADRV9002 driver and proper device tree.
 
 #### Step 1: meta-ori as real layer + static IP via systemd-networkd ✅
 
@@ -478,48 +479,73 @@ stream still works.
   ConfigureWithoutCarrier=true
   ```
 
-**Activation:**
-```bash
-cd ~/yocto/haifuraiya/sources
-ln -s ~/brown/Mode-Dynamic-Transponder/haifuraiya/yocto/meta-ori .
-
-cd ~/yocto/haifuraiya/build
-bitbake-layers add-layer ../sources/meta-ori
-bitbake-layers show-layers | grep ori
-# Expected: ori    /path/to/meta-ori    10
-```
-
-**Build + verify file is in rootfs:**
-```bash
-MACHINE=zcu102-zynqmp bitbake petalinux-image-minimal
-
-zcat tmp/deploy/images/zcu102-zynqmp/petalinux-image-minimal-zcu102-zynqmp.cpio.gz | \
-    cpio -ivt 2>/dev/null | grep "10-eth0"
-# Expected: -rw-r--r-- 1 root root 795 ... ./etc/systemd/network/10-eth0.network
-```
-
-**Verified on hardware after deploy + JTAG boot:**
+**Validated on hardware:**
 ```
 root@zcu102-zynqmp:~# ip addr show eth0
-4: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ...
-    link/ether 00:0a:35:07:eb:c1
-    inet 10.73.1.16/24 brd 10.73.1.255 scope global eth0      ← OUR static IP
-       valid_lft forever preferred_lft forever
+inet 10.73.1.16/24 brd 10.73.1.255 scope global eth0    ← OUR static IP
+```
+And `ping 10.73.1.16` from keroppi succeeds (verified by Paul).
+
+#### Step 2: openssh-server in image ✅
+
+**Files added to `meta-ori/`:**
+- `recipes-core/images/petalinux-image-minimal.bbappend`:
+  ```
+  IMAGE_INSTALL:append = " openssh"
+  ```
+
+**Validated on hardware:**
+```
+abraxas3d@keroppi:~$ ssh root@10.73.1.16
+The authenticity of host '10.73.1.16 (10.73.1.16)' can't be established.
+RSA key fingerprint is SHA256:47319/zshswCgelsjEl4SKbmsSxGk15u23BxqieuZCo.
+Are you sure you want to continue connecting (yes/no)? yes
+root@zcu102-zynqmp:~#
 ```
 
-And from keroppi: `ping 10.73.1.16` → ✅ (confirmed by Paul).
+Empty password root login (via debug-tweaks). SSH from keroppi works,
+no JTAG console needed for routine interactive work.
 
-#### Step 2: openssh-server in image ⏳ NOT STARTED
+**Known sub-issue resolved:** an intermediate build showed `dropbear`
+as the SSH service (inactive). DISTRO_FEATURES in meta-petalinux
+includes `ssh-server-dropbear`. Adding openssh via IMAGE_INSTALL worked
+eventually but the cleaner long-term fix is a meta-ori distro
+override removing dropbear and adding ssh-server-openssh. Tracked for
+later polish.
 
-Add openssh to `IMAGE_INSTALL` so we can ssh into the board from keroppi
-without going through JTAG console for routine work. Probably a single
-line in a meta-ori bbappend or in a custom image recipe.
+#### Step 3: Auto-boot via boot.scr at 0x20000000 ✅
 
-#### Step 3: PXE boot config to eliminate manual U-Boot typing ⏳ NOT STARTED
+**Files added to `scripts/`:**
+- `scripts/boot-script.txt`: U-Boot boot script source with static IPs
+  + tftpboot + booti
+- `scripts/make_boot_scr.sh`: wraps source with mkimage to produce
+  `boot.scr`
+- `scripts/zcu102_jtag_boot.tcl` updated: also loads `boot.scr` to
+  0x20000000 via `dow -data` after loading U-Boot ELF
+- `scripts/copy_to_keroppi.sh` updated: also copies boot.scr + JTAG
+  scripts to keroppi (single-command full deployment)
 
-Drop a `pxelinux.cfg/default` file in `/tftpboot/` with kernel/dtb/initrd
-labels. U-Boot autoboot will load Linux automatically without the
-manual `setenv` + `tftpboot` + `booti` sequence.
+**Boot script content:**
+```
+setenv autoload no
+setenv serverip 10.73.1.94
+setenv ipaddr   10.73.1.16
+setenv netmask  255.255.255.0
+setenv gatewayip 10.73.1.1
+tftpboot 0x80000   abraxas3d-yocto/Image
+tftpboot 0x4000000 abraxas3d-yocto/system.dtb
+tftpboot 0x4100000 abraxas3d-yocto/initramfs.cpio.gz.u-boot
+booti 0x80000 0x4100000 0x4000000
+```
+
+**Validated on hardware:** Power-cycle → `./run_jtag_boot.sh` → ~30
+seconds later → SSH root prompt. **Zero human keystrokes between
+power-on and shell.**
+
+The PXE approach was tried first but failed: PXE requires DHCP-populated
+serverip, and our lab has no DHCP server. The 0x20000000 script approach
+works without DHCP because U-Boot's autoboot checks that memory address
+before any network attempt. See Trophy Case entries 19, 20, 21.
 
 #### Step 4: meta-adi-xilinx + ADRV9002 device tree ⏳ NOT STARTED
 
@@ -529,8 +555,8 @@ The big one — preparation for Phase 2a integration.
 cd ~/yocto/haifuraiya/sources
 git clone https://github.com/analogdevicesinc/meta-adi.git
 cd meta-adi
-git branch -a   # find branch matching 2022.2
-git checkout <branch matching 2022.2 — TBD>
+git branch -a   # find branch matching 2022.2 / honister
+git checkout <branch matching xlnx-rel-v2022.2 — TBD>
 
 cd ~/yocto/haifuraiya/build
 bitbake-layers add-layer ../sources/meta-adi/meta-adi-xilinx
@@ -544,7 +570,7 @@ KERNEL_DTB = "zynqmp-zcu102-rev10-adrv9002"
 Build, deploy, verify:
 ```bash
 MACHINE=zcu102-zynqmp bitbake petalinux-image-minimal
-# JTAG boot, then on target:
+# Auto-boot via boot.scr, then on target via SSH:
 dmesg | grep -i adrv9002
 iio_info | grep -i adrv9002
 ```
@@ -565,36 +591,45 @@ iio_info | grep -i adrv9002
 
 ---
 
-## 🛰️ JTAG Boot Procedure (M1 recipe — keep this current)
+## 🛰️ JTAG Boot Procedure (canonical recipe — keep this current)
 
 This is the canonical JTAG deployment recipe. Everything between
-"power-on" and "root prompt" is here. Future-you returning to this for
-M2/M3/M4 — start at "Quick reference" and dive into "Detailed steps" only
-if something breaks.
+"power-on" and "root prompt via SSH" is here. As of M2 step 3, **the boot
+requires zero human keystrokes during the process** — U-Boot's autoboot
+finds our boot.scr at memory address 0x20000000 and runs through the
+setenv/tftpboot/booti sequence automatically.
 
-### Quick reference (5 commands once everything is set up)
+### Quick reference (truly: 3 commands once everything is set up)
 
 ```bash
-# On mymelody:
+# On mymelody (build host):
 ./scripts/copy_to_keroppi.sh
 
-# On keroppi:
-./run_jtag_boot.sh
+# On keroppi (lab VM), in one terminal:
+screen -L -Logfile ~/boot_$(date +%H%M).log /dev/zcu102_uart1 115200
+# (have Paul or remote-power-control power-cycle the ZCU102 here)
 
-# On serial console (catch the autoboot countdown):
-setenv serverip 10.73.1.94 && setenv ipaddr 10.73.1.16 && \
-  tftpboot 0x80000 abraxas3d-yocto/Image && \
-  tftpboot 0x4000000 abraxas3d-yocto/system.dtb && \
-  tftpboot 0x4100000 abraxas3d-yocto/initramfs.cpio.gz.u-boot && \
-  booti 0x80000 0x4100000 0x4000000
+# On keroppi, in another terminal:
+cd /tmp/abraxas3d-yocto-boot && ./run_jtag_boot.sh
+
+# ~30 seconds later, from keroppi:
+ssh root@10.73.1.16
+# → root shell on ZCU102
 ```
+
+That's it. No more catching the autoboot countdown, no more typing
+`setenv serverip` + `tftpboot` + `booti` at U-Boot prompts. The
+hands-off boot replaces the manual sequence entirely.
 
 ### Pre-flight checklist (do these once per session)
 
+- [ ] **SD card pulled from ZCU102.** Without this, U-Boot's autoboot
+      eventually falls through to mmc0 if the boot.scr-at-0x20000000
+      path has any hiccup, and it might load an old kernel from SD with
+      mismatched rootfs expectations. SD-free = clean fallback chain.
 - [ ] **Boot mode switches (SW6) set to JTAG:** all four positions OFF.
-      If switches are in SD mode (1=ON), the BootROM loads BOOT.BIN from
-      SD card and interferes with JTAG boot. After changing, **power-cycle
-      the ZCU102** — boot mode pins are only sampled at power-on.
+      Only sampled at power-on; after changing, **power-cycle**.
+      Confirmed via U-Boot reporting `Bootmode: JTAG_MODE`.
 - [ ] **TFTP daemon running on keroppi:**
       ```
       sudo systemctl status tftpd-hpa
@@ -603,159 +638,209 @@ setenv serverip 10.73.1.94 && setenv ipaddr 10.73.1.16 && \
       ```
       Should see a process and a listening port. If `Tasks: 0` despite
       "Active: running" — check `which in.tftpd` (the binary may be missing
-      even though the package shows "installed").
+      despite the package showing "installed"); reinstall.
 - [ ] **hw_server running on keroppi:**
       ```
       source /tools/Xilinx/Vivado/2022.2/settings64.sh
       pgrep hw_server || hw_server -d
       ```
-      Use port 3121 (default). Filtered port `3122 -e "set jtag-port-filter Xilinx"`
-      from the lab doc currently catches the LibreSDR, not the ZCU102 — doc is out
-      of date on this. Our script filters by target name (`PSU`, `MicroBlaze PMU`,
-      `Cortex-A53 #0`) so the LibreSDR being on the chain doesn't interfere.
+      Default port 3121. Our xsdb script connects with explicit
+      `connect -url tcp:127.0.0.1:3121`.
+- [ ] **boot.scr exists** in `~/brown/Mode-Dynamic-Transponder/haifuraiya/yocto/scripts/`.
+      If not, regenerate from boot-script.txt:
+      ```
+      cd haifuraiya/yocto/scripts
+      ./make_boot_scr.sh
+      ```
+
+### How the hands-off boot works (mental model)
+
+```
+xsdb script loads to memory:
+  PMU firmware  → /tmp/.../ (loaded into PMU MicroBlaze)
+  FSBL.elf      → 0xfffc0000 (OCM, Cortex-A53)
+  ATF.bin       → 0xfffea000 (OCM, BL31 runtime)
+  U-Boot.elf    → 0x08000000 (DDR)
+  boot.scr      → 0x20000000 (DDR, U-Boot autoboot will find it here)
+
+  Then: rwr pc 0xfffea000 (override to ATF entry, not U-Boot entry)
+  Then: con
+
+Execution chain:
+  ATF runs, transitions EL3 → EL2, jumps to U-Boot
+  U-Boot starts at EL2, prints banner
+  U-Boot's autoboot checks 0x20000000 → finds our boot.scr → runs it
+  boot.scr does: setenv (static IPs) + tftpboot kernel/dtb/initramfs + booti
+  Linux kernel boots
+  systemd starts
+  systemd-networkd applies /etc/systemd/network/10-eth0.network
+  → eth0 = 10.73.1.16/24
+  sshd starts → port 22 listening
+  → login prompt on serial, AND SSH reachable
+```
 
 ### Detailed steps
 
-**Step 1: Build artifacts on mymelody** (~10 min for incremental, hours for first build)
+**Step 1: Build artifacts on mymelody** (10-15 min incremental, hours first build)
 ```bash
 cd ~/yocto/haifuraiya
-source sources/yocto-scripts/setupsdk
+source setupsdk
 MACHINE=zcu102-zynqmp bitbake petalinux-image-minimal
 ```
 
-**Step 2: Copy artifacts to keroppi**
+**Step 2: Generate boot.scr if needed** (only if boot-script.txt changed)
 ```bash
-cd ~/brown/Mode-Dynamic-Transponder/haifuraiya/yocto
-./scripts/copy_to_keroppi.sh
-# Also copy the scripts themselves if changed:
-scp scripts/zcu102_jtag_boot.tcl scripts/run_jtag_boot.sh abraxas3d@keroppi:/tmp/abraxas3d-yocto-boot/
+cd ~/brown/Mode-Dynamic-Transponder/haifuraiya/yocto/scripts
+./make_boot_scr.sh
 ```
 
-This places:
-- JTAG-load artifacts in `keroppi:/tmp/abraxas3d-yocto-boot/`
-- TFTP-served artifacts in `keroppi:/tftpboot/abraxas3d-yocto/`
-- Short-name TFTP symlinks (`system.dtb`, `initramfs.cpio.gz.u-boot`)
+**Step 3: Deploy to keroppi** (single command, copies everything needed)
+```bash
+./copy_to_keroppi.sh
+```
 
-**Step 3: Open serial console with logging** (separate keroppi terminal)
+This copies:
+- Yocto-built FSBL/PMU/ATF/U-Boot → `/tmp/abraxas3d-yocto-boot/`
+- boot.scr + zcu102_jtag_boot.tcl + run_jtag_boot.sh → `/tmp/abraxas3d-yocto-boot/`
+- Kernel + dtb + initramfs → `/tftpboot/abraxas3d-yocto/`
+
+**Step 4: Open serial console with logging on keroppi**
 ```bash
 ssh abraxas3d@keroppi
-screen -L -Logfile ~/zcu102_boot_$(date +%Y%m%d_%H%M).log /dev/zcu102_uart1 115200
+screen -L -Logfile ~/boot_$(date +%Y%m%d_%H%M).log /dev/zcu102_uart1 115200
 ```
 
-To exit screen: `Ctrl-A` then `k` then `y`.
+**Step 5: Power-cycle the ZCU102.** In JTAG boot mode, serial console
+shows nothing at power-on (BootROM is silent without a boot source).
+That's correct.
 
-**Step 4: Power-cycle the ZCU102.** In JTAG boot mode, you'll see *nothing*
-on the serial console at power-on — the BootROM is silent without a boot
-source. That's the correct expected state.
-
-**Step 5: Run JTAG boot** (in another keroppi terminal)
+**Step 6: Run JTAG boot from another keroppi terminal**
 ```bash
 cd /tmp/abraxas3d-yocto-boot
 ./run_jtag_boot.sh
 ```
 
-This:
-1. Sources Vivado 2022.2 settings
-2. Starts hw_server if not running
-3. Invokes xsdb with `zcu102_jtag_boot.tcl` which:
-   - Connects to local hw_server
-   - System-resets the ZynqMP
-   - Selects MicroBlaze PMU, resets it (wakes from sleep), loads PMU firmware, runs
-   - Selects Cortex-A53 #0, processor-resets
-   - Loads ATF binary at 0xfffea000 (OCM)
-   - Loads FSBL ELF
-   - Runs FSBL (FSBL initializes DDR, then enters wait loop)
-   - Waits 8 seconds for FSBL DDR init to complete
-   - Stops A53 (FSBL has completed)
-   - Loads U-Boot ELF
-   - **Sets PC to ATF entry (0xfffea000) via `rwr pc`** — critical for EL2 transition
-   - Continues execution → ATF runs, transitions EL3→EL2, jumps to U-Boot at EL2
+**Step 7: Watch the serial console.** The boot is hands-off but worth
+watching for the success markers:
+- `NOTICE:  ATF running on XCZU9EG/...` — ATF runs
+- `EL Level: EL2` — exception level correct
+- `Bootmode: JTAG_MODE` — boot mode pins correct
+- `JTAG: Trying to boot script at 20000000` — autoboot finds our script
+- `## Executing script at 20000000` — boot.scr is running
+- `our IP address is 10.73.1.16` — static IPs took effect
+- `Bytes transferred = 21592576` (kernel) — TFTP succeeded
+- `Starting kernel ...` — booti called
+- `zcu102-zynqmp login:` — Linux up
 
-**Step 6: Serial console shows boot chain**
-
-Expected sequence:
-```
-Xilinx Zynq MP First Stage Boot Loader 
-Release 2022.2   ...
-...
-NOTICE:  ATF running on XCZU9EG/silicon v4/RTL5.1 at 0xfffea000   ← KEY proof ATF ran
-NOTICE:  BL31: v2.4(release):xlnx_rebase_v2.4_2021.1_update1
-...
-U-Boot 2022.01 (Sep 20 2022 - 06:35:33 +0000)
-...
-DRAM:  4 GiB
-PMUFW:  v1.1
-EL Level:       EL2                                                  ← MUST BE EL2
-Bootmode: JTAG_MODE                                                  ← confirms switches right
-...
-Hit any key to stop autoboot:  3
+**Step 8: SSH in from keroppi**
+```bash
+ssh root@10.73.1.16
+# First time: accept the host key fingerprint
+# No password (debug-tweaks)
+# Returns: root@zcu102-zynqmp:~#
 ```
 
-**If `EL Level: EL3` appears**, ATF did NOT run. Check the xsdb output for
-`PC set. pc: 00000000fffea000` — that line must appear. Without ATF runtime,
-Linux PSCI SMCs will fail and the kernel panics at `psci_0_2_init`.
+### Troubleshooting
 
-**Step 7: Catch the autoboot countdown.** Press any key as soon as you see
-`Hit any key to stop autoboot`. If you miss it, U-Boot will try DHCP + PXE
-which will eventually fail and leave you at `ZynqMP>` anyway — but takes
-longer.
+**If U-Boot reaches autoboot but doesn't find our script** (you see
+`JTAG: SCRIPT FAILED: continuing...` followed by BOOTP retries):
+- boot.scr may not have been loaded correctly
+- Check xsdb output for `boot.scr loaded.` confirmation
+- Verify `dow -data` line ran without error in run_jtag_boot.sh output
 
-**Step 8: Manually configure and load via TFTP** at the `ZynqMP>` prompt:
-```
-setenv autoload no
-setenv serverip 10.73.1.94
-setenv ipaddr   10.73.1.16
-setenv netmask  255.255.255.0
-setenv gatewayip 10.73.1.1
+**If `EL Level: EL3` instead of EL2:**
+- ATF wasn't run; PC redirect to ATF entry didn't take effect
+- Check xsdb output for `PC set. pc: 00000000fffea000`
+- If missing, the `rwr pc 0xfffea000` line is wrong/missing in the .tcl
 
-ping 10.73.1.94
-```
+**If `Bootmode: LVL_SHFT_SD_MODE1` instead of `JTAG_MODE`:**
+- Boot mode switches still set to SD; flip to all-OFF and power-cycle
 
-Expected: `host 10.73.1.94 is alive`. If ping fails, network plumbing is wrong.
+**If SSH won't connect but Linux booted:**
+- First time may need host key acceptance — answer `yes`
+- After image rebuild, host key changes; clean stale entry:
+  ```
+  ssh-keygen -R 10.73.1.16
+  ```
+  then retry.
 
-```
-tftpboot 0x80000     abraxas3d-yocto/Image
-tftpboot 0x4000000   abraxas3d-yocto/system.dtb
-tftpboot 0x4100000   abraxas3d-yocto/initramfs.cpio.gz.u-boot
+**If `Loading: T T T T...` for the kernel TFTP** (lots of T retries):
+- TFTP server may not be running; restart `tftpd-hpa`
+- Or files in `/tftpboot/abraxas3d-yocto/` aren't world-readable; fix
+  with `chmod a+r`.
 
-booti 0x80000 0x4100000 0x4000000
-```
+### The development loop (what bitbake actually does for us)
 
-**Step 9: Linux boot messages scroll, login prompt appears**
+**For future-you returning to this section** — this is the dev workflow
+that closes the loop, explained without bitbake jargon.
 
-```
-Starting kernel ...
+A typical "change something, see it on the board" cycle:
 
-[    0.000000] Booting Linux on physical CPU 0x0000000000000000
-[    0.000000] Linux version 5.15.36-xilinx-v2022.2 ...
-...
+```bash
+# 1. Edit a recipe or config file in meta-ori
+nano meta-ori/recipes-core/systemd/systemd/10-eth0.network
 
-PetaLinux 2022.2_dev zcu102-zynqmp ttyPS0
-
-zcu102-zynqmp login: root
-[root prompt appears]
-```
-
-Login: `root` with no password (`debug-tweaks` enables this).
-
-### Future improvement: PXE boot to avoid manual typing
-
-U-Boot's autoboot tries PXE before falling through. If we drop a
-`pxelinux.cfg/default` file in `/tftpboot/`, U-Boot autoboot will find it
-and execute the boot commands automatically. Format:
-```
-default abraxas3d-yocto
-prompt 1
-timeout 30
-
-label abraxas3d-yocto
-  kernel abraxas3d-yocto/Image
-  fdt abraxas3d-yocto/system.dtb
-  initrd abraxas3d-yocto/initramfs.cpio.gz.u-boot
-  append console=ttyPS0,115200 earlycon
+# 2. Rebuild the image
+cd ~/yocto/haifuraiya/build
+MACHINE=zcu102-zynqmp bitbake petalinux-image-minimal
 ```
 
-This eliminates Step 7-8's manual typing. Worth doing as M2-era polish.
+What bitbake does (the short version):
+- **Parses recipes** (~10 sec): reads .bb files + .bbappend files, figures
+  out what depends on what
+- **Checks sstate cache** (~10 sec): for each task it needs to run, looks
+  up "have I run this exact thing before with these exact inputs?" If
+  yes, reuses the cached output instead of rebuilding
+- **Runs the tasks that aren't cached**: for our scenario, this is usually
+  just the affected recipe (e.g., systemd because we changed our
+  .bbappend's input file) plus the rootfs assembly (because the resulting
+  package changed)
+- **Assembles the rootfs**: takes all packages, lays them out, produces
+  the final cpio.gz / tar.gz / etc.
+
+For a small change (config file edit, IMAGE_INSTALL append), this takes
+**5-15 minutes** because sstate covers ~99% of the work.
+
+For a big change (kernel config, new recipe with C compilation),
+takes **30-60 minutes**.
+
+For a clean fresh build (no sstate, rare), takes **4-6 hours**.
+
+```bash
+# 3. Redeploy to keroppi (auto-runs because copy_to_keroppi.sh checks
+#    that boot.scr exists and bails if not)
+cd ~/brown/Mode-Dynamic-Transponder/haifuraiya/yocto/scripts
+./copy_to_keroppi.sh
+
+# 4. Power-cycle the ZCU102 (have Paul do this if remote)
+
+# 5. Re-boot the system via JTAG
+ssh abraxas3d@keroppi
+cd /tmp/abraxas3d-yocto-boot && ./run_jtag_boot.sh
+
+# 6. SSH in to verify
+ssh root@10.73.1.16
+# (after rebuild, ssh-keygen -R 10.73.1.16 if host key complaints)
+```
+
+End to end: **~5 minutes for small change**, mostly waiting for bitbake
+to verify cache and reassemble the rootfs.
+
+### Common patterns for meta-ori additions
+
+**Pattern 1: Drop a config file into an existing package's rootfs install**
+- Create `.bbappend` in `meta-ori/recipes-<category>/<package>/<package>_%.bbappend`
+- Create `<package>/` subdirectory in the same location with your config file
+- In .bbappend: `FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"` + `SRC_URI += "file://yourfile"` + `do_install:append() { install ... }` + `FILES:${PN}-subpackage += "..."`
+- Example: our systemd_%.bbappend for the static IP config
+
+**Pattern 2: Add a package to the image**
+- Create `petalinux-image-minimal.bbappend` (or other image recipe) in `meta-ori/recipes-core/images/`
+- Single line: `IMAGE_INSTALL:append = " package-name"`
+- Example: our openssh addition
+
+**Pattern 3: Add a device tree fragment** (coming for M3)
+- Will document when we hit it for the Haifuraiya channelizer DT
 
 ---
 
@@ -1194,7 +1279,141 @@ warnings, the build will still complete correctly. The first build on a
 fresh host always shows some of this; subsequent builds use the local
 sstate-cache which doesn't have the uninative dependency.
 
+### 19. PXE boot requires DHCP-populated serverip; static-IP labs need a different approach
+**Symptom:** Dropped `pxelinux.cfg/default` into `/tftpboot/`, expected
+U-Boot autoboot to find it. Instead saw:
+```
+BOOTP broadcast 1...17
+Retry time exceeded; starting again
+...
+Retrieving file: pxelinux.cfg/01-00-0a-35-07-eb-c1
+*** ERROR: `serverip' not set
+```
+PXE couldn't even attempt to fetch our config because serverip was never set.
 
+**Root cause:** U-Boot's PXE flow does DHCP first to get serverip/ipaddr,
+THEN attempts to fetch pxelinux.cfg. Our lab has no DHCP server (the
+rogue Raspberry Pi that previously responded has been retired). Our
+U-Boot has no persistent env storage configured (every boot starts with
+empty env: `Loading Environment from nowhere... OK`). With no DHCP and
+no persistent env, U-Boot can't get the network info PXE needs.
+
+Petalinux setups typically work because they configure U-Boot to store
+env in QSPI, so after a one-time `setenv` + `saveenv`, future boots
+have the IPs persistent. Our Yocto build doesn't enable QSPI env.
+
+**Fix:** Use a U-Boot boot script (`boot.scr`) loaded to memory
+0x20000000. U-Boot's autoboot checks 0x20000000 FIRST, before any
+network attempt. Our script there explicitly sets static IPs and does
+tftpboot directly:
+```
+setenv serverip 10.73.1.94
+setenv ipaddr   10.73.1.16
+tftpboot 0x80000 abraxas3d-yocto/Image
+...
+booti 0x80000 0x4100000 0x4000000
+```
+Compiled with mkimage to produce boot.scr, loaded via xsdb's
+`dow -data boot.scr 0x20000000`.
+
+**Pattern:** When working in a static-IP, no-DHCP lab, PXE isn't a
+viable path without persistent U-Boot env. The 0x20000000 script
+approach replaces it cleanly.
+
+### 20. U-Boot autoboot's check at 0x20000000 is the magic injection point
+**Symptom (positive observation):** During autoboot, U-Boot prints:
+```
+JTAG: Trying to boot script at 20000000
+## Executing script at 20000000
+```
+**Before any other boot attempt.** Including before mmc, qspi, network,
+USB, anything.
+
+**Root cause / mechanism:** AMD's U-Boot for ZynqMP includes a custom
+autoboot sequence (visible in `bootcmd`'s default) that begins with a
+"JTAG script" check at a fixed memory address (0x20000000 in our case).
+This is specifically designed for JTAG-deployed development where the
+debugger has loaded a U-Boot script to known memory.
+
+**Use:** Put a `mkimage`-wrapped U-Boot script at 0x20000000 via xsdb,
+and U-Boot will run it automatically with no human interaction needed.
+Bypasses DHCP, PXE, MMC, QSPI, USB — all of them.
+
+**Pattern:** For JTAG-only labs, the 0x20000000 script is the cleanest
+"no-typing boot" mechanism. Better than PXE (no DHCP), better than env
+persistence (no flash writes), better than command-line injection (no
+custom xsdb hacks).
+
+### 21. Boot mode pins don't stop U-Boot from accessing SD/QSPI fallback
+**Symptom:** With SW6 set correctly to JTAG (all OFF), board still
+showed U-Boot eventually loading an old kernel from SD card:
+```
+Bootmode: JTAG_MODE                                     ← correct mode
+...
+[much boot sequence failure later...]
+switch to partitions #0, OK
+mmc0 is current device
+Scanning mmc 0:1...
+Found U-Boot script /boot.scr                           ← OLD script from SD
+33221120 bytes read in 2971 ms (10.7 MiB/s)             ← OLD kernel
+...
+[    0.000000] Linux version 5.10.0-xilinx-v2021.1 ...  ← OLD Yocto
+```
+
+**Root cause:** Boot mode pins (SW6) are sampled by the BootROM at
+power-on. They control what the BootROM loads. Once U-Boot is running
+(loaded via JTAG), it can access ALL connected storage devices including
+SD card, QSPI, eMMC, USB. U-Boot's autoboot tries them in sequence as
+fallbacks if the primary boot fails. The SD card with leftover content
+from a previous project is in the fallback chain regardless of pin
+settings.
+
+**Fix:** Physically remove the SD card from the board for JTAG-only
+development. Alternatives: rename `/boot.scr` on the SD card so U-Boot
+doesn't find it; or overwrite SD card content with our new image.
+
+**Pattern:** Boot mode pins only affect the BootROM. Storage media
+present on the board can still interfere with U-Boot's autoboot
+fallback. When debugging unexpected boot behavior, **physically
+inventory what's attached to the board** — including SD cards that
+might've been left in from a previous session.
+
+### 22. dropbear vs openssh: Petalinux distro_features chooses dropbear by default
+**Symptom (sub-issue from an intermediate build):** Added `openssh` to
+IMAGE_INSTALL, but `systemctl status sshd` showed:
+```
+* dropbear.service - LSB: Dropbear Secure Shell server
+     Loaded: loaded
+     Active: inactive (dead)
+```
+Dropbear was present (not openssh's sshd) AND inactive. SSH from
+keroppi was hit-or-miss depending on the build.
+
+**Root cause:** Yocto/Petalinux distros include a `DISTRO_FEATURES`
+list that influences which packages are pulled into images. Petalinux's
+distro includes `ssh-server-dropbear`, which causes dropbear to be
+installed as the SSH server. Adding `openssh` to IMAGE_INSTALL adds the
+openssh package files but doesn't override the systemd unit selection —
+result was dropbear installed AND openssh package files installed,
+with confused service activation.
+
+**Eventual fix (what worked in the final M2 build):** The openssh
+package's recipe registered sshd.service correctly. After a clean
+rebuild (no stale state), openssh's sshd was active and responding;
+dropbear was either inactive or shadowed. SSH from keroppi worked.
+
+**Cleaner long-term fix (for later):** Override DISTRO_FEATURES to
+remove ssh-server-dropbear and add ssh-server-openssh, in a meta-ori
+distro layer override. For now the current behavior works.
+
+**Pattern:** When dealing with conflicts between similar packages
+(SSH, NTP daemons, init systems), check DISTRO_FEATURES first
+(`bitbake -e <image> | grep ^DISTRO_FEATURES=`) before adding overlapping
+packages via IMAGE_INSTALL. Yocto's preferred mechanism for "use X
+instead of Y" is `DISTRO_FEATURES_remove` + `DISTRO_FEATURES_append`,
+not multiple IMAGE_INSTALL additions.
+
+### Cross-cutting lessons (Phase 2b chapter)
 
 - **xsdb command naming matters.** `mwr`/`mrd` = memory ops (with
   address). `rwr`/`rrd` = register ops (with register name). Easy typo,
@@ -1223,15 +1442,25 @@ sstate-cache which doesn't have the uninative dependency.
   when the boot scrolls past in 2 seconds.
 - **Boot mode switches are sampled only at power-on.** Flipping them
   mid-session does nothing until you power-cycle.
+- **Boot mode pins don't stop U-Boot from accessing flash/SD fallback.**
+  Pin settings only affect the BootROM. Pull physical media you don't
+  want in the boot fallback chain.
+- **0x20000000 is U-Boot's first autoboot check** on ZynqMP. Loading a
+  mkimage-wrapped script there via xsdb gives you full control with
+  zero typing required.
+- **DISTRO_FEATURES governs which "system services flavor" gets included.**
+  Check it first before adding similar packages via IMAGE_INSTALL.
+  `bitbake -e <image> | grep ^DISTRO_FEATURES=`
 - **D&D commit messages persist memory.** Cast PROTECTION FROM PMU SLEEP.
   Cast IDENTIFY ATF ENTRY. Cast COUNTERSPELL TRANSLATION FAULT. Cast
-  AWAKEN THE MICROBLAZE.
+  AWAKEN THE MICROBLAZE. Cast SCRIBE BUILD INVOCATION. Cast SUMMON
+  FAMILIAR. Cast TELEPORT.
 
 ---
 
 ## ❓ Open Questions / Issues for Investigation
 
-These came up during M1 closeout and are not blocking but worth tracking:
+These came up during M1/M2 closeout and are not blocking but worth tracking:
 
 1. **CPU 1 doesn't come online.** `cat /proc/cpuinfo` shows only CPUs 0, 2,
    3. ZCU102 has 4× Cortex-A53. CPU 1 fails PSCI bring-up. Not blocking
@@ -1240,25 +1469,47 @@ These came up during M1 closeout and are not blocking but worth tracking:
    JTAG (vs full BOOT.BIN flow), or device tree CPU 1 node config.
 
 2. ~~**No persistent IPv4 on eth0.**~~ ✅ Resolved by M2 step 1 (static IP
-   via systemd-networkd dropin in meta-ori). eth0 now comes up with
-   10.73.1.16/24 on boot.
+   via systemd-networkd dropin in meta-ori).
 
-3. ~~**ICMP / ping from outside.**~~ ✅ Resolved — Paul confirmed ping
-   from keroppi succeeds once static IP is set. Default Yocto image has
-   no firewall.
+3. ~~**ICMP / ping from outside.**~~ ✅ Resolved by M2 step 1 — Paul confirmed
+   ping from keroppi succeeds.
 
-4. **U-Boot env doesn't persist across boots.** Every boot starts with
-   default U-Boot env. To persist, would need to enable env storage
-   (QSPI, EMMC, SD FAT). For JTAG-only workflow, PXE config file in
-   /tftpboot is the lighter-weight equivalent — that's M2 step 3.
+4. ~~**U-Boot env doesn't persist across boots.**~~ ✅ Worked around via M2
+   step 3 (boot.scr at 0x20000000 sets env at runtime, no persistence
+   needed). Not strictly resolved (env is still volatile) but no longer
+   matters for our workflow.
 
-5. **PXE boot file would eliminate manual TFTP typing.** Drop a
-   `pxelinux.cfg/default` file in `/tftpboot/` with kernel/dtb/initrd
-   labels. U-Boot's autoboot would then load Linux automatically. M2
-   step 3.
+5. ~~**PXE boot file would eliminate manual TFTP typing.**~~ ✅ Resolved by
+   M2 step 3 via the boot.scr-at-0x20000000 approach (cleaner than PXE
+   for no-DHCP labs).
 
-6. **openssh-server not in default image.** We have ssh client but no
-   server, so we can't ssh INTO the board. Add to meta-ori — M2 step 2.
+6. ~~**openssh-server not in default image.**~~ ✅ Resolved by M2 step 2
+   (added to IMAGE_INSTALL via meta-ori bbappend).
+
+7. **dropbear vs openssh DISTRO_FEATURES override.** Current image has
+   both dropbear (from petalinux distro_features) and openssh (from our
+   IMAGE_INSTALL). Works, but cleaner long-term fix is a distro override
+   in meta-ori that removes ssh-server-dropbear and adds
+   ssh-server-openssh. Polish for later.
+
+8. **SSH host key changes on every boot** (rootfs is ephemeral
+   initramfs). Each new boot generates fresh host keys, triggering
+   "REMOTE HOST IDENTIFICATION HAS CHANGED" warnings on the keroppi side.
+   Workaround: `ssh-keygen -R 10.73.1.16` before each reconnect.
+   Long-term fix involves persistent storage for /etc/ssh/ — see item 9.
+
+9. **Non-volatile storage transition (Phase 4+).** The satellite needs
+   persistent storage in flight; the ephemeral-initramfs JTAG-deploy
+   workflow won't work there. Options to evaluate when we get to Phase
+   4/5:
+   - QSPI flash for FSBL + U-Boot + Linux + bootloader env (standard sat
+     pattern, what ZCU102's QSPI is already wired for)
+   - eMMC for rootfs (if flight board has it)
+   - NAND (less common for ARM SoCs but option exists)
+   - SD card (mechanically iffy in space, radiation concerns — usually
+     not flight-suitable)
+   For Phase 2-3 (now through First Light), JTAG+TFTP is intentional:
+   always-clean state, no flash wear, fast iteration.
 
 ---
 
@@ -1287,6 +1538,10 @@ These came up during M1 closeout and are not blocking but worth tracking:
 | setupsdk creates nested build/build/ when sourced from inside build/ | **Hit** | Always source setupsdk from project root |
 | tftpd-hpa reinstalled but service not auto-restarted | **Hit** | `systemctl restart` after any package reinstall; verify with `ps` and `ss` |
 | Host glibc 2.35 newer than uninative 2.34 | **Hit** | Yocto handles automatically — disables uninative, falls back to fresh builds. Harmless. |
+| Rogue DHCP server in lab (a Raspberry Pi) | **Hit (now retired)** | When lab convention says "static IPs only", verify NO DHCP server is actually running. Rogue devices can mask real issues. |
+| PXE boot requires DHCP for serverip | **Hit** | Use boot.scr at 0x20000000 instead (works without DHCP) |
+| Boot mode pins don't stop U-Boot's storage fallback | **Hit** | Physically remove SD card / unwanted media for clean JTAG-only boot |
+| DISTRO_FEATURES conflicts (dropbear vs openssh) | **Hit** | Long-term: override DISTRO_FEATURES in meta-ori distro layer. Short-term: works as-is. |
 
 ---
 
