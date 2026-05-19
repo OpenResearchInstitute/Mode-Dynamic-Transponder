@@ -4,3 +4,7 @@
 [submodule "haifuraiya/third_party/lowpass_ema"]
 	path = haifuraiya/third_party/lowpass_ema
 	url = https://github.com/OpenResearchInstitute/lowpass_ema.git
+[submodule "haifuraiya/third_party/hdl"]
+	path = haifuraiya/third_party/hdl
+	url = https://github.com/analogdevicesinc/hdl.git
+	branch = hdl_2022_r2
