@@ -59,18 +59,26 @@ BBLAYERS ?= " \
     ${BSPDIR}/sources/meta-ros/meta-ros-common \
     ${BSPDIR}/sources/meta-ros/meta-ros2 \
     ${BSPDIR}/sources/meta-ros/meta-ros2-humble \
+    ${BSPDIR}/sources/meta-ori \
+    ${BSPDIR}/sources/meta-adi/meta-adi-core \
+    ${BSPDIR}/sources/meta-adi/meta-adi-xilinx \
 "
 
 BBLAYERS_NON_REMOVABLE ?= " \
     ${BSPDIR}/sources/core/meta \
 "
 
-# Layers added in later milestones:
+# Layer history:
 #
-# M2: meta-ori (this repo's custom layer)
-#   ${BSPDIR}/sources/meta-ori
+# M2 step 1 (2026-05-18): added meta-ori (this repo's custom layer)
+# M2 step 4 (2026-05-18): added meta-adi-core + meta-adi-xilinx
+#   (ADRV9002 driver via linux-xlnx_%.bbappend that swaps kernel source
+#   to analogdevicesinc/linux 2022_R2; libiio + iio-info userspace tools;
+#   device-tree.bbappend that consumes KERNEL_DTB).
 #
-# M2: meta-adi-xilinx (ADRV9002 driver, device trees)
-#   ${BSPDIR}/sources/meta-adi/meta-adi-xilinx
+#   Important: meta-adi-core is a hard dependency of meta-adi-xilinx on
+#   the 2022_R2 branch (LAYERDEPENDS_adi-xilinx += "adi-core"). Order
+#   matters — meta-adi-core MUST be added first.
 #
-# Add with: bitbake-layers add-layer <path>
+# Add new layers with: bitbake-layers add-layer <path>
+# Reproduce the full list with: bitbake-layers show-layers

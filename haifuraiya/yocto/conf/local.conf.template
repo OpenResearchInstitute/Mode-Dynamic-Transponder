@@ -7,7 +7,7 @@
 # Reproduction context:
 #   Host: Ubuntu 22.04 LTS
 #   Vivado: 2022.2
-#   Yocto release: Kirkstone (4.0)
+#   Yocto release: Honister (3.4)
 #   Manifest: github.com/Xilinx/yocto-manifests rel-v2022.2
 #   Build tree: ~/yocto/haifuraiya/
 #
@@ -137,6 +137,40 @@ IMAGE_INSTALL:remove = "htop"
 # Trophy case: "Yocto default image has root account locked"
 
 EXTRA_IMAGE_FEATURES = "debug-tweaks"
+
+
+# ============================================================
+# M2 step 4: ADI kernel + ADRV9002 device tree (2026-05-18)
+# ============================================================
+#
+# Adding meta-adi-core + meta-adi-xilinx layers (see bblayers.conf.template)
+# requires three local.conf decisions:
+
+# Select the ADRV9002 device tree. meta-adi-xilinx's device-tree.bbappend
+# reads KERNEL_DTB, picks the matching .dts from the ADI kernel sources at
+# arch/arm64/boot/dts/xilinx/, and auto-applies pl-delete-nodes for our PL.
+# Build fails with a clear bbfatal if KERNEL_DTB is unset or names a .dts
+# that doesn't exist in the kernel tree.
+KERNEL_DTB = "zynqmp-zcu102-rev10-adrv9002"
+
+# Pin the ADI kernel SRCREV. meta-adi-xilinx's linux-xlnx_%.bbappend defaults
+# to AUTOREV in online mode — every build could pull a different HEAD of
+# ADI's 2022_R2 branch. We use the same commit ADI's own offline CI uses,
+# pulled from the bbappend's BB_NO_NETWORK fallback. Reproducibility win.
+#
+# Trophy case: "ADI kernel bbappend defaults to AUTOREV; pin SRCREV
+# explicitly or accept silent commit drift between builds."
+SRCREV:pn-linux-xlnx = "cd7e20c430dc19df7c32610e9d5b494d8f313e07"
+
+# Suppress meta-adi's Kuiper-Linux compat user setup. Without these two lines,
+# meta-adi's petalinux-image-minimal.bbappend (in dynamic-layers/meta-petalinux/)
+# force-sets root password to "analog" via EXTRA_USERS_PARAMS, silently
+# overriding our debug-tweaks empty-password root login.
+#
+# Trophy case: "KUIPER_COMPAT_USERADD/SUDOERS silently override debug-tweaks
+# when meta-adi-xilinx is added; suppress explicitly to keep dev workflow."
+KUIPER_COMPAT_USERADD = ""
+KUIPER_COMPAT_SUDOERS = ""
 
 
 # ============================================================
