@@ -28,7 +28,14 @@ channelizer's Linux runtime.
 | ✅ | **First meta-ori recipe: static IP via systemd-networkd** | **`ip addr show eth0` reports `inet 10.73.1.16/24`. ping from keroppi succeeds. systemd-networkd uses /etc/systemd/network/10-eth0.network installed by our recipe.** |
 | ✅ | **openssh-server in image** | **`ssh root@10.73.1.16` from keroppi succeeds (empty password via debug-tweaks). Dev workflow no longer requires JTAG console for interactive work.** |
 | ✅ | **Auto-boot via boot.scr at 0x20000000** | **Zero keystrokes during boot. U-Boot's autoboot finds boot.scr (loaded by xsdb via `dow -data`), runs setenv + tftpboot + booti automatically.** |
-| 🎯 | **Next concrete action** | **meta-adi-xilinx + ADRV9002 driver (M2 step 5), preparation for Phase 2a hardware integration** |
+| ✅ | **M2 step 4 (phase 1): meta-adi layers registered** | **`bitbake-layers show-layers` lists `adi-core` (priority 6) and `adi-xilinx` (priority 8). Honister LAYERSERIES_COMPAT confirmed on `2022_R2` branch. Layer.conf hard dep `LAYERDEPENDS_adi-xilinx += "adi-core"` discovered — both layers required, dep order matters.** |
+| ✅ | **M2 step 4 (phase 1): ADI kernel compiles cleanly** | **`linux-xlnx-5.15.36-adi_master+gitAUTOINC+machine-r0: task do_compile: Succeeded`. meta-adi's bbappend swaps `KERNELURI` to `analogdevicesinc/linux@cd7e20c4...` 2022_R2 branch while keeping `linux-xlnx` recipe name (no PREFERRED_PROVIDER swap needed). 24 minutes wall clock for first kernel build.** |
+| ✅ | **Conf templates updated** | **`haifuraiya/yocto/conf/*.template` capture tonight's project-wide decisions: meta-adi layers, KERNEL_DTB, SRCREV pin, KUIPER_COMPAT suppression. Live build configs verified to match templates functionally (one cosmetic whitespace diff on `INHERIT += "plnx-mirrors"`).** |
+| ✅ | **M2.5: ADI HDL submodule + reference design built** | **`analogdevicesinc/hdl` added as submodule at `haifuraiya/third_party/hdl`, pinned to `hdl_2022_r2`. `make` in `projects/adrv9001/zcu102/` produces `system_top.xsa` (2.3 MB) and `system_top.bit` (9.9 MB). 26 min wall clock. Eight library IPs + project. Clean Vivado 2022.2 build, no timing failures.** |
+| 🎯 | **Next concrete action** | **M2 step 4 (phase 2): integrate ADI XSA into Yocto build via XSA-substitution mechanism (TBD); write system-conf.dtsi stub via meta-ori bbappend (closes Petalinux-vs-Yocto seam); rebuild Yocto; update JTAG boot to load bitstream; validate `dmesg \| grep -i adrv9002` and `iio_info`.** |
+| ⏳ | M3: image built against Phase 2a .xsa (Haifuraiya in PL) | Hardware design integrated; channelizer in bitstream |
+| ⏳ | M4: userspace mmap reads VERSION register = 0x00010000 | Round-trip Linux-to-IP communication confirmed |
+| ⏳ | M5: Takadono v0 MQTT publish working | First observability output |
 | ⏳ | M3: image built against Phase 2a .xsa (Haifuraiya in PL) | Hardware design integrated; channelizer in bitstream |
 | ⏳ | M4: userspace mmap reads VERSION register = 0x00010000 | Round-trip Linux-to-IP communication confirmed |
 | ⏳ | M5: Takadono v0 MQTT publish working | First observability output |
@@ -100,7 +107,33 @@ All layers tagged `xlnx-rel-v2022.2`:
 | `meta-xilinx` | **2e60ee606** | "xwayland: Add xkbcomp runtime dependency" |
 | `meta-xilinx-tools` | **909b70c** | "Add new YAML_BSP_CONFIG for apu overlay config" |
 | `meta-petalinux` | **5799be30** | "Revert: xilinx-mirrors.conf TEMPORARY mirrors" |
-| `meta-adi-xilinx` | _(TBD — pin when added in M2)_ | Cloned separately; not in AMD manifest |
+| `meta-adi-xilinx` | **3a5de5c** | "ci: add build script for the release branch" (branch `2022_R2`) |
+| `analogdevicesinc/hdl` (submodule) | **__ae6e248f219a5bb2e63733c762e9561c072d037e__** | (branch `hdl_2022_r2`, pinned via `.gitmodules` at `haifuraiya/third_party/hdl`) |
+
+### Kernel SRCREV pin
+
+meta-adi-xilinx's `linux-xlnx_%.bbappend` defaults `SRCREV` to `AUTOREV` in
+online builds — every build could pull a different HEAD of ADI's `2022_R2`
+branch. We pin explicitly in `local.conf`:
+
+```
+SRCREV:pn-linux-xlnx = "cd7e20c430dc19df7c32610e9d5b494d8f313e07"
+```
+
+This is the same commit ADI's own offline CI uses (the bbappend's
+`BB_NO_NETWORK` fallback). Source: `analogdevicesinc/linux` at the
+`adi_master` branch, kernel version 5.15.36 + ADI patches.
+
+To refresh this pin: check `git log` on `analogdevicesinc/linux@adi_master`,
+pick a commit, update `local.conf.template` and our live `local.conf`.
+```
+
+Update the "Tool versions" table — find the `Vivado` row and add a build
+date column or append to the rationale:
+
+```markdown
+| Vivado | **2022.2** (build 3671981, 2022-10-14) | License-constrained; install at `/opt/Xilinx/Vivado/2022.2/` (also reachable via `/tools/Xilinx/Vivado/2022.2/` symlink on CHONC-shared lab VMs). Source `settings64.sh` before any Vivado-using command. |
+```
 
 ### How to refresh these pins (for future you)
 
@@ -450,8 +483,19 @@ MAC: 00:0a:35:07:eb:c1 (Xilinx OUI)
 
 ### M2: meta-ori layer + static IP + openssh + auto-boot + ADRV9002 device tree ⏳ IN PROGRESS
 
-**Status: 4 of 5 sub-steps complete (2026-05-18). Remaining:
-meta-adi-xilinx integration for ADRV9002.**
+**Status as of 2026-05-18: steps 1-3 complete; step 4 split into two
+phases. Phase 1 (layer registration + kernel compile + conf template
+updates) complete. Phase 2 (XSA integration + image rebuild + JTAG deploy
++ ADRV9002 driver probe validation) is the current 🎯 and is gated on
+M2.5 being banked first (see below).**
+
+The original M2 step 4 ("add meta-adi-xilinx, set KERNEL_DTB, rebuild")
+turned out to be more involved than anticipated because (a) meta-adi-xilinx
+was written assuming a Petalinux-tool flow that produces `system-conf.dtsi`
+and pure Yocto doesn't, and (b) booting `zynqmp-zcu102-rev10-adrv9002.dts`
+meaningfully requires matching PL hardware — which means building ADI's
+HDL reference design (`adrv9001_zcu102`). Step 4 is therefore phased and a
+new M2.5 milestone was inserted between phases.
 
 **Goal:** turn `meta-ori/` into a real Yocto layer with `conf/layer.conf`,
 add static IP via systemd-networkd dropin, add openssh for non-JTAG
@@ -547,35 +591,158 @@ serverip, and our lab has no DHCP server. The 0x20000000 script approach
 works without DHCP because U-Boot's autoboot checks that memory address
 before any network attempt. See Trophy Case entries 19, 20, 21.
 
-#### Step 4: meta-adi-xilinx + ADRV9002 device tree ⏳ NOT STARTED
+#### Step 4 phase 1: meta-adi layers + kernel + conf templates ✅ COMPLETE
 
-The big one — preparation for Phase 2a integration.
+**Recipe inventory of meta-adi-xilinx on `2022_R2`:** 6 files only —
+`linux-xlnx_%.bbappend`, `device-tree.bbappend`, `libiio_%.bbappend`,
+`adrv9009-zu11eg-fan-control_dev.bb`, `fpga-manager-util_%.bbappend`,
+and the dynamic-layer `petalinux-image-minimal.bbappend`. A *thin* layer
+that mostly steers existing Xilinx recipes.
+
+**Layers registered** (priorities 6 and 8 respectively; below our meta-ori
+at 10, above oe-core):
 
 ```bash
-cd ~/yocto/haifuraiya/sources
-git clone https://github.com/analogdevicesinc/meta-adi.git
-cd meta-adi
-git branch -a   # find branch matching 2022.2 / honister
-git checkout <branch matching xlnx-rel-v2022.2 — TBD>
-
-cd ~/yocto/haifuraiya/build
-bitbake-layers add-layer ../sources/meta-adi/meta-adi-xilinx
+bitbake-layers add-layer ~/yocto/haifuraiya/sources/meta-adi/meta-adi-core
+bitbake-layers add-layer ~/yocto/haifuraiya/sources/meta-adi/meta-adi-xilinx
 ```
 
-Set kernel device tree to ADRV9002 variant in local.conf:
+**local.conf additions** (also captured in
+`haifuraiya/yocto/conf/local.conf.template`):
+
 ```
 KERNEL_DTB = "zynqmp-zcu102-rev10-adrv9002"
+SRCREV:pn-linux-xlnx = "cd7e20c430dc19df7c32610e9d5b494d8f313e07"
+KUIPER_COMPAT_USERADD = ""
+KUIPER_COMPAT_SUDOERS = ""
 ```
 
-Build, deploy, verify:
+**Validated:** parse-only `bitbake -n petalinux-image-minimal` succeeds
+across 4230 tasks (3962 sstate hits from M1, ~268 new tasks). Real build
+gets through ADI kernel `do_compile` cleanly (24 min wall clock from a
+cold start). Hits `system-conf.dtsi missing` at device-tree `do_configure`
+— see Trophy Case for the diagnosis.
+
+**Conf templates updated** at `haifuraiya/yocto/conf/`:
+- `local.conf.template` — Kirkstone→Honister header fix + new "M2 step 4"
+  block with KERNEL_DTB + SRCREV pin + KUIPER_COMPAT suppression.
+- `bblayers.conf.template` — meta-ori + meta-adi-core + meta-adi-xilinx
+  promoted from comments into active BBLAYERS list; "Layer history"
+  comment rewritten.
+
+Verified live `local.conf` matches template functionally (one cosmetic
+whitespace diff on `INHERIT += "plnx-mirrors"` vs `INHERIT+="plnx-mirrors"`
+— bitbake parses both identically). Live `bblayers.conf` has 40 active
+layer paths matching the template's 40.
+
+#### Step 4 phase 2: Yocto XSA integration + ADRV9002 validation ⏳ NEXT
+
+Gated on M2.5 (below) being banked first — we need a real ADRV9002-aware
+`.xsa` and matching bitstream before the device-tree-with-pl-content stack
+can meaningfully boot.
+
+Work items (in order):
+1. **Research the XSA substitution mechanism in meta-xilinx-tools.** The
+   build currently uses `Xilinx-zcu102-zynqmp.xsa` shipped by
+   meta-xilinx-tools. To swap in our M2.5 XSA, likely candidates are
+   `HDF_BASE_PATH` / `HDF_EXT_PATH` overrides, or feeding via
+   `gen-machine-conf`. Verify and document.
+2. **Write `meta-ori/recipes-bsp/device-tree/device-tree.bbappend`**
+   providing a minimal `system-conf.dtsi` stub (just `/dts-v1/; / { };`
+   or equivalent) to satisfy meta-adi's sed. This is the pure-Yocto-vs-
+   Petalinux flow bridge.
+3. **Rebuild Yocto** — first build with the new XSA + stub. Expect kernel
+   sstate to mostly survive; device-tree + image regen will rerun.
+4. **Update `scripts/zcu102_jtag_boot.tcl`** to load `system_top.bit`
+   onto the PL before kernel boot (`fpga -f <bitstream>` step).
+5. **Deploy and validate.** On boot:
+   - `dmesg | grep -i adrv9002` — driver probes successfully
+   - `ls /sys/bus/iio/devices/` — IIO device for ADRV9002 visible
+   - `iio_info` — enumerates the chip with its channels
+   - Bonus: `iio_attr -d adrv9002-phy` — reads phy attributes
+
+If those all pass, that's full **M2 step 4 banked** — ADI's reference
+ADRV9002 stack working end-to-end on our Yocto build, validating the
+toolchain before Phase 2a's Haifuraiya XSA arrives in M3.
+
+---
+
+### M2.5: ADI HDL reference design build ✅ COMPLETE (2026-05-18)
+
+**Why this exists:** M2 step 4 phase 1 proved meta-adi's machinery works
+inside our Yocto stack (layer registration, kernel compile, conf templates
+captured). But validating the ADRV9002 driver against real hardware needs
+two things that pure Yocto can't produce by itself:
+1. An `.xsa` containing ADRV9002-compatible PL infrastructure (AXI DMAC,
+   JESD204 framers, AXI register interfaces matching the device tree).
+2. A bitstream that loads that PL infrastructure onto the actual ZCU102.
+
+ADI's `adrv9001_zcu102` reference HDL project produces both. M2.5 is
+"build that reference design from source, banking the XSA + bitstream
+artifacts for M2 step 4 phase 2 integration."
+
+**Architectural payoff:** Phase 2a (Haifuraiya channelizer in PL) will
+*modify* ADI's reference design rather than build from scratch — the
+channelizer slots between `axi_adrv9001` (sample source) and `axi_dmac`
+(path to memory). So building ADI's reference now also banks reusable
+Vivado IP (`axi_adrv9001`, `axi_dmac`, `axi_sysid`, `sysid_rom`,
+`util_cpack2`, `util_upack2`, plus transitive deps `util_cdc` and
+`util_axis_fifo`) that Phase 2a inherits.
+
+**Submodule setup:**
+
 ```bash
-MACHINE=zcu102-zynqmp bitbake petalinux-image-minimal
-# Auto-boot via boot.scr, then on target via SSH:
-dmesg | grep -i adrv9002
-iio_info | grep -i adrv9002
+cd ~/brown/Mode-Dynamic-Transponder
+git submodule add https://github.com/analogdevicesinc/hdl.git haifuraiya/third_party/hdl
+git config -f .gitmodules submodule.haifuraiya/third_party/hdl.branch hdl_2022_r2
+cd haifuraiya/third_party/hdl
+git checkout hdl_2022_r2
+cd ~/brown/Mode-Dynamic-Transponder
+git add .gitmodules haifuraiya/third_party/hdl
+git commit
 ```
 
-**Pin the meta-adi commit SHA** in the Version Stack table after this step.
+Pin recorded in `.gitmodules`. Submodule size is large (~1-2 GB) but
+peripheral to runtime — only consumed during Vivado synthesis.
+
+**Build invocation:**
+
+```bash
+source /tools/Xilinx/Vivado/2022.2/settings64.sh    # symlink to /opt
+cd ~/brown/Mode-Dynamic-Transponder/haifuraiya/third_party/hdl/projects/adrv9001/zcu102
+time make 2>&1 | tee /tmp/adrv9001-zcu102-build-$(date +%Y%m%d-%H%M).log
+```
+
+ADI's build framework (`projects/scripts/project-xilinx.mk`) cascades:
+1. `lib:` target — `make xilinx` in each LIB_DEPS library directory. For
+   adrv9001_zcu102: `util_cdc`, `axi_adrv9001`, `util_axis_fifo`, `axi_dmac`,
+   `axi_sysid`, `sysid_rom`, `util_cpack2`, `util_upack2` (8 IPs total —
+   the 6 explicitly listed plus 2 transitive deps).
+2. `$(PROJECT_NAME).sdk/system_top.xsa` target — `vivado -mode batch -source
+   system_project.tcl` for synth + place + route + write_hw_platform.
+
+**Artifacts produced:**
+
+```
+projects/adrv9001/zcu102/
+├── adrv9001_zcu102.sdk/system_top.xsa      ← 2.3 MB (feeds Yocto build)
+├── adrv9001_zcu102.runs/impl_1/system_top.bit  ← 9.9 MB (PL bitstream)
+└── adrv9001_zcu102_vivado.log               ← full build log
+```
+
+**Verified outcome:** 8/8 library IPs built OK, project built OK. 26 min
+real / 29 min user / 6 min sys wall clock on mymelody (parallelism modest
+but functional). Vivado log tail: "Successfully created Hardware Platform",
+"Exiting Vivado at Mon May 18 21:56:41 2026", no timing failures.
+
+**What this proves:**
+- ✅ adi-hdl submodule integration works
+- ✅ `hdl_2022_r2` branch is buildable end-to-end on Vivado 2022.2
+- ✅ ADRV9002 reference design XSA + bitstream now sit on mymelody, ready
+   to feed M2 step 4 phase 2
+- ✅ Vivado licensing on mymelody is functional via CHONC-shared install
+   at `/opt/Xilinx/` (`/tools` symlink)
+
 
 ### M3: Image built against Phase 2a .xsa (Haifuraiya in PL) ⏳
 
@@ -1413,6 +1580,157 @@ packages via IMAGE_INSTALL. Yocto's preferred mechanism for "use X
 instead of Y" is `DISTRO_FEATURES_remove` + `DISTRO_FEATURES_append`,
 not multiple IMAGE_INSTALL additions.
 
+### 23. meta-adi's bbappend assumes Petalinux flow, breaks pure Yocto
+
+**Symptom:** Yocto build of `petalinux-image-minimal` proceeds through ADI
+kernel compile cleanly, then fails at device-tree `do_configure`:
+
+```
+sed: can't read .../device-tree-build/device-tree/system-conf.dtsi: No such file or directory
+WARNING: exit code 2 from a shell command.
+ERROR: Task (.../meta-xilinx-core/recipes-bsp/device-tree/device-tree.bb:do_configure) failed
+```
+
+**Diagnosis:** `system-conf.dtsi` is a **Petalinux-tool artifact**, generated
+by `petalinux-config --get-hw-description=<xsa>` as part of Petalinux's own
+flow. It contains software-side decisions (bootargs, root filesystem type,
+chosen node) that don't come from the .xsa itself. In pure Yocto with
+meta-xilinx-tools, `hsi` runs (and produces `system.dts`, `system-top.dts`,
+`pl.dtsi`, etc. — 26 files) but **not** `system-conf.dtsi`. meta-adi-xilinx's
+`device-tree.bbappend` `seds` that file unconditionally in its
+`do_configure:append()`, assuming Petalinux flow.
+
+**Trace:** the file `hsi` actually produces vs the file meta-adi expects:
+```
+Produced by hsi:                   Expected by meta-adi:
+  system.dts ✅                       system-conf.dtsi ❌ (missing)
+  system-top.dts ✅
+  pl.dtsi ✅
+  zcu102-rev1.0.dtsi ✅
+  zynqmp.dtsi ✅
+  hardware_description.xsa ✅
+  ... (20 others) ...
+```
+
+**Fix (planned):** `meta-ori/recipes-bsp/device-tree/device-tree.bbappend`
+providing a minimal `system-conf.dtsi` stub (`/dts-v1/; / { };` or
+equivalent). The stub satisfies meta-adi's sed without changing hardware
+behavior. This is **not throwaway** — it's required for any pure-Yocto
+build using meta-adi-xilinx, regardless of which .xsa is in use.
+
+**Lesson:** "Yocto support" in vendor layers often means "Petalinux's
+underlying Yocto" — pure-Yocto users hit assumption seams. Read bbappends
+before assuming compatibility.
+
+---
+
+### 23. ADI kernel bbappend defaults to AUTOREV in online mode
+
+**Symptom:** Not really a symptom — a reproducibility gun pointed at our
+foot. `meta-adi-xilinx/recipes-kernel/linux/linux-xlnx_%.bbappend`:
+
+```
+SRCREV = "${@ "cd7e20c430..." if bb.utils.to_boolean(d.getVar('BB_NO_NETWORK')) else d.getVar('AUTOREV')}"
+```
+
+In online builds (BB_NO_NETWORK unset, which is our default), SRCREV is
+**AUTOREV** — meaning every build pulls whatever HEAD of `analogdevicesinc/linux@adi_master`
+is at fetch time. Two builds an hour apart could pull different commits
+without any local change.
+
+**Fix:** explicit pin in `local.conf`:
+```
+SRCREV:pn-linux-xlnx = "cd7e20c430dc19df7c32610e9d5b494d8f313e07"
+```
+
+Convenient detail: that exact commit is what ADI's own offline-CI build
+uses (the bbappend's BB_NO_NETWORK fallback). So pinning to it doesn't
+just freeze drift — it aligns us with ADI's reference build.
+
+**Lesson:** any kernel recipe that uses AUTOREV is a footgun. Pin SRCREV
+or accept silent commit drift between builds.
+
+---
+
+### 24. meta-adi keeps `linux-xlnx` recipe name but swaps the source
+
+**Subtle pattern worth knowing.** meta-adi-xilinx's `linux-xlnx_%.bbappend`
+does NOT use a `PREFERRED_PROVIDER_virtual/kernel` swap. The recipe name
+stays `linux-xlnx`. Instead, the bbappend overrides `KERNELURI` to point
+at `analogdevicesinc/linux.git`, and changes `KBUILD_DEFCONFIG` to
+`adi_zynqmp_defconfig`. Net effect: the recipe identity is unchanged, the
+source is *completely* replaced.
+
+**Consequences:**
+- No need to add `PREFERRED_PROVIDER_virtual/kernel = "linux-adi"` to
+  local.conf. Don't waste time looking for a `linux-adi` recipe.
+- Kernel sstate from M1 is fully invalidated because the SRC_URI and
+  KBUILD_DEFCONFIG changed → different task hashes → full kernel rebuild.
+- Kernel version (5.15.36) stays the same as Xilinx stock; only the
+  *contents* differ (ADI's driver set baked in).
+
+**Lesson:** when checking which kernel will actually build, look at the
+recipe's `SRC_URI`/`KERNELURI` not just the recipe name. Vendor layers
+sometimes graft new source onto old recipes.
+
+---
+
+### 25. KUIPER_COMPAT silently overrides debug-tweaks
+
+**Symptom (subtle):** after adding meta-adi-xilinx, root password becomes
+"analog" instead of empty. SSH still works with the new password but the
+empty-password convenience of `EXTRA_IMAGE_FEATURES = "debug-tweaks"` is
+gone, and the change happens silently — no warning during build.
+
+**Diagnosis:** `meta-adi-xilinx/dynamic-layers/meta-petalinux/recipes-core/images/petalinux-image-minimal.bbappend`
+adds machinery for Kuiper-Linux compatibility (Kuiper is ADI's Raspbian-
+based reference image). The Kuiper convention is root password = "analog".
+The bbappend sets `EXTRA_USERS_PARAMS` via `KUIPER_COMPAT_USERADD` /
+`KUIPER_COMPAT_SUDOERS` variables, which apply *after* debug-tweaks and
+overwrite it.
+
+**Fix:** suppress KUIPER_COMPAT explicitly in local.conf:
+```
+KUIPER_COMPAT_USERADD = ""
+KUIPER_COMPAT_SUDOERS = ""
+```
+
+Empty strings → no users get added by meta-adi's append → debug-tweaks
+empty-password root survives.
+
+**Lesson:** debug-tweaks gives weak defaults; downstream bbappends in
+vendor layers can override them silently. If you depend on debug-tweaks
+behavior, audit any new layer's image bbappends for `EXTRA_USERS_PARAMS`.
+
+---
+
+### 26. ADI HDL's `project-xilinx.mk` lives in `projects/scripts/`, not repo root `scripts/`
+
+**Symptom:** project Makefile says `include ../../scripts/project-xilinx.mk`,
+but the repo root `scripts/` directory contains only `adi_env.tcl` — no
+`project-xilinx.mk`. Looks broken.
+
+**Diagnosis:** path-math error on the reader's part (not the framework's).
+From `projects/adrv9001/zcu102/`, `../../scripts/` resolves to
+`projects/scripts/` — *not* the repo root's `scripts/`. ADI has TWO
+`scripts/` directories:
+
+```
+hdl/
+├── scripts/                    ← top-level utilities (adi_env.tcl)
+└── projects/
+    └── scripts/                ← project build framework (project-xilinx.mk,
+                                   project-toplevel.mk, project-intel.mk)
+```
+
+The Makefile's include is correct; the relative path navigates exactly
+right.
+
+**Lesson:** when chasing missing-file errors in a multi-level build system,
+do the path math manually before concluding the framework is broken. ADI's
+HDL repo is well-trodden and unlikely to ship a release branch with an
+obviously-broken include.
+
 ### Cross-cutting lessons (Phase 2b chapter)
 
 - **xsdb command naming matters.** `mwr`/`mrd` = memory ops (with
@@ -1486,11 +1804,7 @@ These came up during M1/M2 closeout and are not blocking but worth tracking:
 6. ~~**openssh-server not in default image.**~~ ✅ Resolved by M2 step 2
    (added to IMAGE_INSTALL via meta-ori bbappend).
 
-7. **dropbear vs openssh DISTRO_FEATURES override.** Current image has
-   both dropbear (from petalinux distro_features) and openssh (from our
-   IMAGE_INSTALL). Works, but cleaner long-term fix is a distro override
-   in meta-ori that removes ssh-server-dropbear and adds
-   ssh-server-openssh. Polish for later.
+7. ~~**dropbear vs openssh DISTRO_FEATURES override.**~~ Still open — long-term polish; tracked but not blocking.
 
 8. **SSH host key changes on every boot** (rootfs is ephemeral
    initramfs). Each new boot generates fresh host keys, triggering
@@ -1510,6 +1824,37 @@ These came up during M1/M2 closeout and are not blocking but worth tracking:
      not flight-suitable)
    For Phase 2-3 (now through First Light), JTAG+TFTP is intentional:
    always-clean state, no flash wear, fast iteration.
+   
+10. **meta-adi 2022_R2 LAYERDEPENDS includes `adi-core`**. ✅ Resolved
+    — both `meta-adi-core` and `meta-adi-xilinx` are now registered. Order
+    matters: core must be added before xilinx.
+
+11. **Kernel-fork swap mechanism in meta-adi-xilinx.** ✅ Resolved — no
+    PREFERRED_PROVIDER swap. Recipe stays `linux-xlnx`; bbappend overrides
+    KERNELURI to ADI's fork. See Trophy Case.
+
+12. **ADI HDL branch alignment with meta-adi 2022_R2.** ✅ Resolved —
+    `hdl_2022_r2` is the matching branch on `analogdevicesinc/hdl`. Pinned
+    via .gitmodules.
+    
+13. **Yocto XSA substitution mechanism.** Current build uses
+    `Xilinx-zcu102-zynqmp.xsa` from meta-xilinx-tools by default. To swap
+    in our M2.5 `system_top.xsa`, options include `HDF_BASE_PATH` /
+    `HDF_EXT_PATH` overrides in local.conf, or feeding via
+    `gen-machine-conf`. Needs research — first work item of M2 step 4
+    phase 2.
+
+14. **JTAG bitstream-load integration.** Current `zcu102_jtag_boot.tcl`
+    boots PMU → FSBL → ATF → U-Boot → Linux without loading a PL bitstream.
+    For ADRV9002 device tree to find matching hardware, we need an
+    `fpga -f system_top.bit` step inserted before kernel handoff. Update
+    the .tcl and document in JTAG Boot Procedure section.
+
+15. **system-conf.dtsi stub recipe.** meta-ori needs a
+    `recipes-bsp/device-tree/device-tree.bbappend` providing a minimal
+    `system-conf.dtsi` file. The stub bridges the Petalinux-flow assumption
+    in meta-adi-xilinx's bbappend with pure-Yocto reality. See Trophy Case
+    for full diagnosis.
 
 ---
 
@@ -1542,6 +1887,12 @@ These came up during M1/M2 closeout and are not blocking but worth tracking:
 | PXE boot requires DHCP for serverip | **Hit** | Use boot.scr at 0x20000000 instead (works without DHCP) |
 | Boot mode pins don't stop U-Boot's storage fallback | **Hit** | Physically remove SD card / unwanted media for clean JTAG-only boot |
 | DISTRO_FEATURES conflicts (dropbear vs openssh) | **Hit** | Long-term: override DISTRO_FEATURES in meta-ori distro layer. Short-term: works as-is. |
+| meta-adi-xilinx assumes Petalinux flow (system-conf.dtsi) | **Hit** | Fix planned via meta-ori device-tree.bbappend stub. Trophy case entry. |
+| ADI kernel bbappend defaults to AUTOREV | **Hit** | Pin SRCREV:pn-linux-xlnx explicitly in local.conf. Trophy case entry. |
+| KUIPER_COMPAT silently overrides debug-tweaks | **Hit** | Suppress with KUIPER_COMPAT_USERADD="" + KUIPER_COMPAT_SUDOERS="". |
+| adi-hdl submodule is large (~1-2 GB) | Low | One-time clone cost; pinned via .gitmodules for reproducibility. |
+| Vivado XSA may need substitution mechanism research | Medium | M2 step 4 phase 2 work item 1; HDF_BASE_PATH or gen-machine-conf candidates. |
+| Bitstream loading not yet in JTAG boot script | Medium | Update zcu102_jtag_boot.tcl with fpga -f step before kernel handoff. |
 
 ---
 
@@ -1556,6 +1907,13 @@ These came up during M1/M2 closeout and are not blocking but worth tracking:
 ### ADI documentation
 - meta-adi: https://github.com/analogdevicesinc/meta-adi
 - ADRV9002 ZCU102: https://wiki.analog.com/resources/eval/user-guides/adrv9002
+- ADI HDL build framework (project-xilinx.mk):
+  `~/brown/Mode-Dynamic-Transponder/haifuraiya/third_party/hdl/projects/scripts/project-xilinx.mk`
+- ADI HDL Wiki (build instructions): https://wiki.analog.com/resources/fpga/docs/build
+- ADRV9002 device tree source (the file KERNEL_DTB selects):
+  `analogdevicesinc/linux@adi_master:arch/arm64/boot/dts/xilinx/zynqmp-zcu102-rev10-adrv9002.dts`
+- ADI HDL adrv9001/zcu102 project on 2022_R2:
+  https://github.com/analogdevicesinc/hdl/tree/hdl_2022_r2/projects/adrv9001/zcu102
 
 ### Yocto Project core
 - Yocto Reference Manual (Honister): https://docs.yoctoproject.org/honister/
@@ -1600,12 +1958,15 @@ $ ip addr show eth0
 
 ---
 
-*Last updated: 2026-05-18, M2 step 1 closeout. Phase 2b chapter 1 (vanilla
-Yocto JTAG boot, M1) banked with twelve bosses slain. Phase 2b chapter 2
-(meta-ori layer + first recipe, M2 step 1) banked with six more bosses
-slain. eth0 = 10.73.1.16/24 confirmed on hardware; ping from keroppi
-succeeds (verified by Paul). meta-ori is a real Yocto layer with one
-working recipe; from here every customization follows the same pattern.
-Yocto base correctly identified as Honister (3.4), not Kirkstone as
-previously assumed. Next focus: choose M2 step 2 (openssh-server, PXE
-boot, OR jump to meta-adi-xilinx).*
+*Last updated: 2026-05-18 (continued session), M2 step 4 phase 1 + M2.5
+banked. Phase 2b chapter 4: meta-adi-core + meta-adi-xilinx registered;
+ADI kernel (linux-xlnx with source swapped to analogdevicesinc/linux@cd7e20c4
+on 2022_R2) compiles cleanly in 24 min; conf templates updated and verified
+to match live build. Phase 2b chapter 5: adi-hdl added as submodule pinned
+to hdl_2022_r2; `adrv9001_zcu102` reference design built in Vivado 2022.2
+producing system_top.xsa (2.3 MB) + system_top.bit (9.9 MB) in 26 min,
+clean Vivado log, no timing failures. Five new trophy case entries banked
+(Petalinux-vs-Yocto seam, AUTOREV gotcha, kernel-source-swap pattern,
+KUIPER_COMPAT override, project-xilinx.mk location). Next focus: M2 step 4
+phase 2 — Yocto XSA integration + system-conf.dtsi stub + JTAG bitstream
+load + real ADRV9002 driver probe on hardware.*
