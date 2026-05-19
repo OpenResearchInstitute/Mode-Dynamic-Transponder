@@ -36,9 +36,6 @@ channelizer's Linux runtime.
 | ⏳ | M3: image built against Phase 2a .xsa (Haifuraiya in PL) | Hardware design integrated; channelizer in bitstream |
 | ⏳ | M4: userspace mmap reads VERSION register = 0x00010000 | Round-trip Linux-to-IP communication confirmed |
 | ⏳ | M5: Takadono v0 MQTT publish working | First observability output |
-| ⏳ | M3: image built against Phase 2a .xsa (Haifuraiya in PL) | Hardware design integrated; channelizer in bitstream |
-| ⏳ | M4: userspace mmap reads VERSION register = 0x00010000 | Round-trip Linux-to-IP communication confirmed |
-| ⏳ | M5: Takadono v0 MQTT publish working | First observability output |
 
 If you're returning to this doc after a hiatus, start at "You Are Here,"
 then jump to whichever milestone is the current 🎯.
@@ -90,7 +87,7 @@ here.
 
 | Layer | Pin | Rationale |
 |---|---|---|
-| Vivado | **2022.2** | License-constrained |
+| Vivado | **2022.2** (build 3671981, 2022-10-14) | License-constrained; install at `/opt/Xilinx/Vivado/2022.2/` (also reachable via `/tools/Xilinx/Vivado/2022.2/` symlink on CHONC-shared lab VMs). Source `settings64.sh` before any Vivado-using command. |
 | Yocto release | **Honister (3.4)** | What xlnx-rel-v2022.2 actually pulls (despite Kirkstone being available at the same time). Verify with: `grep LAYERSERIES_COMPAT_core sources/core/meta/conf/layer.conf` |
 | Xilinx manifest | **`rel-v2022.2`** from `github.com/Xilinx/yocto-manifests.git` | AMD-recommended, pulls a consistent layer set |
 | Host OS | **Ubuntu 22.04 LTS** | Yocto Honister's primary supported host (note: 22.04's glibc 2.35 vs Honister uninative's 2.34 — handled automatically, see Trophy Case) |
@@ -108,7 +105,7 @@ All layers tagged `xlnx-rel-v2022.2`:
 | `meta-xilinx-tools` | **909b70c** | "Add new YAML_BSP_CONFIG for apu overlay config" |
 | `meta-petalinux` | **5799be30** | "Revert: xilinx-mirrors.conf TEMPORARY mirrors" |
 | `meta-adi-xilinx` | **3a5de5c** | "ci: add build script for the release branch" (branch `2022_R2`) |
-| `analogdevicesinc/hdl` (submodule) | **__ae6e248f219a5bb2e63733c762e9561c072d037e__** | (branch `hdl_2022_r2`, pinned via `.gitmodules` at `haifuraiya/third_party/hdl`) |
+| `analogdevicesinc/hdl` (submodule) | **ae6e248f** | (branch `hdl_2022_r2`, pinned via `.gitmodules` at `haifuraiya/third_party/hdl`) |
 
 ### Kernel SRCREV pin
 
@@ -126,14 +123,6 @@ This is the same commit ADI's own offline CI uses (the bbappend's
 
 To refresh this pin: check `git log` on `analogdevicesinc/linux@adi_master`,
 pick a commit, update `local.conf.template` and our live `local.conf`.
-```
-
-Update the "Tool versions" table — find the `Vivado` row and add a build
-date column or append to the rationale:
-
-```markdown
-| Vivado | **2022.2** (build 3671981, 2022-10-14) | License-constrained; install at `/opt/Xilinx/Vivado/2022.2/` (also reachable via `/tools/Xilinx/Vivado/2022.2/` symlink on CHONC-shared lab VMs). Source `settings64.sh` before any Vivado-using command. |
-```
 
 ### How to refresh these pins (for future you)
 
@@ -360,7 +349,12 @@ core/meta + core/meta-poky    (oe-core + bitbake + reference distro)
             └── meta-xilinx-tools     (XSCT-dependent baremetal recipes)
                  └── meta-petalinux    (petalinux-image-minimal recipe)
                       └── meta-adi-xilinx     (M2: ADRV9002 driver, libiio,
-                                               device trees — TBD)
+                                               device trees)
+                                              (M2 step 4: ADRV9002 driver 
+                                               via kernel-source-swap bbappend, 
+                                               libiio integration, 
+                                               device-tree.bbappend; 
+                                               registered and compiles cleanly)
                            └── meta-ori        (M2+: static IP, Takadono
                                                 publisher, channelizer DT)
 ```
@@ -402,6 +396,8 @@ For our active layer set:
 | `meta-xilinx-tools` | `xilinx-tools` |
 | `meta-petalinux` | `petalinux` |
 | `meta-ori` (ours) | `ori` |
+| `meta-adi/meta-adi-core` | `adi-core` |
+| `meta-adi/meta-adi-xilinx` | `adi-xilinx` |
 
 To find the collection name of any layer:
 ```bash
@@ -1624,7 +1620,7 @@ before assuming compatibility.
 
 ---
 
-### 23. ADI kernel bbappend defaults to AUTOREV in online mode
+### 24. ADI kernel bbappend defaults to AUTOREV in online mode
 
 **Symptom:** Not really a symptom — a reproducibility gun pointed at our
 foot. `meta-adi-xilinx/recipes-kernel/linux/linux-xlnx_%.bbappend`:
@@ -1652,7 +1648,7 @@ or accept silent commit drift between builds.
 
 ---
 
-### 24. meta-adi keeps `linux-xlnx` recipe name but swaps the source
+### 25. meta-adi keeps `linux-xlnx` recipe name but swaps the source
 
 **Subtle pattern worth knowing.** meta-adi-xilinx's `linux-xlnx_%.bbappend`
 does NOT use a `PREFERRED_PROVIDER_virtual/kernel` swap. The recipe name
@@ -1675,7 +1671,7 @@ sometimes graft new source onto old recipes.
 
 ---
 
-### 25. KUIPER_COMPAT silently overrides debug-tweaks
+### 26. KUIPER_COMPAT silently overrides debug-tweaks
 
 **Symptom (subtle):** after adding meta-adi-xilinx, root password becomes
 "analog" instead of empty. SSH still works with the new password but the
@@ -1704,7 +1700,7 @@ behavior, audit any new layer's image bbappends for `EXTRA_USERS_PARAMS`.
 
 ---
 
-### 26. ADI HDL's `project-xilinx.mk` lives in `projects/scripts/`, not repo root `scripts/`
+### 27. ADI HDL's `project-xilinx.mk` lives in `projects/scripts/`, not repo root `scripts/`
 
 **Symptom:** project Makefile says `include ../../scripts/project-xilinx.mk`,
 but the repo root `scripts/` directory contains only `adi_env.tcl` — no
