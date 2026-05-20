@@ -196,3 +196,8 @@ CONF_VERSION = "2"
 # Uncomment if you have a custom xsct trim
 #EXTERNAL_XSCT_TARBALL = "/proj/yocto/xsct-trim/2022.2_xsct_daily_latest"
 #VALIDATE_XSCT_CHECKSUM = '0'
+
+# M2 step 4 phase 2: ADI HDL reference design XSA. Set in your live
+# local.conf to the absolute path of system_top.xsa from your M2.5
+# Vivado build (in third_party/hdl/projects/adrv9001/zcu102/...sdk/).
+# ADI_HDL_XSA = ""

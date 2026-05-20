@@ -1,4 +1,4 @@
-# zcu102_jtag_boot.tcl  (v3 — verified PMU wake + correct ATF/FSBL ordering)
+# zcu102_jtag_boot.tcl  (v4 — adds PL bitstream load after PMU wake)
 #
 # Boot Yocto-built bootloader stack on ZCU102 via JTAG.
 #
@@ -8,6 +8,8 @@
 #   - rst -processor on MicroBlaze PMU to wake it from "Sleeping. No clock"
 #   - Load ATF BEFORE running FSBL (so FSBL's chain-to-ATF finds it)
 #   - U-Boot loaded after FSBL/ATF run (DDR is now initialized)
+#   - v4: load PL bitstream (system_top.bit) after PMU is running,
+#     before A53 work — provides ADRV9002 AXI peripherals for kernel
 
 if {[info exists ::env(BOOT_DIR)]} {
     set boot_dir $::env(BOOT_DIR)
@@ -20,8 +22,9 @@ set fsbl      "$boot_dir/fsbl-zcu102-zynqmp.elf"
 set atf_bin   "$boot_dir/arm-trusted-firmware.bin"
 set uboot_elf "$boot_dir/u-boot.elf"
 set boot_scr  "$boot_dir/boot.scr"
+set system_bit "$boot_dir/system_top.bit"
 
-foreach f [list $pmu_fw $fsbl $atf_bin $uboot_elf $boot_scr] {
+foreach f [list $pmu_fw $fsbl $atf_bin $uboot_elf $boot_scr $system_bit] {
     if {![file exists $f]} {
         puts "ERROR: file not found: $f"
         exit 1
@@ -71,6 +74,8 @@ puts "    Running PMU..."
 con
 after 1000
 
+
+
 # --- Switch to A53 #0 ---
 puts ""
 puts "=== Selecting Cortex-A53 #0 ==="
@@ -114,6 +119,61 @@ puts ""
 puts "=== Stopping A53 to load U-Boot into DDR ==="
 stop
 puts "    A53 stopped."
+
+
+
+# --- Load PL bitstream (M2.5 ADI HDL adrv9001_zcu102 reference design) ---
+# Must load AFTER PMU is running (PMU FW owns the PCAP interface on
+# ZynqMP, which is the bitstream-load path) and BEFORE kernel boot
+# (ADRV9002 driver probes against AXI peripherals — axi_adrv9001 at
+# 0x84A30000 etc — that only exist once the bitstream is on the PL).
+#
+# Trophy case: at this point in JTAG boot, PMU FW is alive, A53 is
+# still in reset, so the PL load is the safest and quietest window.
+puts ""
+puts "=== Loading PL bitstream ($system_bit) ==="
+
+# IMPORTANT: ZCU102 has TWO FPGA devices on JTAG — the system controller
+# (Zynq-7020, first in chain) and the ZynqMP (xczu9eg, second). When `fpga`
+# finds multiple devices, it lists their target IDs in the error message and
+# expects us to pick one via `targets -set` first.
+#
+# For our current ZCU102 + Digilent cable setup:
+#   target 17  = system controller (Zynq-7020) — NOT what we want
+#   target 1   = ZynqMP PL (xczu9eg)           — YES, this one
+#
+# Other setups may differ. If load fails with "Multiple FPGA devices found:
+# X, Y", try `targets -set X` then re-run. Update this script with the
+# correct ID once verified.
+if {[catch {targets -set 1} err]} {
+    puts "ERROR: could not select target 17 (ZynqMP PL): $err"
+    exit 1
+}
+
+if {[catch {fpga -no-revision-check -file $system_bit} err]} {
+    puts "ERROR: bitstream load failed: $err"
+    puts "       If target 17 was wrong, try target 1 (swap above)."
+    exit 1
+}
+puts "    Bitstream loaded."
+after 500
+
+
+
+puts "    Bitstream loaded."
+after 500
+
+# Switch back to A53 #0 — fpga -file switched our context to the PL target,
+# and the subsequent dow $uboot_elf needs to target the A53's memory space.
+if {[catch {targets -set -filter {name == "Cortex-A53 #0"}} err]} {
+    puts "ERROR: could not re-select Cortex-A53 #0 after bitstream load: $err"
+    exit 1
+}
+puts "    Re-selected Cortex-A53 #0."
+
+
+
+
 
 # --- Load U-Boot (DDR is initialized now, so 0x8000000 is accessible) ---
 puts ""

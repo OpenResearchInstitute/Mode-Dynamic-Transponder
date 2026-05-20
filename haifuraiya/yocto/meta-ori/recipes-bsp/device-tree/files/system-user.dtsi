@@ -1,0 +1,11 @@
+/* Haifuraiya user device-tree extensions.
+ *
+ * The ADRV9002 DT chain sets /chosen/bootargs to just "earlycon" with
+ * no console= parameter. After kernel disables the bootconsole, serial
+ * output stops. Add explicit console=ttyPS0,115200 plus keep_bootcon.
+ */
+/ {
+    chosen {
+        bootargs = "earlycon console=ttyPS0,115200 keep_bootcon";
+    };
+};

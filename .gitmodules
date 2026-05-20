@@ -8,3 +8,7 @@
 	path = haifuraiya/third_party/hdl
 	url = https://github.com/analogdevicesinc/hdl.git
 	branch = hdl_2022_r2
+[submodule "haifuraiya/third_party/meta-adi"]
+	path = haifuraiya/third_party/meta-adi
+	url = https://github.com/analogdevicesinc/meta-adi.git
+	branch = 2022_R2

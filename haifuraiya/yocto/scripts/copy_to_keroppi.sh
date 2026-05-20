@@ -60,10 +60,14 @@ ssh ${KEROPPI_USER}@${KEROPPI_HOST} "
 echo ""
 echo "=== Copying Yocto-built JTAG-load files (FSBL/PMU/ATF/U-Boot) ==="
 # These are loaded into RAM via xsdb during JTAG boot
+
+ADI_BITSTREAM="${HOME}/brown/Mode-Dynamic-Transponder/haifuraiya/third_party/hdl/projects/adrv9001/zcu102/adrv9001_zcu102.runs/impl_1/system_top.bit"
+
 scp ${DEPLOY_DIR}/fsbl-zcu102-zynqmp.elf \
     ${DEPLOY_DIR}/pmu-firmware-zcu102-zynqmp.elf \
     ${DEPLOY_DIR}/arm-trusted-firmware.bin \
     ${DEPLOY_DIR}/u-boot.elf \
+    ${ADI_BITSTREAM} \
     ${KEROPPI_USER}@${KEROPPI_HOST}:${JTAG_DIR}/
 
 echo ""
@@ -82,7 +86,7 @@ echo ""
 echo "=== Copying TFTP-served files (kernel/dtb/initramfs) ==="
 # These are fetched by U-Boot from the TFTP server (keroppi) into RAM
 scp ${DEPLOY_DIR}/Image \
-    ${DEPLOY_DIR}/zynqmp-zcu102-rev1.0.dtb \
+    ${DEPLOY_DIR}/system.dtb \
     ${DEPLOY_DIR}/petalinux-image-minimal-zcu102-zynqmp.cpio.gz.u-boot \
     ${KEROPPI_USER}@${KEROPPI_HOST}:${TFTP_DIR}/
 
@@ -91,7 +95,6 @@ echo "=== Creating short-name symlinks on keroppi (TFTP-friendly) ==="
 ssh ${KEROPPI_USER}@${KEROPPI_HOST} "
     cd ${TFTP_DIR}
     ln -sf petalinux-image-minimal-zcu102-zynqmp.cpio.gz.u-boot initramfs.cpio.gz.u-boot
-    ln -sf zynqmp-zcu102-rev1.0.dtb system.dtb
     ls -la
 "
 

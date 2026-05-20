@@ -19,14 +19,17 @@ Quick orientation when you come back to this doc weeks later:
 | ✅ | OPV demodulator RTL | `pluto_msk`, working on LibreSDR; would need 64× or time-shared |
 | ✅ | OPV demodulator software | `opv-cxx-demod`, real-time on Pluto's A9 |
 | ⏳ | lowpass_ema upstream PRs | **TWO open PRs** to `OpenResearchInstitute/lowpass_ema`: `fix/data-ena-gate` (multiplexed-stream gating) and `fix/sum-saturation` (PROD_W-range clamping). Local builds use `ori/integration` branch until both merge. |
-| 🎯 | **Next session focus** | **Phase 2: ADRV9002 bring-up + Yocto on PS. OR Friedrichshafen demo prep specifically — depends on time-horizon decision (Open Quest #8).** |
-| ⏳ | ADRV9002 + ZCU102 board | Hardware exists; state of bring-up unknown |
-| ⏳ | Yocto Linux on ZCU102 PS | Migration from Petalinux underway; Takadono observability lives here too |
+| ✅ | **Phase 2b: PetaLinux on ZCU102 PS** | **PetaLinux Tools 2022.2 build, JTAG boot to login prompt, ADRV9002 driver enumeration confirmed (`adrv9002 spi1.0: ... Firmware 0.22.30, Stream 0.7.11.0, API version: 68.13.7 successfully initialized`). All four AXI infrastructure cores (RX ADC, 2× TX DDS, 2× TDD) come up clean.** |
+| ✅ | **Phase 2a: ADRV9002 + ZCU102 board** | **ADI HDL `hdl_2022_r2` reference design build closed, meta-adi 2022_R2 integration verified, ADRV9002 enumerates and reports valid firmware/stream/API. Sample stream verification (next-tier of 2a) is the immediate next step.** |
+| 🎯 | **Next session focus** | **(a) Clean-clone-rebuild test + commit everything (catches reproducibility issues while details are fresh); (b) First captured sample stream from ADRV9002 via libiio (gate from "Linux works" to "SDR is actually accessible"); (c) Friedrichshafen demo prep is now realistic.** |
+| ⏳ | Sample stream verified through libiio | Driver up, but no `iio_readdev` test yet |
+| ⏳ | Yocto Linux on ZCU102 PS | **Superseded by PetaLinux Tools 2022.2** — strategic shift documented in Phase 2. AMD has deprecated PetaLinux for 2024.1+ but it's the canonical happy path for the hdl_2022_r2 stack era. |
 | ❓ | HD.CLK_SRC OOC clock prop | Unresolved; cosmetic for now |
 
 If you only have 5 minutes when returning to this doc, read this section,
-then jump to **Phase 2** and **Open Quests** (decisions you owe yourself).
-**Phase 1 is now done — RTL complete, IP packaged, BD-integratable.**
+then jump to **Phase 2** (now mostly done — see what's left for full 2a closure)
+and **Open Quests** (decisions you owe yourself).
+**Phase 1 is done. Phase 2b is done. Phase 2a is partially done: chip enumerates, sample stream verification is next.**
 
 ---
 
@@ -107,8 +110,9 @@ ZCU102 block design.**
 | ~~Output serializer (parallel 64-ch → AXIS with TDEST)~~ ✅ DONE | PL RTL | ~~included in P1~~ | 1 |
 | ~~IP-XACT packaging~~ ✅ DONE | Vivado | ~~1 session~~ | 1 |
 | ~~Block-design smoke test~~ ✅ DONE | Vivado | ~~1 session~~ | 1 |
-| ADRV9002 reference design integration | Vivado + Linux driver | hours-weeks (depends on starting state) | 2 |
-| Yocto Linux on ZCU102 PS | Build system + recipes | unknown | 2 |
+| ADRV9002 reference design integration | Vivado + Linux driver | ~~hours-weeks (depends on starting state)~~ ✅ DONE | 2 |
+| ~~Yocto~~ **PetaLinux Tools 2022.2** Linux on ZCU102 PS | Build system + recipes | ~~unknown~~ ✅ DONE (boots to login, ADRV9002 enumerates) | 2 |
+| First captured sample stream from ADRV9002 (libiio) | PS userspace | 1 session | 2 |
 | First-light block design | Vivado | hours | 3 |
 | opv-cxx-demod ↔ AXIS DMA glue | C++ + Linux DMA driver | 1-2 sessions | 4 |
 | Kabura-ya GSE MUX | C++ on PS | 1-3 sessions | 5 |
@@ -515,42 +519,216 @@ reset" instinct.
 ---
 
 ## 🌉 Phase 2: ADRV9002 Bring-up + PS Infrastructure
+**🟡 Substantially complete. Subphase 2b done; 2a partially done; 2c pending.**
 
 ### Goal
 Get RF samples flowing from the ADRV9002 into the PL fabric as AXIS at
 10 MSps complex, with PS-side control plane (tuning, gain, AGC). Establish
-Yocto Linux on the PS and the early Takadono observability scaffolding so
+Linux on the PS and the early Takadono observability scaffolding so
 that downstream phases have a working OS and a place to put telemetry.
 
-### Scope depends heavily on starting state
-- **If ADI `adrv9002_zcu102` reference design has ever booted and produced samples on this hardware:** mostly configuration work and integration into the Haifuraiya block design. Days, not weeks.
-- **If starting cold:** weeks. The ADRV9002 is newer than the AD9361 that powered the LibreSDR/Pluto work, so reference design maturity in 2026 is the unknown.
+### Strategic shift: PetaLinux Tools 2022.2, not pure Yocto
+
+The original plan called for "Yocto/EDF Linux on PS via gen-machine-conf."
+We tried that path first. It does not work for ADI reference designs in
+the hdl_2022_r2 era: `meta-xilinx-tools`' PMU/FSBL BSP template hardcodes
+`axi_intc_0` (which ADI XSAs don't include), and `device-tree-xilinx`
+expects PetaLinux convention files (`system-conf.dtsi`) that meta-adi
+doesn't ship. After a day and a half of patching seams, we pivoted to
+PetaLinux Tools 2022.2 — which is the documented happy path for this
+stack. AMD has deprecated PetaLinux Tools as of 2024.1 in favor of pure
+Yocto + gen-machine-conf, but that flow targets Vivado 2024.x and a
+newer meta-adi release. For our hdl_2022_r2 / meta-adi 2022_R2 era,
+**PetaLinux Tools is what ADI's documentation assumes and what works
+without fighting the tools.** Strategic principle: don't fight the
+documented happy path of your stack era.
+
+### Architecture (operational)
+
+- **Build host:** `mymelody`. PetaLinux project at `<MDT>/haifuraiya/petalinux/haifuraiya/`. ADI HDL submodule at `<MDT>/haifuraiya/third_party/hdl/` (branch `hdl_2022_r2`). meta-adi clone at `<MDT>/haifuraiya/third_party/meta-adi/` (branch `2022_R2`). PetaLinux Tools install at `~/petalinux/2022.2/`.
+- **JTAG / lab host:** `keroppi` (10.73.1.94). `hw_server -d` on default port 3121. ZCU102 over USB JTAG. Serial console at `/dev/zcu102_uart1` 115200.
+- **Target:** ZCU102 + ADRV9002. Static IP `10.73.1.16` (configured in `petalinux-config`; verification via `ip addr` post-boot pending the systemd-network porting step).
+- **Boot path:** `petalinux-boot --jtag --prebuilt 3 --hw_server-url TCP:keroppi:3121 --after-connect "targets 1" --tcl <path>` to generate the xsdb script, then hand-edit to insert `rst -processor -clear-registers` before the U-Boot `dow` (workaround for an MMU-on-after-FSBL bug — see the PetaLinux Build Lessons section), then `xsdb <path>` to run.
+- **Cross-machine wiring:** xsdb on mymelody connects to hw_server on keroppi via `--hw_server-url`. Boot artifacts stream from mymelody over the network through hw_server's JTAG to the board. **No file-copy step to keroppi is required** — the old `copy_to_keroppi.sh` and TFTP-based Yocto boot path are retired.
 
 ### Subphase 2a: ADRV9002 + sample stream
-1. Confirm ADRV9002 ref design state (Open Quest below)
-2. Configure ADRV9002 for 10 MSps complex sample rate, mid-band LO
-3. Linux IIO driver on PS for tuning, gain, AGC
-4. Verify sample stream lands in PL at expected throughput (ILA + counter check)
+1. ✅ ADI reference design build closed (`hdl_2022_r2` branch, `make CMOS_LVDS_N=0` in `projects/adrv9001/zcu102/`, `system_top.xsa` exported with bitstream included).
+2. ✅ ADRV9002 driver probes, talks SPI, reports valid firmware (0.22.30) / stream (0.7.11.0) / API (68.13.7).
+3. ✅ Full AXI infrastructure enumerates: `cf_axi_adc` (RX), `cf_axi_dds` ×2 (TX1, TX2), `cf_axi_tdd` ×2 (TDD1, TDD2).
+4. ⏳ Configure ADRV9002 for 10 MSps complex sample rate, mid-band LO. *(needs TES-generated profile or libiio attribute writes)*
+5. ⏳ Verify sample stream lands in PL at expected throughput (ILA + counter check, OR libiio `iio_readdev` capture).
+6. ⏳ Custom RFIC profiles for Mode-Dynamic-Transponder frequencies. *(uses ADI's Transceiver Evaluation Software offline to generate)*
 
-### Subphase 2b: Yocto/EDF Linux on PS
-1. Build a Yocto image for ZCU102 (post-Petalinux EDF flow via `gen-machine-conf`, MACHINE=zcu102-zynqmp)
-2. Boot to userspace on the four A53 cores
-3. Verify AXI-Lite mmap access from userspace (the channelizer registers from Phase 1 should be readable)
-4. Install mosquitto MQTT broker (will host Takadono later)
+### Subphase 2b: PetaLinux Linux on PS
+1. ✅ PetaLinux Tools 2022.2 installed on Ubuntu 22.04 (officially unsupported, works with `/bin/sh = /bin/bash`).
+2. ✅ Project created (`petalinux-create -t project --template zynqMP --name haifuraiya`).
+3. ✅ meta-adi cloned at `2022_R2` branch and added as User Layers via `petalinux-config` menuconfig (slot 0 = meta-adi-core, slot 1 = meta-adi-xilinx).
+4. ✅ XSA imported (`petalinux-config --get-hw-description`).
+5. ✅ `KERNEL_DTB = "zynqmp-zcu102-rev10-adrv9002"` in `petalinuxbsp.conf`.
+6. ✅ `petalinux-build` succeeds (4571 tasks, ADI fork kernel 5.15.36-xilinx-v2022.2).
+7. ✅ `petalinux-package --boot --fsbl --fpga --u-boot --force` produces BOOT.BIN.
+8. ✅ `petalinux-package --prebuilt --force` populates the prebuilt directory.
+9. ✅ JTAG boot to login prompt via `xsdb` with rst-processor workaround.
 
-### Subphase 2c: Takadono v0 (stub)
+### Subphase 2c: Takadono v0 (stub) — not started
 Just enough scaffolding to validate that the observability path works
 end-to-end. Defers the dashboard work until Phase 4 when there's more to
 observe.
 
-1. Tiny C program that mmaps the channelizer registers, prints to stdout in a loop. **Bonus thanks to Phase 1 Task 7:** since the IP-XACT memory map is encoded, this C program can be auto-generated from `component.xml` via the IP-XACT-to-C tooling. No hand-maintained register address constants needed.
-2. Wrap in an MQTT publisher (publishes register values to topics like `haifuraiya/channelizer/frame_count`)
-3. **No HTML/CSS yet** — that comes when Phase 4 has interesting state worth visualizing
+1. ⏳ Tiny C program that mmaps the channelizer registers, prints to stdout in a loop. **Bonus thanks to Phase 1 Task 7:** since the IP-XACT memory map is encoded, this C program can be auto-generated from `component.xml` via the IP-XACT-to-C tooling. No hand-maintained register address constants needed.
+2. ⏳ Wrap in an MQTT publisher (publishes register values to topics like `haifuraiya/channelizer/frame_count`).
+3. **No HTML/CSS yet** — that comes when Phase 4 has interesting state worth visualizing.
+
+### Verified signature for "Phase 2 success" (paste-into-doc reference)
+
+```
+adrv9002 spi1.0: adrv9002-phy Rev 12.0, Firmware 0.22.30, Stream 0.7.11.0,
+                 API version: 68.13.7 successfully initialized
+cf_axi_adc 84a00000.axi-adrv9002-rx-lpc:  ADC ADRV9002 as MASTER
+cf_axi_dds 84a0a000.axi-adrv9002-tx-lpc:  DDS ADRV9002 (TX1)
+cf_axi_dds 84a0c000.axi-adrv9002-tx2-lpc: DDS ADRV9002 (TX2)
+cf_axi_tdd 84a0c800.axi-adrv9002-core-tdd1-lpc: CF_AXI_TDD MASTER
+cf_axi_tdd 84a0cc00.axi-adrv9002-core-tdd2-lpc: CF_AXI_TDD MASTER
+```
 
 ### Deliverable
-ADRV9002 → PL with verifiable sample stream at 10 MSps complex. Yocto
-booting on PS with mmap working. Takadono v0 publishing channelizer
-registers via MQTT.
+ADRV9002 driver alive, all RX/TX/TDD AXI cores enumerated, Linux user space
+booting to login on the four A53 cores from a JTAG-streamed build. **Done.**
+What remains for full Phase 2: configure the RFIC profile, capture a first
+sample stream, build the Takadono v0 MQTT publisher.
+
+---
+
+## 🛠️ PetaLinux Build Lessons
+*Tooling gotchas learned during Phase 2b. Read before bringing PetaLinux up
+on any future ZynqMP target.*
+
+### What worked beautifully
+
+- **Cross-machine build + JTAG is a clean architecture.** `petalinux-boot --jtag --hw_server-url TCP:<jtag-host>:3121` lets xsdb on the build host stream binaries through hw_server on the JTAG host to the board. No file-copy step between machines. The old Yocto-era `copy_to_keroppi.sh` and TFTP-orchestration scripts are obsolete and retired.
+
+- **`--tcl` flag to dump the boot script.** `petalinux-boot --jtag ... --tcl /tmp/boot.tcl` generates the xsdb sequence *without running it*. Inspect it, edit it, run via `xsdb /tmp/boot.tcl`. Indispensable when the default sequence has a bug for your hardware combination.
+
+- **`--after-connect "<xsdb command>"` flag** is the documented way to inject xsdb commands right after the `connect` step. Useful for JTAG target disambiguation. The bottom of `petalinux-boot --jtag --help` shows the full flag list; the summary `--help` is incomplete.
+
+- **meta-adi as a sibling clone, referenced by absolute path via User Layers menuconfig.** PetaLinux's "User Layers" feature is the documented integration point. No bbappends in `project-spec/meta-user` needed for the ADI BSP itself; meta-adi is self-contained.
+
+### What bit us
+
+- **Pure-Yocto-with-meta-adi-for-ADI-reference-designs is undocumented and breaks.** `meta-xilinx-tools`' PMU/FSBL BSP template (`zynqmp-pmufw`, `zynqmp-fsbl`) hardcodes `axi_intc_0` which ADI XSAs don't include — `do_compile` fails at `bspconfig` time with "No IP instance named axi_intc_0 present in hardware design." `device-tree-xilinx` expects `system-conf.dtsi` which meta-adi doesn't ship. After a day and a half of bbappend patching, we pivoted. **Use PetaLinux Tools for the 2022.2-era stack.** Save yourself the tour.
+
+- **PetaLinux installer needs `--dir` or it scatters files into your home directory.** Always: `./petalinux-v2022.2-10141622-installer.run --dir ~/petalinux/2022.2`.
+
+- **`/bin/sh = dash` on Ubuntu 22.04 silently breaks PetaLinux scripts.** Multiple build steps fail with cryptic errors. Fix: `sudo ln -sf /bin/bash /bin/sh`. PetaLinux's official supported OS list is Ubuntu 18.04 / 20.04, but 22.04 works in practice once this is fixed.
+
+- **Stale `PETALINUX` and friends in shell env from earlier failed installs persist.** Symptom: nonsensical paths like `PETALINUX=/home/abraxas3d/ip_version` show up. Fix: open a fresh terminal *after* the new install completes, before sourcing `settings.sh`.
+
+- **User layers added via direct edit of `project-spec/configs/config` look right but don't fully register.** Layers MUST be added via `petalinux-config` menuconfig → Yocto Settings → User Layers. The menuconfig save triggers additional internal state updates that the hand-edit doesn't. Verify with `grep USER_LAYER project-spec/configs/config` after.
+
+- **Layer order matters.** meta-adi-core first (slot 0), meta-adi-xilinx second (slot 1). Reverse order produces undefined behavior at recipe-parse time.
+
+- **`KERNEL_DTB` selection is required for ADI hardware.** Without `KERNEL_DTB = "zynqmp-zcu102-rev10-adrv9002"` in `petalinuxbsp.conf`, the build uses the default zcu102 device tree and ADRV9002 is invisible to Linux.
+
+- **TFTPBOOT warning at end of build is benign** on a build host without `/tftpboot`. Build still succeeds; artifacts are in `images/linux/`.
+
+- **`petalinux-package --prebuilt --force` is mandatory** before `petalinux-boot --jtag --prebuilt N` works. The prebuilt directory (`pre-built/linux/images/`) is separate from `images/linux/`. Forgetting this produces "fsbl image doesn't exist" with an unhelpful path.
+
+- **ZCU102 multi-FPGA JTAG ambiguity.** ZCU102 enumerates both xczu9eg (target 1, ZynqMP PL) and onboard xc7z020 system controller (target 17). PetaLinux's xsdb doesn't auto-disambiguate. Solution: `--after-connect "targets 1"`. The hw_server `-e "set jtag-port-filter Xilinx"` approach picks the WRONG target (both chips match "Xilinx"); `xczu9eg` filter matches nothing (port name filter ≠ chip name).
+
+- **🐉 The big one: MMU translation fault on `dow u-boot.elf` to DDR 0x8000000.** PetaLinux's generated xsdb script halts FSBL via `after 4000; stop` with the A53 still holding active MMU translation tables that FSBL set up during its 4-second run. The subsequent `dow u-boot.elf` writes through the active MMU and faults because FSBL's tables don't cover 0x8000000. **Fix:** `--tcl` to dump, insert `rst -processor -clear-registers` between `psu_ps_pl_reset_config` and `dow u-boot.elf`, run via `xsdb` directly. Open question (Open Quest below): can this be automated cleanly?
+
+- **JTAG board state wedges between failed boot attempts.** Symptoms on retry: "EDITR timeout" on OCM writes, xsdb segfault. Recovery: `rst -system` via a PSU-filtered target (not target 1 — that returns "Invalid reset type"), then restart hw_server if it died, then retry. Physical power-cycle always works as a last resort.
+
+- **`rst -system` on a top-level FPGA target (target 1) returns "Invalid reset type."** Must use a PSU or processor target: `targets -set -nocase -filter {name =~ "*PSU*"}; rst -system`.
+
+- **`rst -system` sometimes kills hw_server.** Watch for "Connection refused" on the next attempt; restart hw_server on the JTAG host if so.
+
+- **xsdb cosmetic core-dump on exit when fed via heredoc** is functionally harmless. The commands completed before the dump. Annoying but ignorable.
+
+- **Shell-to-tcl quote escaping is fragile for `--after-connect` complex filter expressions.** Bash single-quotes preserve inner double-quotes for the shell, but PetaLinux's script processing strips them before they reach xsdb. Use simple `"targets 1"` for index-based selection, or generate the tcl with `--tcl` and edit it directly for anything more complex.
+
+- **`zynqmp_clk_divider_set_rate() set divider failed for spi1_ref_div1, ret = -13`** in dmesg is a benign cosmetic warning. PMUFW manages that clock; the kernel driver retries gracefully, no functional impact on ADRV9002 operation.
+
+- **🐉 `rst -system` is required before every JTAG re-boot attempt.** xsdb's debug target tree accumulates state across boots — running A53 cores from a prior Linux session, renamed targets, etc. Yesterday-successful boot scripts fail today because the board never went through a clean reset. Symptoms when you forget: "Multiple FPGA devices found, please use targets command to select one of: 1, 17" (because the debug target tree restructured and `targets 1` now points to "PS TAP" instead of xczu9eg) or "bitstream is not compatible with the target" (selected an FPGA on the wrong chain). **Cure:** add a PSU-target `rst -system` as the first step of the boot sequence:
+  ```tcl
+  connect -url TCP:keroppi:3121
+  targets -set -filter {name =~ "*PSU*"}
+  rst -system
+  after 1000
+  # ... rest of the boot sequence
+  ```
+  This restores the target tree to a clean state where `targets 1` reliably points to the ZynqMP. Bonus: `rst -system` sometimes kills hw_server — restart it on the JTAG host if so.
+
+- **`petalinux-config → Subsystem AUTO Hardware Settings → Ethernet Settings` sets IP but defaults netmask to `/8` (`255.0.0.0`).** Symptom: `ifconfig eth0` shows `inet addr:10.73.1.16  Bcast:10.255.255.255  Mask:255.0.0.0` instead of the expected `/24` (`255.255.255.0` with broadcast `10.73.1.255`). Same-subnet SSH still works (both sides treat each other as local), but cross-subnet routing is broken. **Fix in `petalinux-config`** — explicitly set `Static IP netmask: 255.255.255.0`. The menuconfig DOES expose this field; we just missed it. Even better: port systemd-networkd config from meta-ori for precise per-interface control (Action Item #3).
+
+- **🐉 Dropbear's default `-w` flag blocks root SSH.** PetaLinux ships `/etc/default/dropbear` with `DROPBEAR_EXTRA_ARGS="-w"` (the comment in the file says "Disallow root logins by default"). Console login as root works fine; SSH as root returns "Permission denied" even with the right password. **Immediate fix on the target** (doesn't survive reboot, since rootfs reloads from JTAG initramfs each boot):
+  ```bash
+  sed -i 's/DROPBEAR_EXTRA_ARGS="-w"/DROPBEAR_EXTRA_ARGS=""/' /etc/default/dropbear
+  systemctl restart dropbear.socket
+  killall dropbear 2>/dev/null
+  ```
+  **Permanent fix (rebuild required)** — see Action Item #9: bbappend in `project-spec/meta-user/recipes-core/dropbear/` to override the default, OR replace dropbear with openssh-server + proper sshd_config + per-user authorized_keys. The latter is the correct long-term answer for a multi-developer remote lab.
+
+### Workflow recipe (for the next ZynqMP PetaLinux project)
+
+```
+# 1. Ensure /bin/sh is bash
+sudo ln -sf /bin/bash /bin/sh
+
+# 2. Install PetaLinux Tools (always --dir)
+./petalinux-v2022.2-installer.run --dir ~/petalinux/2022.2
+
+# 3. Fresh terminal, then source
+source ~/petalinux/2022.2/settings.sh
+
+# 4. Vivado HDL build for the XSA (separately, in its own sourced env)
+source /tools/Xilinx/Vivado/2022.2/settings64.sh
+# ... clone ADI hdl repo, checkout matching branch, make
+# ... open in Vivado, export hardware with bitstream
+
+# 5. PetaLinux project create + meta-adi
+petalinux-create -t project --template zynqMP --name <PROJECT_NAME>
+cd <PROJECT_NAME>
+git clone -b 2022_R2 https://github.com/analogdevicesinc/meta-adi.git ../meta-adi
+
+# 6. Import XSA, then add meta-adi via menuconfig
+petalinux-config --get-hw-description=<path-to-xsa>
+# In menuconfig: Yocto Settings → User Layers → add meta-adi-core (0), meta-adi-xilinx (1)
+
+# 7. Set KERNEL_DTB
+echo 'KERNEL_DTB = "<adi-dtb-name>"' >> project-spec/meta-user/conf/petalinuxbsp.conf
+
+# 8. (Optional but recommended) Set static IP in Subsystem AUTO Hardware Settings → Ethernet
+#    Critically: set BOTH IP address AND netmask. The menuconfig defaults netmask to 255.0.0.0 (/8)
+#    which works for same-subnet SSH but breaks cross-subnet routing. Set netmask to 255.255.255.0.
+
+# 9. Build + package
+petalinux-build
+petalinux-package --boot --fsbl --fpga --u-boot --force
+petalinux-package --prebuilt --force
+
+# 10. JTAG boot: generate, edit, run
+petalinux-boot --jtag --prebuilt 3 --hw_server-url TCP:<jtag-host>:3121 \
+               --after-connect "targets 1" --tcl /tmp/boot.tcl
+# Edit /tmp/boot.tcl to:
+#   (a) Insert `targets -set -filter {name =~ "*PSU*"}; rst -system; after 1000` immediately after `connect`
+#       REQUIRED if the board has been running Linux from a prior boot; xsdb target tree drift will
+#       otherwise produce "Multiple FPGA devices found" or "bitstream is not compatible" errors.
+#   (b) Insert `rst -processor -clear-registers` between `psu_ps_pl_reset_config` and `dow u-boot.elf`
+#       This fixes the MMU-on-after-FSBL bug documented above.
+# Then:
+xsdb /tmp/boot.tcl
+
+# 11. Monitor serial console on the JTAG host in parallel:
+# (on JTAG host) screen /dev/zcu102_uart1 115200
+```
+
+### Cross-cutting lessons
+
+- **Don't fight the documented happy path of your stack era.** PetaLinux is officially deprecated, but for hdl_2022_r2 / meta-adi 2022_R2 it's what ADI's documentation assumes and what works. The pure-Yocto-with-gen-machine-conf flow is the future, but it targets Vivado 2024.x and a newer meta-adi.
+- **Cross-machine build + JTAG separations is sustainable** if the JTAG host runs hw_server and exposes it via TCP. No file-copy script needed. Cleaner than the old Yocto-era TFTP plumbing.
+- **PetaLinux's generated xsdb script is editable and inspectable.** When it has a bug for your hardware combination, `--tcl` dump + hand-edit + run-directly is a legitimate engineering workflow, not a hack. Document the edit; consider automating it eventually.
+- **JTAG boot is comfortable for verification, painful for routine iteration.** ~10 minutes per boot streaming everything via JTAG. For the iterate-on-userspace workflow, set up TFTP for kernel/initramfs delivery via Ethernet (post-bring-up infrastructure task).
 
 ---
 
@@ -674,12 +852,47 @@ decodes any subset of the 64 streams.
 
 ---
 
+## ⚡ Immediate Action Items
+*Things that should happen in the next session or two, before we move on to
+the next strategic chunk. Numbered for ordering; all are near-term.*
+
+1. **Clean-clone-rebuild test.** Move the current MDT working tree aside (`mv brown brown-bak` or equivalent), `git clone` the repo fresh into a clean directory, and try to reproduce tonight's success path purely from the documented procedure (Remote Labs doc + this plan). Catches "this only works because of files in my current clone" issues while the bring-up is fresh in mind. **Important precondition: commit everything first** (action #2).
+
+2. **Commit everything.** The PetaLinux project metadata (`project-spec/configs/config`, `project-spec/meta-user/conf/petalinuxbsp.conf`, any custom recipes we may add for systemd) and a sensible `.gitignore` to exclude build artifacts (`components/yocto/`, `images/`, `build/tmp/`, `pre-built/`, `cache/`). Consider whether meta-adi belongs as a git submodule (consistent with the existing ADI HDL submodule) for pinning to a known-good commit. Write a `petalinux/README.md` summarizing the recipe so the plan-of-attack stays strategic-not-procedural.
+
+3. **Port systemd static IP config from meta-ori into the PetaLinux project.** The `10-eth0.network` file (the only piece of meta-ori that genuinely survives the Yocto→PetaLinux transition) belongs in `project-spec/meta-user/recipes-core/systemd/`. After rebuild + reboot, verify `10.73.1.16/24` is up. **Note from tonight's session:** `petalinux-config → Subsystem AUTO Hardware Settings → Ethernet Settings` sets the IP but defaults the netmask to `255.0.0.0` (/8), not `255.255.255.0` (/24). The systemd-networkd `.network` file gives precise netmask control. Either set the netmask explicitly in petalinux-config OR use systemd-networkd — but consistency matters.
+
+4. **First libiio smoke test.** From the booted target:
+   ```
+   iio_info | grep -A 5 adrv9002
+   iio_attr -a -c adrv9002-phy
+   ```
+   Confirm RX/TX channels enumerate with reasonable attribute trees. This is the gate from "Linux works" to "SDR is actually accessible." Closes the remaining piece of Subphase 2a.
+
+5. **First captured sample stream.** `iio_readdev` or a small pyadi-iio script to capture I/Q samples from the ADRV9002 at a known frequency, plot the spectrum, sanity-check. Closes Subphase 2a fully.
+
+6. **Set up TFTP fast-iteration path.** `--prebuilt 2` + U-Boot TFTP from `keroppi:/tftpboot/abraxas3d-haifuraiya/` brings boot times from ~10 minutes (everything-via-JTAG) to ~30 seconds. Required for routine dev iteration. Trimmed copy_to_keroppi.sh (or a new ship_to_tftp.sh) handles the kernel/dtb/initramfs deployment to keroppi after each build.
+
+7. **Investigate automating the rst-processor injection.** Either a `petalinux-boot` flag or env var we haven't found, or a small wrapper script (`pl-boot.sh`) that runs `petalinux-boot --tcl`, sed-injects the line, and runs `xsdb`. Wrapper is the obvious fallback. Either way, document the rationale.
+
+8. **Update the Open Research Institute Remote Labs FPGA documentation.** ✅ done tonight — the existing zcu102+ADRV9002+PetaLinux section was replaced with the verified recipe.
+
+9. **Make SSH access permanent across rebuilds.** Tonight's quick fix (`sed -i 's/-w//' /etc/default/dropbear`) lives in JTAG-loaded initramfs and dies on the next boot. Two options:
+   - **Quick:** bbappend in `project-spec/meta-user/recipes-core/dropbear/dropbear_%.bbappend` that overrides `/etc/default/dropbear` to drop the `-w` flag.
+   - **Proper:** swap dropbear out for `openssh-server`, configure `sshd_config` with key-based auth, set up per-user authorized_keys for each developer who needs access. This is the correct remote-lab posture — password auth in a multi-developer environment is fragile.
+
+   Until either is done, every JTAG boot requires the manual `sed` fix on the target before SSH works. Should be addressed as part of the systemd-networkd port (Action #3) since both touch project-spec/meta-user/recipes-core/.
+
+---
+
+
+
 ## 📜 Open Quests
 *Decisions / clarifications to resolve before or early in next session*
 
-1. **ADRV9002 reference design state.** Has the ADI `adrv9002_zcu102` ref design ever booted on this hardware? "Yes, sample stream working" vs "never tried" is a multi-week difference in Phase 2 scope.
+1. ✅ **ADRV9002 reference design state — RESOLVED.** ADI `adrv9001/zcu102` reference design from `hdl_2022_r2` builds and runs cleanly. ADRV9002 driver probes successfully, reports valid firmware/stream/API versions. Sample stream not yet captured but the chip is alive.
 
-2. **PS Linux state.** Is Yocto/EDF building cleanly for ZCU102? Or is that also TBD? Affects Phase 4 timeline directly.
+2. ✅ **PS Linux state — RESOLVED via strategic shift.** PetaLinux Tools 2022.2 with meta-adi 2022_R2 builds and boots cleanly. Yocto/EDF was attempted first and abandoned due to undocumented incompatibilities with ADI reference designs in the 2022.2 stack era. PetaLinux is the documented happy path for this stack.
 
 3. **AXIS output topology.** TDEST channel index (one channel per beat, ~40 MSps total throughput at 100 MHz) — recommended. Or wide TDATA (all 64 channels per beat, needs wide DMA)?
 
@@ -691,7 +904,7 @@ decodes any subset of the 64 streams.
 
 7. **Manifest PDU format spec.** Once Phase 5 starts, the contents and cadence of the manifest PDU is a design decision worth getting right early — it directly determines what receiver apps can show. Worth a brief design doc of its own.
 
-8. **Time horizon.** "Lab demo in N months" vs "deployable Phase 4 Ground station" — affects polish on intermediate steps. **Hard date in sight: Friedrichshafen HAM RADIO 2026 (June).** With Phase 1 done today, demo prep for Friedrichshafen is now realistic.
+8. **Time horizon.** "Lab demo in N months" vs "deployable Phase 4 Ground station" — affects polish on intermediate steps. **Hard date in sight: Friedrichshafen HAM RADIO 2026 (June).** With Phase 1 done and Phase 2b done, demo prep for Friedrichshafen is now realistic. (Quest #12 sharpens this.)
 
 9. **Receiver software for demo.** Will ORI publish a reference receiver to go with this, or rely on GNU Radio flowgraphs for early demos? Pivotal for the "fun and rewarding" goal.
 
@@ -699,7 +912,13 @@ decodes any subset of the 64 streams.
 
 11. **IP-XACT versioning policy.** v0.1 ships with broad family compatibility (zynquplus + kintexuplus + virtexuplus + others). Should we narrow to just zynquplus for v0.2 since that's the only family we've actually tested on? Or keep broad on the theory that other UltraScale+ families will work without intervention?
 
-12. **First Friedrichshafen-targeted deliverable.** Now that Phase 1 is done: what's the most compelling single thing to demo? Live channelizer + spectrum view on a laptop hooked up to the ZCU102? Single OPV recovery (Phase 4a)? Or something else? Worth choosing soon to focus the next month or two.
+12. **First Friedrichshafen-targeted deliverable.** Now that Phase 1 + Phase 2b are done: what's the most compelling single thing to demo? Live channelizer + spectrum view on a laptop hooked up to the ZCU102 + ADRV9002 receiving real signals? Single OPV recovery (Phase 4a) over the air? A two-board loop showing transponder behavior? Worth choosing in the next session or two to focus the next month or two of work.
+
+13. **Automating the rst-processor injection in `petalinux-boot --jtag`.** Is there a documented PetaLinux flag, env var, or `.bbappend` that does this cleanly? If not, a small wrapper script is the obvious workaround. Worth ~30 minutes of investigation before committing to the wrapper. *(Tracked as Action Item #7.)*
+
+14. **QSPI boot path.** ZCU102 has 128 MB QSPI flash (mt25qu512a, enumerated cleanly in dmesg with the standard 4-partition layout). One-time flash of BOOT.BIN to QSPI would let the board boot autonomously on power-up, no JTAG, no SD card. Useful for unattended remote-lab operation. Investigate after demo prep stabilizes.
+
+15. **Complex `--after-connect` filter quoting.** If we need name-filter target selection (more robust to JTAG target renumbering across xsdb sessions), how do we cleanly pass `targets -set -filter {name =~ "xczu9eg*"}` through the shell-to-tcl chain? Pertinent if/when we encounter target index renumbering during routine use.
 
 ---
 
@@ -711,13 +930,16 @@ decodes any subset of the 64 streams.
 | ADRV9002 driver maturity in 2026 | Medium | High (could blow up Phase 2) | Check ADI ref design status early; have AD9361 stack as Plan B fallback |
 | A53 throughput insufficient for 64× software demod | Medium | Medium (forces PL time-share fallback) | Measure early; PL 8:1 time-share fallback is well-understood |
 | OOC clock propagation (HD.CLK_SRC) | Low — constraint should propagate from parent in real block design | Low | Document for now; revisit if it bites in Phase 1 integration |
-| Yocto/EDF maturity on ZCU102 | Medium | High | Start that work in parallel with Phase 1-2 |
+| Yocto/EDF maturity on ZCU102 | **Resolved by strategic shift** — see Phase 2 | n/a | We pivoted from pure-Yocto to PetaLinux Tools 2022.2 (the documented happy path for the hdl_2022_r2 era). Will revisit pure-Yocto + gen-machine-conf when we eventually migrate to Vivado 2024.x and a newer meta-adi. |
 | dvb_fpga → ZCU102 port surprises | Low | Low | Repo already supports zcu106; difference is mostly board constraint files |
 | Per-channel demod processing latency adding up | Low | Medium | Voice latency tolerance is generous (~100ms); measure during Phase 4 |
 | GSE library bugs in `libgse` | Low | Low | OpenSAND-derived implementations are well-tested; we control encapsulation order |
 | Other latent EMA overflows under different operating conditions | Low | Medium | Test 10 (sustained-amplitude regression) now in CI; MSB-doesn't-flip assertion. Run before every release. |
 | IP-XACT package breaks on a future Vivado version | Low | Medium | component.xml is plain XML; readable/editable across versions. Re-package if needed using the recipe in "IP-XACT Packaging Lessons." Smoke test re-runnable for regression. |
 | Other latent IP-XACT metadata bugs surface at integration time | Low | Medium | Smoke test catches multi-clock association issues. Re-run after any IP-XACT modification. |
+| PetaLinux Tools deprecation in 2024.1+ eventually forces a migration | Low (we're on 2022.2 for the foreseeable future) | Medium when it lands | When ADI releases meta-adi for newer Vivado/Yocto eras, plan the migration. The Vivado/HDL/meta-adi versions are tightly coupled; we move all three at once or none. |
+| PetaLinux's xsdb-script-FSBL-MMU bug breaks on a future PetaLinux update | Low (we own the workaround) | Low (we have the `rst -processor` patch, well-understood) | Workaround documented in PetaLinux Build Lessons. If a future PetaLinux release fixes it natively, simplify our boot recipe. |
+| Switching IP indices on JTAG between sessions ("targets 1" no longer points to ZynqMP) | Low (haven't seen it yet in this session structure, but xsdb behavior across reboots is not always deterministic) | Low (recovery is just running `targets` and picking the right index) | Document the by-name filter form as a more robust alternative once we crack the quoting. |
 
 ---
 
@@ -787,7 +1009,27 @@ reciprocity on the strong components.
 - `haifuraiya/component.xml` — modified (ASSOCIATED_BUSIF removed from aresetn parameter block)
 - Parent repo commit: "Cast PROTECTION FROM CLOCK CONFUSION + close Phase 1 with a smoke test"
 
-### Key results to remember
+### Phase 2b: PetaLinux + ADRV9002 bring-up session (this update)
+- `<MDT>/haifuraiya/petalinux/haifuraiya/project-spec/configs/config` — User layer registrations for meta-adi-core and meta-adi-xilinx
+- `<MDT>/haifuraiya/petalinux/haifuraiya/project-spec/meta-user/conf/petalinuxbsp.conf` — `KERNEL_DTB = "zynqmp-zcu102-rev10-adrv9002"`
+- `<MDT>/haifuraiya/third_party/meta-adi/` — Branch `2022_R2`, freshly cloned, pending decision on submodule-ification
+- `<MDT>/haifuraiya/third_party/hdl/` — Branch `hdl_2022_r2`, existing submodule
+- ORI Remote Labs FPGA documentation — "Working on the ZCU102 and attached ADRV9002 with PetaLinux Tools 2022.2" section replaced (verified recipe + rationale + pitfalls)
+- **Verified signature on ZCU102 dmesg:** `adrv9002 spi1.0: adrv9002-phy Rev 12.0, Firmware 0.22.30, Stream 0.7.11.0, API version: 68.13.7 successfully initialized`
+- **Boot recipe:** `petalinux-boot --jtag --prebuilt 3 --hw_server-url TCP:keroppi:3121 --after-connect "targets 1" --tcl /tmp/petalinux-boot.tcl` → hand-edit to inject `rst -processor -clear-registers` between FSBL halt and U-Boot dow → `xsdb /tmp/petalinux-boot.tcl`
+- **Key strategic decision:** Pivoted from pure-Yocto+gen-machine-conf to PetaLinux Tools 2022.2 after pure-Yocto path proved undocumented + broken for ADI reference designs in this stack era
+- Parent repo commit (pending): "Cast SUMMON ADRV9002 (level 7 spell) — PetaLinux Tools 2022.2, meta-adi 2022_R2, full RX/TX/TDD AXI enumeration, root login on JTAG-streamed Linux"
+
+### Phase 2b: Follow-on SSH access bring-up + JTAG re-boot lessons (this update)
+- `/etc/default/dropbear` on target — in-RAM edit to remove `-w` flag; pending permanent fix via bbappend or openssh migration (Action #9)
+- `/tmp/petalinux-boot-fixed.tcl` updated: includes `rst -system` on PSU target as the first action after `connect` (required for any boot after the board has been running Linux from a prior session)
+- Confirmed: `petalinux-config → Ethernet Settings` baked the static IP `10.73.1.16` into the rebuild, but with `/8` netmask (cosmetic for same-subnet ssh from mymelody; matters for cross-subnet routing)
+- **Verified:** Paul successfully SSHed into the ZCU102 from outside the immediate lab network after the dropbear `-w` removal. Phase 2b is now multi-user accessible (with the understood ephemeral state caveat until Action #9 is done).
+- **Three lessons captured in PetaLinux Build Lessons:** (a) `rst -system` is required before every JTAG re-boot, (b) `petalinux-config` Ethernet defaults to /8 netmask, (c) dropbear `-w` blocks root SSH out of the box.
+
+### Key results from Phase 1 closeout
+
+
 - Synth-stage critical path: **9.684 ns** (≈ 100 MHz closes; ~0.3 ns slack)
 - Post-route data path delay essentially preserved (DSP cascade routing is silicon-fixed)
 - Resource baseline: **1346 DSPs (53%), 116K LUTs (42%), 0 BRAMs, 93K FFs (17%)** *(channelizer only — wrapper adds 64 power_detector instances, ~256 DSPs)*
@@ -798,6 +1040,18 @@ reciprocity on the strong components.
 - **Block-design smoke test: PASS, zero warnings.** Address segment `s_axi_ctrl/reg0` auto-maps at `0x0000_0000 [4K]` on the AXI master VIP's address space. Phase 1 fully closed.
 - HD.CLK_SRC issue causes WNS=inf, 16.5 ns artifact paths, and 1.2 kW absurd power estimate (all the same root cause; not a real design issue)
 
+### Key results from Phase 2b closeout
+- ADI HDL `hdl_2022_r2` reference design build closed (~5 hours from clean clone to XSA — `make` takes time)
+- meta-adi `2022_R2` integration verified end-to-end
+- ADRV9002 driver probes successfully via SPI on spi1.0, reports valid firmware/stream/API
+- Full PL AXI infrastructure enumerated: `cf_axi_adc` (RX), `cf_axi_dds` ×2 (TX1, TX2), `cf_axi_tdd` ×2
+- Kernel: ADI fork `5.15.36-xilinx-v2022.2` boots on all four A53 cores
+- Hostname `haifuraiya`, login `root`/`analog` (default; will be hardened)
+- Network: eth0 up at 1Gbps full duplex, MAC assigned, IPv6 link-local active (IPv4 pending systemd-network port from meta-ori)
+- QSPI flash enumerated cleanly: `mt25qu512a` (128 MB) with standard 4-partition layout
+- Boot performance: ~10 min via fully-JTAG-streamed `--prebuilt 3` (acceptable for verification, slow for routine iteration → TFTP fast-path is the next infrastructure task)
+- Strategic decision: PetaLinux Tools 2022.2 is the canonical happy path for the hdl_2022_r2 / meta-adi 2022_R2 stack era; pure-Yocto-with-gen-machine-conf is the future direction but targets a later Vivado/HDL release
+
 ---
 
-*Last updated: end of Phase 1 closeout session (Task 8 block-design smoke test passes clean; 8 bugs slain total; IP-XACT v0.1 validated in a BD with zero warnings; two upstream PRs open to `OpenResearchInstitute/lowpass_ema`; smoke test re-runnable as future regression). When you come back, start at "You Are Here" — Phase 1 is done, Phase 2 (ADRV9002 + Yocto) or Friedrichshafen demo prep are next. Update statuses as items move between ⏳ / 🎯 / ✅.*
+*Last updated: end of Phase 2b closeout + follow-on SSH access session (PetaLinux Tools 2022.2 build + JTAG boot to login + ADRV9002 driver enumeration verified + multi-user SSH access confirmed; strategic pivot from pure-Yocto to PetaLinux documented; 17 PetaLinux build lessons captured; 5 Open Quests resolved, 4 new ones added; 9 Action Items defined for the immediate next sessions; "Cast SUMMON ADRV9002" + "Cast OPEN PORTAL (level 4 spell): remove dropbear's -w" pending commits to GitHub). When you come back, start at "You Are Here" — Phase 1 and Phase 2b are done, Phase 2a wraps with first sample stream verification, Friedrichshafen demo prep is now realistic. Update statuses as items move between ⏳ / 🎯 / ✅.*

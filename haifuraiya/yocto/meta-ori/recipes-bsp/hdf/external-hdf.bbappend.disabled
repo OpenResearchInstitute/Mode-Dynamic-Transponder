@@ -1,0 +1,23 @@
+# Override the stock Xilinx zcu102 reference XSA with our M2.5 ADI HDL
+# adrv9001_zcu102 reference design XSA. Replaces external-hdf's github
+# fetch with a file:// pointer to our Vivado-built artifact.
+#
+# All downstream consumers (fsbl, atf, u-boot, device-tree, etc.) read
+# from ${DEPLOY_DIR_IMAGE}/Xilinx-${MACHINE}.xsa which this override
+# now populates with our XSA — consistent boot chain.
+
+ADI_HDL_XSA ??= ""
+
+python () {
+    if not d.getVar('ADI_HDL_XSA'):
+        raise bb.parse.SkipRecipe(
+            "ADI_HDL_XSA not set. Set it in local.conf to the absolute "
+            "path of your ADI HDL adrv9001_zcu102 system_top.xsa.")
+}
+
+HDF_BASE = "file://"
+HDF_PATH = "${ADI_HDL_XSA}"
+SRC_URI = "file://${ADI_HDL_XSA}"
+BRANCH = ""
+SRCREV = ""
+BRANCHARG = ""
