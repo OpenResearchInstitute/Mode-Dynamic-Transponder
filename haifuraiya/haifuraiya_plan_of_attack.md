@@ -808,6 +808,49 @@ that wrap PetaLinux.*
 - Sentinel paths (`/PLEASE_RUN_<thing>_FIRST/...`) are better than empty strings or user-specific paths. Empty strings silently miss meta-adi at build time (very confusing); user-specific paths fail for everyone else; sentinels fail for everyone identically with instructions baked into the path itself.
 - The setup script must be idempotent. Anyone running `petalinux-config` will re-bake their local paths into the committed files. The setup script must be the natural way to "fix it again."
 - A Makefile wrapper composes well with the JTAG boot automation that will eventually exist (Action #7). The user-facing command stays `make haifuraiya-build` regardless of how many internal steps grow under it.
+- **Track the git executable bit on shell scripts deliberately.** `git update-index --chmod=+x <script>` is the recipe; verify with `git ls-files -s <script>` showing `100755`. Discovered when a fresh-cloner couldn't invoke `make haifuraiya-build` because the setup script came down without executable permission. Fixed via the explicit chmod commit; lesson captured here so it isn't rediscovered next project.
+
+### Hardware Regeneration Workflow
+
+*When RTL, IP-XACT packaging, or the block design changes, the XSA must
+be rebuilt in Vivado and re-imported into PetaLinux before the new
+hardware appears in the booted image. The Makefile has four targets that
+chain this cleanly. Documented here so the canonical path is obvious to
+anyone (including future-self) coming back after weeks away.*
+
+**The four-step regeneration chain:**
+
+```bash
+# 1. Edit RTL / IP-XACT / system_bd.tcl
+#    ... your changes ...
+
+# 2. Rebuild XSA (Vivado batch, ~5 hours)
+make haifuraiya-xsa
+
+# 3. Re-import XSA into PetaLinux project
+#    Updates project-spec/hw-description/ and HARDWARE_CHECKSUM
+make haifuraiya-import-xsa
+
+# 4. Build PetaLinux image with the new hardware
+make haifuraiya-build
+```
+
+**Why these are separate, not chained:**
+
+- **`haifuraiya-xsa` requires Vivado on PATH (~5 hour blocker).** Forcing it as a dependency of `haifuraiya-build` would make every PetaLinux iteration a half-day operation. Most PetaLinux changes (kernel config, rootfs packages, etc.) don't need a fresh XSA.
+- **`haifuraiya-import-xsa` is destructive in subtle ways.** It overwrites the cached `project-spec/hw-description/` and updates `HARDWARE_CHECKSUM` in `.petalinux/metadata`. Should be an explicit "yes I want this" step, not implicit.
+- **`haifuraiya-build` works WITHOUT Vivado** for anyone who hasn't changed hardware. The cached hw-description in `project-spec/hw-description/` is committed and self-sufficient. Verified by Paul (KB5MU)'s fresh-clone test on mymelody.
+
+**Precondition checks built into the targets:**
+
+- `haifuraiya-check-vivado` — verifies `vivado` is on PATH; if not, prints exact `source /tools/Xilinx/Vivado/2022.2/settings64.sh` instruction. Dependency of `haifuraiya-xsa`.
+- `haifuraiya-check-env` — verifies `petalinux-build` is on PATH; if not, prints exact `source ~/petalinux/2022.2/settings.sh` instruction. Dependency of `haifuraiya-build` and `haifuraiya-import-xsa`.
+
+Both checks fail fast with actionable error messages. They were added in response to Paul's fresh-eyes test, where the original Makefile silently invoked `petalinux-build` and failed cryptically when PetaLinux Tools hadn't been sourced.
+
+**Where this will evolve (Phase 3 and beyond):**
+
+The current `haifuraiya-xsa` target invokes the upstream ADI reference design `make` directly. When the Haifuraiya channelizer IP needs to be inserted into the block design (Phase 3 / 4), this target will need to grow — see Open Quest #16 for the three architectural options under consideration. The expected outcome is that the user-facing four-step recipe above stays unchanged; only the internals of `haifuraiya-xsa` evolve.
 
 ### Cross-cutting lessons
 
@@ -1023,6 +1066,16 @@ the next strategic chunk. Numbered for ordering; all are near-term.*
 
 15. **Complex `--after-connect` filter quoting.** If we need name-filter target selection (more robust to JTAG target renumbering across xsdb sessions), how do we cleanly pass `targets -set -filter {name =~ "xczu9eg*"}` through the shell-to-tcl chain? Pertinent if/when we encounter target index renumbering during routine use.
 
+16. **🐉 Inserting Haifuraiya IP into the ADI reference block design.** Phase 3 requires integrating the Haifuraiya channelizer IP (the IP-XACT package from Phase 1) into the existing ADI `adrv9001/zcu102` reference design. The current `haifuraiya-xsa` target just invokes the upstream ADI `make`; it doesn't add our IP. Three architectural options to investigate before committing to a path:
+
+    - **Option A: Patch the upstream `system_bd.tcl` in-place before invoking `make`.** Apply a sed/patch to insert Haifuraiya IP instantiation, then run Vivado batch. Simple but fragile — if upstream changes structure (e.g., on a future `hdl_2023_r2` bump), the patch breaks silently or noisily. Easy to demo, hard to maintain.
+
+    - **Option B: Custom `system_haifuraiya_bd.tcl` that wraps or extends the ADI one.** Depends on whether ADI's upstream Makefile offers a hook (environment variable, "sourced after" convention) for downstream extensions. If such a hook exists, this is the cleanest answer — we own a small file, upstream owns the rest, and bumps work without modification. Need to read the ADI Makefile and any `bd.tcl` files in `hdl/projects/adrv9001/zcu102/` to find out.
+
+    - **Option C: Custom Haifuraiya Vivado project outside the hdl submodule entirely.** Reuse ADI's IP cores via `add_repo_path $hdl_repo/library` but build a project we fully control in `haifuraiya/syn/zcu102/` (where we already have our XDC and synth/impl tcl scripts from Phase 1). Most isolation, most upfront work, most independence from upstream churn. Probably the right long-term answer if Phase 3 reveals we need to do nontrivial topology surgery on the reference design.
+
+    The decision affects how `haifuraiya-xsa` evolves. Decision criteria: (a) does upstream offer a hook for B?, (b) how much does Phase 3 need to modify topology vs just add a tap point?, (c) how stable do we expect the ADI reference design to be across hdl_2022_r2 → future revisions?. Worth ~1-2 hours of investigation early in Phase 3 before committing to a path.
+
 ---
 
 ## ⚠️ Monsters to Watch For
@@ -1141,6 +1194,19 @@ reciprocity on the strong components.
 - **Strategic insight:** The "build only works for the original author" trap is universal across PetaLinux projects. Solving it on the first commit (instead of the tenth) is the right call. Architecture is reusable for future ORI projects that wrap PetaLinux.
 - Parent repo commits: "Cast PORTAL TO ANYWHERE — fix /brown/ hardcoded paths" + "Cast WARD AGAINST CHAOS — finish portability fix and netmask bug"
 
+### Phase 2b: Paul fresh-eyes test + Vivado/XSA target chain (this update)
+- **Paul (KB5MU) clean-clone test on mymelody from `~/Documents/git/Mode-Dynamic-Transponder/`.** Two real reproducibility bugs found:
+  - `setup-petalinux.sh` was committed without git's executable bit. Required `chmod +x` before `make` could invoke. Fixed via `git update-index --chmod=+x`.
+  - `make haifuraiya-build` assumed `petalinux-build` was on PATH; failed cryptically when PetaLinux Tools settings hadn't been sourced. Fixed via new `haifuraiya-check-env` preflight target with actionable error message.
+- **Confirmed working in Paul's environment:** the portability machinery itself. `setup-petalinux.sh` correctly resolved `/home/kb5mu/Documents/git/Mode-Dynamic-Transponder/` as the repo root and rewrote all three paths (CONFIG_USER_LAYER_0/1 + HARDWARE_PATH) to point into Paul's clone. **No `/brown/` contamination of any kind.** This is the empirical proof the portability fix works for a different user in a different directory.
+- **Anticipating Phase 3:** Michelle flagged that Vivado will be required as soon as Haifuraiya is inserted into the ADI reference block design. Added four new Makefile targets to wire that path now:
+  - `haifuraiya-check-vivado` — preflight, similar shape to haifuraiya-check-env
+  - `haifuraiya-xsa` — Vivado batch build of the adrv9001/zcu102 reference XSA (~5 hour blocker)
+  - `haifuraiya-import-xsa` — `petalinux-config --silentconfig --get-hw-description=$(XSA)` to update cached hw-description and HARDWARE_CHECKSUM
+  - These are intentionally NOT chained into `haifuraiya-build` — they're explicit "yes I want this 5-hour operation" steps.
+- **Documentation added:** new "Hardware Regeneration Workflow" subsection in PetaLinux Build Lessons describing the four-step RTL-change-to-board recipe. New Open Quest #16 about how to insert Haifuraiya IP into the ADI reference block design (three options under investigation).
+- Parent repo commits: "Cast HALLOW BLADE — Paul fresh-eyes test fixes" + a follow-on commit adding the Vivado/XSA targets and Hardware Regeneration Workflow documentation.
+
 ### Key results from Phase 1 closeout
 
 
@@ -1168,4 +1234,4 @@ reciprocity on the strong components.
 
 ---
 
-*Last updated: end of Phase 2b portability + wired.network root-cause session (Makefile + setup-petalinux.sh + sentinel paths in place; `/brown/` and absolute paths eradicated from committed live files; wired.network CIDR bug traced to PetaLinux autogenerator and hand-corrected; duplicate plan-of-attack pruned; three audit passes verified clean state; 19 PetaLinux build lessons captured; portability tooling architecture documented for reuse in future ORI PetaLinux projects; 11 Action Items defined — #2 and #10 now ✅ done, #1 now concrete, #3 reframed around the wired.network bbappend; "Cast PORTAL TO ANYWHERE" + "Cast WARD AGAINST CHAOS" pushed to GitHub). When you come back, start at "You Are Here" — Phase 1 and Phase 2b are done, the clean-clone rebuild test is the natural first verification step now that portability is fixed, then Phase 2a wraps with first sample stream verification. Friedrichshafen demo prep is realistic.*
+*Last updated: end of Phase 2b Paul-fresh-eyes-test + Vivado/XSA target wiring session (portability machinery empirically verified by Paul KB5MU on mymelody from a different user's home; two real bugs caught and fixed — git executable bit on setup-petalinux.sh + missing petalinux-build preflight check; Vivado/XSA target chain added in anticipation of Phase 3 IP integration; Hardware Regeneration Workflow documented; Open Quest #16 captures the three architectural options for inserting Haifuraiya IP into the ADI reference block design; "Cast HALLOW BLADE" + Vivado-targets follow-on commits to GitHub). When you come back, start at "You Are Here" — Phase 1 and Phase 2b are done, the canonical hardware regeneration recipe is now `make haifuraiya-xsa && make haifuraiya-import-xsa && make haifuraiya-build && make haifuraiya-boot`, Phase 2a wraps with first sample stream verification, Friedrichshafen demo prep is realistic. Open Quest #16 (Haifuraiya IP insertion approach) is the key Phase 3 architectural decision to investigate early.*
