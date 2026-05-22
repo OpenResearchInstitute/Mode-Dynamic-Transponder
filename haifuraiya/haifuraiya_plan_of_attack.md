@@ -659,7 +659,30 @@ on any future ZynqMP target.*
   ```
   This restores the target tree to a clean state where `targets 1` reliably points to the ZynqMP. Bonus: `rst -system` sometimes kills hw_server — restart it on the JTAG host if so.
 
-- **`petalinux-config → Subsystem AUTO Hardware Settings → Ethernet Settings` sets IP but defaults netmask to `/8` (`255.0.0.0`).** Symptom: `ifconfig eth0` shows `inet addr:10.73.1.16  Bcast:10.255.255.255  Mask:255.0.0.0` instead of the expected `/24` (`255.255.255.0` with broadcast `10.73.1.255`). Same-subnet SSH still works (both sides treat each other as local), but cross-subnet routing is broken. **Fix in `petalinux-config`** — explicitly set `Static IP netmask: 255.255.255.0`. The menuconfig DOES expose this field; we just missed it. Even better: port systemd-networkd config from meta-ori for precise per-interface control (Action Item #3).
+- **🐉 `petalinux-config → Subsystem AUTO Hardware Settings → Ethernet Settings` writes a broken `wired.network` for systemd.** Symptom: `ifconfig eth0` on the booted target shows `inet addr:10.73.1.16  Bcast:10.255.255.255  Mask:255.0.0.0` instead of the expected `/24` (`255.255.255.0`). Same-subnet SSH still works (both sides treat each other as local), but cross-subnet routing is broken. **Initial theory was menuconfig defaults; the actual root cause is worse.** PetaLinux's autogenerator for `project-spec/configs/systemd-conf/wired.network` writes the file in a malformed shape:
+  ```
+  [Network]
+  Address=10.73.1.16       ← missing /24 CIDR suffix
+  DNS=255.255.255.0         ← the netmask is in the DNS field
+  Gateway=10.73.1.1
+  ```
+  systemd-networkd requires CIDR notation in `Address=` (per the spec — confirmed via ArchWiki and the systemd-networkd manpage); without it, the netmask defaults to `/32` and the address effectively gets a class-A `/8` from the kernel's class-routing fallback. The garbage `DNS=` line is silently ignored. **The parallel `init-ifupdown/interfaces` file is correctly formed** with proper `netmask 255.255.255.0` — only the systemd-networkd autogenerator has the bug, and PetaLinux's systemd subsystem is what actually runs on the ZCU102. **Fix:** hand-edit `project-spec/configs/systemd-conf/wired.network` to use proper CIDR + real DNS:
+  ```
+  [Network]
+  Address=10.73.1.16/24
+  Gateway=10.73.1.1
+  DNS=8.8.8.8
+  DNS=1.1.1.1
+  ```
+  Caveat: if anyone re-runs `petalinux-config → Ethernet Settings`, PetaLinux's autogenerator will overwrite this file with the malformed form again. The proper long-term fix is a bbappend that locks in the correct format (tracked as Action Item #3). This bug is shared with archinstall and some other static-IP installers (filed against archinstall in October 2024, same class of issue); it does NOT appear to be widely reported as a PetaLinux bug specifically — likely because most PetaLinux users use DHCP and never hit it.
+
+- **🐉 `petalinux-config` bakes ABSOLUTE PATHS into `project-spec/configs/config` AND `.petalinux/metadata`.** Two specific offenders:
+  - **User Layer paths.** Adding meta-adi via Yocto Settings → User Layers writes `CONFIG_USER_LAYER_0="/home/<user>/<whatever>/Mode-Dynamic-Transponder/haifuraiya/third_party/meta-adi/meta-adi-core"` (literal absolute path) into `project-spec/configs/config`. Committing this breaks for anyone cloning the repo to a different directory.
+  - **HARDWARE_PATH.** `petalinux-config --get-hw-description=<xsa-path>` writes that absolute path into `.petalinux/metadata` (which IS tracked, via explicit un-ignore in `.gitignore`). Only consulted when re-importing hardware, but still a `/home/<user>/...` reference in a committed file.
+
+  `petalinux-config` does not support relative paths, environment variables, or any token substitution — the paths it writes are literal strings. The fix we converged on for MDT: a setup script `haifuraiya/petalinux/scripts/setup-petalinux.sh` that derives the repo root from its own filesystem location and rewrites both files in place; a top-level `Makefile` that wraps it (`make haifuraiya-configure`, `make haifuraiya-build`, `make haifuraiya-revert-paths`); and **sentinel placeholder paths** (`/PLEASE_RUN_make_haifuraiya-configure_FIRST/...`) in the committed files that fail loudly with a self-explanatory error if anyone bypasses the Makefile. See the "Repository Portability" subsection below for the full architecture.
+
+- **`petalinux-config → Subsystem AUTO Hardware Settings → Ethernet Settings` ALSO defaults netmask to `/8` in menuconfig.** The netmask field exists but defaults to `255.0.0.0` instead of asking. Setting it to `255.255.255.0` makes `init-ifupdown/interfaces` correct but does NOT fix `wired.network` (see above). The menuconfig default is a minor pitfall on top of the bigger systemd-networkd bug.
 
 - **🐉 Dropbear's default `-w` flag blocks root SSH.** PetaLinux ships `/etc/default/dropbear` with `DROPBEAR_EXTRA_ARGS="-w"` (the comment in the file says "Disallow root logins by default"). Console login as root works fine; SSH as root returns "Permission denied" even with the right password. **Immediate fix on the target** (doesn't survive reboot, since rootfs reloads from JTAG initramfs each boot):
   ```bash
@@ -722,6 +745,69 @@ xsdb /tmp/boot.tcl
 # 11. Monitor serial console on the JTAG host in parallel:
 # (on JTAG host) screen /dev/zcu102_uart1 115200
 ```
+
+### Repository Portability
+
+*The PetaLinux project's committed config files contain absolute paths
+that `petalinux-config` writes. Without intervention, the repo is only
+buildable by the person who ran `petalinux-config` (because their home
+directory path is baked into the config). The MDT repo solves this with
+a setup script + Makefile + sentinel placeholder paths. Architecture
+captured here so the pattern can be repeated for future ORI projects
+that wrap PetaLinux.*
+
+**The problem (two committed files with hardcoded absolute paths):**
+
+- `haifuraiya/petalinux/haifuraiya/project-spec/configs/config` — lines `CONFIG_USER_LAYER_0` and `CONFIG_USER_LAYER_1` hold absolute paths to the meta-adi-core and meta-adi-xilinx layers.
+- `haifuraiya/petalinux/haifuraiya/.petalinux/metadata` — line `HARDWARE_PATH` holds the absolute path to the XSA used at last hardware import. This file is explicitly tracked (`!.petalinux/metadata` in `.gitignore`).
+
+**The architecture:**
+
+- **Sentinel paths in the committed files.** Instead of any specific user's paths, the committed files have placeholder paths:
+  ```
+  CONFIG_USER_LAYER_0="/PLEASE_RUN_make_haifuraiya-configure_FIRST/meta-adi-core"
+  CONFIG_USER_LAYER_1="/PLEASE_RUN_make_haifuraiya-configure_FIRST/meta-adi-xilinx"
+  HARDWARE_PATH=/PLEASE_RUN_make_haifuraiya-configure_FIRST/system_top.xsa
+  ```
+  Anyone who tries to `petalinux-build` without running setup first gets a path-doesn't-exist error that LITERALLY reads "PLEASE RUN make haifuraiya-configure FIRST". Self-curing failure mode.
+
+- **Setup script `haifuraiya/petalinux/scripts/setup-petalinux.sh`.** Resolves its own filesystem location via `${BASH_SOURCE[0]}` and derives the MDT repo root three directories up. Computes the correct absolute paths for the local clone. Rewrites both files in place via `sed -i`. Idempotent — safe to re-run after every `petalinux-config` edit (which would otherwise re-bake the user's local paths into the committed config). Includes a GNU sed precondition check at the top — fails cleanly on macOS with a message pointing at this document, since PetaLinux Tools is Linux-only.
+
+- **Top-level `Makefile` at MDT repo root.** Project-specific targets dispatch to the right places:
+  - `make haifuraiya-configure` — runs the setup script
+  - `make haifuraiya-build` — configure → `petalinux-build` → `petalinux-package --boot` → `petalinux-package --prebuilt`, then prints the SD card artifact paths
+  - `make haifuraiya-boot` — currently prints the manual JTAG boot recipe with `rst -system` + `rst -processor` edits (full automation is Action Item #7)
+  - `make haifuraiya-clean` — wipes `build/`, `images/`, `pre-built/`
+  - `make haifuraiya-revert-paths` — restores both files to sentinel form. Run before `git commit` if the workflow has ever touched `petalinux-config`.
+
+  Targets are prefixed `haifuraiya-` because the MDT repo contains two parallel projects (haifuraiya and mdt_sic) that don't share a bitstream.
+
+- **Workflow for a fresh clone (regardless of directory name):**
+  ```bash
+  git clone https://github.com/OpenResearchInstitute/Mode-Dynamic-Transponder.git
+  cd Mode-Dynamic-Transponder
+  git submodule update --init --recursive
+  make haifuraiya-build
+  ```
+  Works whether the user cloned to `/MDT/`, `/orange/`, `/the-fellowship-of-the-channelizer/`, or anywhere else.
+
+- **Workflow for someone editing the PetaLinux config:**
+  ```bash
+  cd haifuraiya/petalinux/haifuraiya
+  petalinux-config        # makes intentional edits — but ALSO re-bakes local paths
+  cd <repo root>
+  make haifuraiya-configure    # re-rewrites paths (idempotent)
+  # ... build / test ...
+  make haifuraiya-revert-paths # before commit, to restore sentinel form
+  git commit ...
+  ```
+
+**Lessons for future ORI PetaLinux projects:**
+
+- `petalinux-config` is a one-way path-baking machine. If you commit `project-spec/configs/config` and `.petalinux/metadata` as-is, your repo only works for you. Solve this on the first commit, not the tenth.
+- Sentinel paths (`/PLEASE_RUN_<thing>_FIRST/...`) are better than empty strings or user-specific paths. Empty strings silently miss meta-adi at build time (very confusing); user-specific paths fail for everyone else; sentinels fail for everyone identically with instructions baked into the path itself.
+- The setup script must be idempotent. Anyone running `petalinux-config` will re-bake their local paths into the committed files. The setup script must be the natural way to "fix it again."
+- A Makefile wrapper composes well with the JTAG boot automation that will eventually exist (Action #7). The user-facing command stays `make haifuraiya-build` regardless of how many internal steps grow under it.
 
 ### Cross-cutting lessons
 
@@ -856,11 +942,24 @@ decodes any subset of the 64 streams.
 *Things that should happen in the next session or two, before we move on to
 the next strategic chunk. Numbered for ordering; all are near-term.*
 
-1. **Clean-clone-rebuild test.** Move the current MDT working tree aside (`mv brown brown-bak` or equivalent), `git clone` the repo fresh into a clean directory, and try to reproduce tonight's success path purely from the documented procedure (Remote Labs doc + this plan). Catches "this only works because of files in my current clone" issues while the bring-up is fresh in mind. **Important precondition: commit everything first** (action #2).
+1. **Clean-clone-rebuild test (now concrete).** The portability tooling is in place; what's left is end-to-end verification on a truly fresh clone in a different directory.
+   ```bash
+   cd /tmp                          # or any directory other than /brown/, /fuschia/, etc.
+   git clone https://github.com/OpenResearchInstitute/Mode-Dynamic-Transponder.git verify-clone
+   cd verify-clone
+   git submodule update --init --recursive
+   # Verify sentinel paths are present in committed state
+   grep CONFIG_USER_LAYER_ haifuraiya/petalinux/haifuraiya/project-spec/configs/config
+   grep HARDWARE_PATH      haifuraiya/petalinux/haifuraiya/.petalinux/metadata
+   # Now build (this also tests that `make haifuraiya-configure` rewrites paths correctly)
+   make haifuraiya-build
+   # Then JTAG boot via the printed manual recipe
+   ```
+   Pass criteria: build completes, BOOT.BIN and image.ub appear in `images/linux/`, JTAG boot reaches login, ADRV9002 enumerates. Catches any remaining "this only works because of files in my current clone" issues. Action #10 (path-portability fix) and Action #2 (commit everything) are preconditions; both ✅ done.
 
-2. **Commit everything.** The PetaLinux project metadata (`project-spec/configs/config`, `project-spec/meta-user/conf/petalinuxbsp.conf`, any custom recipes we may add for systemd) and a sensible `.gitignore` to exclude build artifacts (`components/yocto/`, `images/`, `build/tmp/`, `pre-built/`, `cache/`). Consider whether meta-adi belongs as a git submodule (consistent with the existing ADI HDL submodule) for pinning to a known-good commit. Write a `petalinux/README.md` summarizing the recipe so the plan-of-attack stays strategic-not-procedural.
+2. **Commit everything. ✅ DONE.** The PetaLinux project metadata (`project-spec/configs/config`, `project-spec/meta-user/conf/petalinuxbsp.conf`, custom systemd `wired.network`) is committed. `.gitignore` excludes build artifacts (`components/yocto/`, `images/`, `build/`, `pre-built/`, `.petalinux/*` except `metadata`). meta-adi is a pinned submodule at branch `2022_R2`. Yocto-era work is archived under `haifuraiya/yocto/`. See "Repository Portability" subsection in PetaLinux Build Lessons for the portability machinery.
 
-3. **Port systemd static IP config from meta-ori into the PetaLinux project.** The `10-eth0.network` file (the only piece of meta-ori that genuinely survives the Yocto→PetaLinux transition) belongs in `project-spec/meta-user/recipes-core/systemd/`. After rebuild + reboot, verify `10.73.1.16/24` is up. **Note from tonight's session:** `petalinux-config → Subsystem AUTO Hardware Settings → Ethernet Settings` sets the IP but defaults the netmask to `255.0.0.0` (/8), not `255.255.255.0` (/24). The systemd-networkd `.network` file gives precise netmask control. Either set the netmask explicitly in petalinux-config OR use systemd-networkd — but consistency matters.
+3. **Lock in the corrected `wired.network` via bbappend (prevent re-corruption).** The current `project-spec/configs/systemd-conf/wired.network` is hand-corrected with proper CIDR notation (`Address=10.73.1.16/24`, real DNS entries). **Risk:** if anyone re-runs `petalinux-config → Subsystem AUTO Hardware Settings → Ethernet Settings`, PetaLinux's autogenerator overwrites the file with the malformed shape again (Address without CIDR, netmask shoved into DNS field — see PetaLinux Build Lessons). The proper fix is a bbappend in `project-spec/meta-user/recipes-core/systemd-conf/` that lays down the correct file unconditionally. Alternatively, port the equivalent `10-eth0.network` from meta-ori. Either way, the goal is "correct format survives a future petalinux-config touch."
 
 4. **First libiio smoke test.** From the booted target:
    ```
@@ -882,6 +981,10 @@ the next strategic chunk. Numbered for ordering; all are near-term.*
    - **Proper:** swap dropbear out for `openssh-server`, configure `sshd_config` with key-based auth, set up per-user authorized_keys for each developer who needs access. This is the correct remote-lab posture — password auth in a multi-developer environment is fragile.
 
    Until either is done, every JTAG boot requires the manual `sed` fix on the target before SSH works. Should be addressed as part of the systemd-networkd port (Action #3) since both touch project-spec/meta-user/recipes-core/.
+
+10. **Repository portability. ✅ DONE.** `petalinux-config` was writing user-specific absolute paths into committed files (`CONFIG_USER_LAYER_*` in `project-spec/configs/config`, `HARDWARE_PATH` in `.petalinux/metadata`), making the repo unbuildable for anyone cloning to a different directory. Resolved via setup script + top-level Makefile + sentinel placeholder paths. See "Repository Portability" subsection in PetaLinux Build Lessons.
+
+11. **Optional: add ARCHIVED marker to `haifuraiya/yocto/`.** The Yocto-era scripts and recipes in `haifuraiya/yocto/` (including `copy_to_keroppi.sh`, `make_boot_scr.sh`, `meta-ori/`) reference Michelle's `/brown/` lab paths and the abandoned pure-Yocto approach. Anyone following them would be doing the wrong thing. A top-level `haifuraiya/yocto/README.md` (or banner in the existing one) saying "ARCHIVED — Yocto approach abandoned in favor of PetaLinux Tools; see plan-of-attack" would prevent confusion. Low priority; not blocking anything.
 
 ---
 
@@ -1027,6 +1130,17 @@ reciprocity on the strong components.
 - **Verified:** Paul successfully SSHed into the ZCU102 from outside the immediate lab network after the dropbear `-w` removal. Phase 2b is now multi-user accessible (with the understood ephemeral state caveat until Action #9 is done).
 - **Three lessons captured in PetaLinux Build Lessons:** (a) `rst -system` is required before every JTAG re-boot, (b) `petalinux-config` Ethernet defaults to /8 netmask, (c) dropbear `-w` blocks root SSH out of the box.
 
+### Phase 2b: Repository portability + wired.network root-cause session (this update)
+- `<MDT>/Makefile` — new top-level Makefile with `haifuraiya-{configure,build,boot,clean,revert-paths}` targets; documented Linux-only, `mdt_sic` deliberately not wired up (independent project)
+- `<MDT>/haifuraiya/petalinux/scripts/setup-petalinux.sh` — new portability setup script; resolves repo root from script location, rewrites `CONFIG_USER_LAYER_0/1` and `HARDWARE_PATH` based on local clone; GNU sed precondition with clean macOS-error message; sanity checks for missing meta-adi submodule and missing config files
+- `<MDT>/haifuraiya/petalinux/haifuraiya/project-spec/configs/config` — `CONFIG_USER_LAYER_0/1` converted from `/home/abraxas3d/brown/...` to sentinel paths `/PLEASE_RUN_make_haifuraiya-configure_FIRST/...`
+- `<MDT>/haifuraiya/petalinux/haifuraiya/.petalinux/metadata` — `HARDWARE_PATH` converted to sentinel form (was previously holding `/home/abraxas3d/brown/...` to the XSA)
+- `<MDT>/haifuraiya/petalinux/haifuraiya/project-spec/configs/systemd-conf/wired.network` — hand-corrected from PetaLinux's malformed autogenerator output (`Address=10.73.1.16`, `DNS=255.255.255.0`) to spec-compliant systemd-networkd format (`Address=10.73.1.16/24`, real DNS entries). Root cause traced to PetaLinux's autogenerator, not systemd-networkd — confirmed via ArchWiki and the parallel archinstall bug.
+- `<MDT>/haifuraiya/sim/haifuraiya_plan_of_attack.md` — deleted (duplicate of canonical plan-of-attack at `haifuraiya/haifuraiya_plan_of_attack.md`)
+- Three audit rounds completed (zip upload → check → fix → re-upload pattern); final audit shows zero `/brown/`, `/Users/w5nyv/`, or `/home/abraxas3d/` references in any live tracked file
+- **Strategic insight:** The "build only works for the original author" trap is universal across PetaLinux projects. Solving it on the first commit (instead of the tenth) is the right call. Architecture is reusable for future ORI projects that wrap PetaLinux.
+- Parent repo commits: "Cast PORTAL TO ANYWHERE — fix /brown/ hardcoded paths" + "Cast WARD AGAINST CHAOS — finish portability fix and netmask bug"
+
 ### Key results from Phase 1 closeout
 
 
@@ -1054,4 +1168,4 @@ reciprocity on the strong components.
 
 ---
 
-*Last updated: end of Phase 2b closeout + follow-on SSH access session (PetaLinux Tools 2022.2 build + JTAG boot to login + ADRV9002 driver enumeration verified + multi-user SSH access confirmed; strategic pivot from pure-Yocto to PetaLinux documented; 17 PetaLinux build lessons captured; 5 Open Quests resolved, 4 new ones added; 9 Action Items defined for the immediate next sessions; "Cast SUMMON ADRV9002" + "Cast OPEN PORTAL (level 4 spell): remove dropbear's -w" pending commits to GitHub). When you come back, start at "You Are Here" — Phase 1 and Phase 2b are done, Phase 2a wraps with first sample stream verification, Friedrichshafen demo prep is now realistic. Update statuses as items move between ⏳ / 🎯 / ✅.*
+*Last updated: end of Phase 2b portability + wired.network root-cause session (Makefile + setup-petalinux.sh + sentinel paths in place; `/brown/` and absolute paths eradicated from committed live files; wired.network CIDR bug traced to PetaLinux autogenerator and hand-corrected; duplicate plan-of-attack pruned; three audit passes verified clean state; 19 PetaLinux build lessons captured; portability tooling architecture documented for reuse in future ORI PetaLinux projects; 11 Action Items defined — #2 and #10 now ✅ done, #1 now concrete, #3 reframed around the wired.network bbappend; "Cast PORTAL TO ANYWHERE" + "Cast WARD AGAINST CHAOS" pushed to GitHub). When you come back, start at "You Are Here" — Phase 1 and Phase 2b are done, the clean-clone rebuild test is the natural first verification step now that portability is fixed, then Phase 2a wraps with first sample stream verification. Friedrichshafen demo prep is realistic.*
