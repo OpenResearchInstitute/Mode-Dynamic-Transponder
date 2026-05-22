@@ -51,10 +51,17 @@ MDT_REPO="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 PETALINUX_PROJECT="${MDT_REPO}/haifuraiya/petalinux/haifuraiya"
 CONFIG_FILE="${PETALINUX_PROJECT}/project-spec/configs/config"
+METADATA_FILE="${PETALINUX_PROJECT}/.petalinux/metadata"
 
 META_ADI_BASE="${MDT_REPO}/haifuraiya/third_party/meta-adi"
 META_ADI_CORE="${META_ADI_BASE}/meta-adi-core"
 META_ADI_XILINX="${META_ADI_BASE}/meta-adi-xilinx"
+
+# The ADI reference design XSA. Produced by Vivado batch-mode build of
+# the ADI hdl submodule's adrv9001/zcu102 project. May not exist on a
+# fresh clone (the user must build Vivado first); we still rewrite the
+# path so that when they DO build, the path is correct.
+XSA_PATH="${MDT_REPO}/haifuraiya/third_party/hdl/projects/adrv9001/zcu102/adrv9001_zcu102.sdk/system_top.xsa"
 
 # ---------------------------------------------------------------------------
 # Sanity checks: fail fast with clear messages.
@@ -68,6 +75,17 @@ ERROR: PetaLinux config file not found at:
 
        Is this script being run from inside the MDT repo? The script
        expects to live at <REPO>/haifuraiya/petalinux/scripts/.
+EOF
+    exit 1
+fi
+
+if [[ ! -f "${METADATA_FILE}" ]]; then
+    cat >&2 <<EOF
+ERROR: PetaLinux metadata file not found at:
+       ${METADATA_FILE}
+
+       This file is tracked in git; its absence suggests an incomplete
+       checkout. Verify with: git status haifuraiya/petalinux/haifuraiya/
 EOF
     exit 1
 fi
@@ -104,11 +122,43 @@ sed -i \
     "${CONFIG_FILE}"
 
 # ---------------------------------------------------------------------------
+# Rewrite HARDWARE_PATH in .petalinux/metadata.
+# This file records the path to the XSA used at last hardware import; it's
+# only consulted when re-running 'petalinux-config --get-hw-description'.
+# Day-to-day builds use the cached project-spec/hw-description/ directory,
+# but if anyone updates the hdl submodule and re-imports the hardware, this
+# path needs to point to the local clone.
+# ---------------------------------------------------------------------------
+echo
+echo "==> Rewriting HARDWARE_PATH in:"
+echo "    ${METADATA_FILE}"
+echo
+echo "    HARDWARE_PATH -> ${XSA_PATH}"
+
+if [[ ! -f "${XSA_PATH}" ]]; then
+    echo
+    echo "    NOTE: The XSA file does not yet exist at this path. This is"
+    echo "          expected on a fresh clone — the XSA is produced by"
+    echo "          building the ADI hdl submodule in Vivado batch mode."
+    echo "          The HARDWARE_PATH rewrite is still applied; the file"
+    echo "          will be at this location once Vivado builds it."
+fi
+
+sed -i \
+    -e "s|^HARDWARE_PATH=.*|HARDWARE_PATH=${XSA_PATH}|" \
+    "${METADATA_FILE}"
+
+# ---------------------------------------------------------------------------
 # Verify the rewrite landed.
 # ---------------------------------------------------------------------------
 echo
-echo "==> Verification — current state of User Layer entries:"
-grep "^CONFIG_USER_LAYER_[012]=" "${CONFIG_FILE}" | sed 's/^/    /'
+echo "==> Verification — current state of rewritten entries:"
+echo
+echo "    In ${CONFIG_FILE}:"
+grep "^CONFIG_USER_LAYER_[012]=" "${CONFIG_FILE}" | sed 's/^/      /'
+echo
+echo "    In ${METADATA_FILE}:"
+grep "^HARDWARE_PATH=" "${METADATA_FILE}" | sed 's/^/      /'
 
 echo
 echo "==> Done. Next steps:"

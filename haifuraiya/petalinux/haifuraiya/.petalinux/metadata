@@ -1,6 +1,6 @@
 PETALINUX_VER=2022.2
 VALIDATE_HW_CHKSUM=1
-HARDWARE_PATH=/home/abraxas3d/brown/Mode-Dynamic-Transponder/haifuraiya/third_party/hdl/projects/adrv9001/zcu102/adrv9001_zcu102.sdk/system_top.xsa
+HARDWARE_PATH=/PLEASE_RUN_make_haifuraiya-configure_FIRST/system_top.xsa
 HDF_EXT=xsa
 HARDWARE_CHECKSUM=7a940ade468452f3061b338b62bf30fc
 YOCTO_SDK=4ade5db6317c61f6cb657b7a919dfa25

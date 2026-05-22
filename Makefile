@@ -106,13 +106,19 @@ haifuraiya-clean:
 	@echo "==> Clean. Run 'make haifuraiya-build' to rebuild from sources."
 
 haifuraiya-revert-paths:
-	@echo "==> Reverting User Layer paths to sentinel form..."
+	@echo "==> Reverting absolute paths to sentinel form..."
 	@sed -i \
 	    -e 's|^CONFIG_USER_LAYER_0=.*|CONFIG_USER_LAYER_0="/PLEASE_RUN_make_haifuraiya-configure_FIRST/meta-adi-core"|' \
 	    -e 's|^CONFIG_USER_LAYER_1=.*|CONFIG_USER_LAYER_1="/PLEASE_RUN_make_haifuraiya-configure_FIRST/meta-adi-xilinx"|' \
 	    $(HAIFURAIYA_PROJECT)/project-spec/configs/config
+	@sed -i \
+	    -e 's|^HARDWARE_PATH=.*|HARDWARE_PATH=/PLEASE_RUN_make_haifuraiya-configure_FIRST/system_top.xsa|' \
+	    $(HAIFURAIYA_PROJECT)/.petalinux/metadata
 	@echo "==> Done. Current state:"
-	@grep "^CONFIG_USER_LAYER_[01]=" $(HAIFURAIYA_PROJECT)/project-spec/configs/config | sed 's/^/    /'
+	@echo "    In project-spec/configs/config:"
+	@grep "^CONFIG_USER_LAYER_[01]=" $(HAIFURAIYA_PROJECT)/project-spec/configs/config | sed 's/^/      /'
+	@echo "    In .petalinux/metadata:"
+	@grep "^HARDWARE_PATH=" $(HAIFURAIYA_PROJECT)/.petalinux/metadata | sed 's/^/      /'
 	@echo
-	@echo "    Safe to 'git commit' the config now."
+	@echo "    Safe to 'git commit' the config and metadata now."
 	@echo "    Re-run 'make haifuraiya-configure' before next build."
