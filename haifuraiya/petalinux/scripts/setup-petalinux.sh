@@ -25,6 +25,23 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
+# Precondition: this script requires GNU sed (Linux).
+# PetaLinux Tools is Linux-only; the build host must be Linux. macOS users
+# verifying the repo can read this script but should not try to run it.
+# ---------------------------------------------------------------------------
+if ! sed --version 2>/dev/null | grep -q "GNU"; then
+    cat >&2 <<EOF
+ERROR: This script requires GNU sed (Linux).
+
+       PetaLinux Tools is Linux-only. You should be running this on a
+       Linux build host (e.g., Ubuntu 20.04 or 22.04), not on macOS or
+       another BSD-flavored system. See haifuraiya/haifuraiya_plan_of_attack.md
+       for the supported environment.
+EOF
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # Locate this script and derive the MDT repo root.
 # Script lives at: <REPO>/haifuraiya/petalinux/scripts/setup-petalinux.sh
 # Repo root is three directories up.

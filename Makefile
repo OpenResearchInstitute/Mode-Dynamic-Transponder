@@ -1,5 +1,9 @@
 # Mode-Dynamic-Transponder (MDT) — Top-level Makefile
 #
+# REQUIRES: Linux. PetaLinux Tools 2022.2 is Linux-only (officially Ubuntu
+# 18.04/20.04; works in practice on 22.04 with /bin/sh = /bin/bash). Scripts
+# use GNU sed and other Linux-specific tools. Do NOT run on macOS.
+#
 # Dispatches to subproject builds. The MDT repo contains two separate
 # projects that do NOT integrate at the bitstream level:
 #
@@ -20,19 +24,22 @@ HAIFURAIYA_PROJECT := $(REPO_ROOT)/haifuraiya/petalinux/haifuraiya
 HAIFURAIYA_SCRIPTS := $(REPO_ROOT)/haifuraiya/petalinux/scripts
 HAIFURAIYA_IMAGES := $(HAIFURAIYA_PROJECT)/images/linux
 
-.PHONY: help haifuraiya-configure haifuraiya-build haifuraiya-boot haifuraiya-clean
+.PHONY: help haifuraiya-configure haifuraiya-build haifuraiya-boot haifuraiya-clean haifuraiya-revert-paths
 
 help:
 	@echo "Mode-Dynamic-Transponder — top-level Makefile"
 	@echo
 	@echo "Haifuraiya (ZCU102 + ADRV9002 channelizer):"
-	@echo "  make haifuraiya-configure  Rewrite User Layer paths for this clone."
-	@echo "                             Run this once after 'git clone' and"
-	@echo "                             after every petalinux-config edit."
-	@echo "  make haifuraiya-build      Configure + petalinux-build + package."
-	@echo "  make haifuraiya-boot       Configure + JTAG boot to login (TBD;"
-	@echo "                             currently prints the manual recipe)."
-	@echo "  make haifuraiya-clean      Wipe build/ and images/ for a fresh start."
+	@echo "  make haifuraiya-configure     Rewrite User Layer paths for this clone."
+	@echo "                                Run this once after 'git clone' and"
+	@echo "                                after every petalinux-config edit."
+	@echo "  make haifuraiya-build         Configure + petalinux-build + package."
+	@echo "  make haifuraiya-boot          Configure + JTAG boot to login (TBD;"
+	@echo "                                currently prints the manual recipe)."
+	@echo "  make haifuraiya-clean         Wipe build/ and images/ for a fresh start."
+	@echo "  make haifuraiya-revert-paths  Reset User Layer paths to sentinel form."
+	@echo "                                Run before 'git commit' if you've ever"
+	@echo "                                run haifuraiya-configure."
 	@echo
 	@echo "MDT-SIC (iCE40 + STM32 SIC receiver):"
 	@echo "  Targets not wired up. See mdt_sic/README.md for the Radiant +"
@@ -97,3 +104,15 @@ haifuraiya-clean:
 	rm -rf $(HAIFURAIYA_PROJECT)/images
 	rm -rf $(HAIFURAIYA_PROJECT)/pre-built
 	@echo "==> Clean. Run 'make haifuraiya-build' to rebuild from sources."
+
+haifuraiya-revert-paths:
+	@echo "==> Reverting User Layer paths to sentinel form..."
+	@sed -i \
+	    -e 's|^CONFIG_USER_LAYER_0=.*|CONFIG_USER_LAYER_0="/PLEASE_RUN_make_haifuraiya-configure_FIRST/meta-adi-core"|' \
+	    -e 's|^CONFIG_USER_LAYER_1=.*|CONFIG_USER_LAYER_1="/PLEASE_RUN_make_haifuraiya-configure_FIRST/meta-adi-xilinx"|' \
+	    $(HAIFURAIYA_PROJECT)/project-spec/configs/config
+	@echo "==> Done. Current state:"
+	@grep "^CONFIG_USER_LAYER_[01]=" $(HAIFURAIYA_PROJECT)/project-spec/configs/config | sed 's/^/    /'
+	@echo
+	@echo "    Safe to 'git commit' the config now."
+	@echo "    Re-run 'make haifuraiya-configure' before next build."

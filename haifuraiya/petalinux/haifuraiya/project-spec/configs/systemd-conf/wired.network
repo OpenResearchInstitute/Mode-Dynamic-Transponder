@@ -5,6 +5,7 @@ KernelCommandLine=!nfsroot
 KernelCommandLine=!ip
 
 [Network]
-Address=10.73.1.16
-DNS=255.255.255.0
+Address=10.73.1.16/24
 Gateway=10.73.1.1
+DNS=8.8.8.8
+DNS=1.1.1.1
