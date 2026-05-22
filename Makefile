@@ -24,7 +24,12 @@ HAIFURAIYA_PROJECT := $(REPO_ROOT)/haifuraiya/petalinux/haifuraiya
 HAIFURAIYA_SCRIPTS := $(REPO_ROOT)/haifuraiya/petalinux/scripts
 HAIFURAIYA_IMAGES := $(HAIFURAIYA_PROJECT)/images/linux
 
-.PHONY: help haifuraiya-configure haifuraiya-build haifuraiya-boot haifuraiya-clean haifuraiya-revert-paths
+# ADI HDL reference design — produces the XSA via 'make' in Vivado batch mode.
+HAIFURAIYA_ADI_HDL := $(REPO_ROOT)/haifuraiya/third_party/hdl
+HAIFURAIYA_XSA_PROJECT := $(HAIFURAIYA_ADI_HDL)/projects/adrv9001/zcu102
+HAIFURAIYA_XSA := $(HAIFURAIYA_XSA_PROJECT)/adrv9001_zcu102.sdk/system_top.xsa
+
+.PHONY: help haifuraiya-configure haifuraiya-build haifuraiya-boot haifuraiya-clean haifuraiya-revert-paths haifuraiya-check-env haifuraiya-check-vivado haifuraiya-xsa haifuraiya-import-xsa
 
 help:
 	@echo "Mode-Dynamic-Transponder — top-level Makefile"
@@ -40,6 +45,19 @@ help:
 	@echo "  make haifuraiya-revert-paths  Reset User Layer paths to sentinel form."
 	@echo "                                Run before 'git commit' if you've ever"
 	@echo "                                run haifuraiya-configure."
+	@echo "  make haifuraiya-check-env     Verify that PetaLinux Tools is sourced"
+	@echo "                                and 'petalinux-build' is on PATH."
+	@echo
+	@echo "Hardware regeneration (only when RTL/IP-XACT/block-design changes):"
+	@echo "  make haifuraiya-check-vivado  Verify that Vivado 2022.2 is sourced."
+	@echo "  make haifuraiya-xsa           Vivado batch build of the adrv9001/zcu102"
+	@echo "                                reference design. ~5 hours. Produces"
+	@echo "                                system_top.xsa under the hdl submodule."
+	@echo "  make haifuraiya-import-xsa    Re-import the freshly-built XSA into the"
+	@echo "                                PetaLinux project. Updates hw-description"
+	@echo "                                cache and HARDWARE_CHECKSUM. Run BEFORE"
+	@echo "                                'make haifuraiya-build' if you've rebuilt"
+	@echo "                                the XSA."
 	@echo
 	@echo "MDT-SIC (iCE40 + STM32 SIC receiver):"
 	@echo "  Targets not wired up. See mdt_sic/README.md for the Radiant +"
@@ -53,7 +71,26 @@ help:
 haifuraiya-configure:
 	@$(HAIFURAIYA_SCRIPTS)/setup-petalinux.sh
 
-haifuraiya-build: haifuraiya-configure
+haifuraiya-check-env:
+	@command -v petalinux-build >/dev/null 2>&1 || { \
+	    echo "ERROR: 'petalinux-build' is not on PATH."; \
+	    echo ""; \
+	    echo "       PetaLinux Tools 2022.2 must be installed AND its environment"; \
+	    echo "       must be sourced in your current shell."; \
+	    echo ""; \
+	    echo "       If PetaLinux is installed at ~/petalinux/2022.2/, run:"; \
+	    echo "         source ~/petalinux/2022.2/settings.sh"; \
+	    echo ""; \
+	    echo "       Then retry 'make haifuraiya-build'."; \
+	    echo ""; \
+	    echo "       If PetaLinux is not installed, see"; \
+	    echo "       haifuraiya/haifuraiya_plan_of_attack.md (PetaLinux Build"; \
+	    echo "       Lessons → Workflow recipe) for installation instructions."; \
+	    exit 1; \
+	}
+	@echo "==> PetaLinux Tools detected on PATH: $$(command -v petalinux-build)"
+
+haifuraiya-build: haifuraiya-check-env haifuraiya-configure
 	cd $(HAIFURAIYA_PROJECT) && petalinux-build
 	cd $(HAIFURAIYA_PROJECT) && petalinux-package --boot --fsbl --fpga --u-boot --force
 	cd $(HAIFURAIYA_PROJECT) && petalinux-package --prebuilt --force
@@ -122,3 +159,69 @@ haifuraiya-revert-paths:
 	@echo
 	@echo "    Safe to 'git commit' the config and metadata now."
 	@echo "    Re-run 'make haifuraiya-configure' before next build."
+
+# ---------------------------------------------------------------------------
+# Vivado / XSA targets (only used when RTL or block-design changes)
+# ---------------------------------------------------------------------------
+
+haifuraiya-check-vivado:
+	@command -v vivado >/dev/null 2>&1 || { \
+	    echo "ERROR: 'vivado' is not on PATH."; \
+	    echo ""; \
+	    echo "       Vivado 2022.2 must be installed AND its environment must"; \
+	    echo "       be sourced in your current shell."; \
+	    echo ""; \
+	    echo "       If Vivado is installed at /tools/Xilinx/Vivado/2022.2/, run:"; \
+	    echo "         source /tools/Xilinx/Vivado/2022.2/settings64.sh"; \
+	    echo ""; \
+	    echo "       Then retry your make target."; \
+	    echo ""; \
+	    echo "       Note: Vivado is ONLY needed when rebuilding the XSA"; \
+	    echo "       (e.g., after modifying RTL, IP-XACT, or the block design)."; \
+	    echo "       'make haifuraiya-build' does NOT require Vivado — the"; \
+	    echo "       cached hardware description is already in the repo."; \
+	    exit 1; \
+	}
+	@echo "==> Vivado detected on PATH: $$(command -v vivado)"
+
+haifuraiya-xsa: haifuraiya-check-vivado
+	@echo "==> Building Vivado XSA for adrv9001/zcu102 reference design..."
+	@echo "    Source:   $(HAIFURAIYA_XSA_PROJECT)"
+	@echo "    Output:   $(HAIFURAIYA_XSA)"
+	@echo "    Expected duration: ~5 hours (Vivado batch synthesis + impl)."
+	@echo
+	cd $(HAIFURAIYA_XSA_PROJECT) && $(MAKE)
+	@test -f $(HAIFURAIYA_XSA) || { \
+	    echo ""; \
+	    echo "ERROR: XSA was not produced at expected path:"; \
+	    echo "         $(HAIFURAIYA_XSA)"; \
+	    echo "       Check the Vivado batch log for synthesis/implementation"; \
+	    echo "       errors. Look in $(HAIFURAIYA_XSA_PROJECT) for *.log files."; \
+	    exit 1; \
+	}
+	@echo
+	@echo "==> XSA built successfully."
+	@echo "    Path: $(HAIFURAIYA_XSA)"
+	@echo
+	@echo "==> Next step: run 'make haifuraiya-import-xsa' to update the"
+	@echo "    PetaLinux project's hardware description and checksum."
+
+haifuraiya-import-xsa: haifuraiya-check-env
+	@test -f $(HAIFURAIYA_XSA) || { \
+	    echo "ERROR: XSA not found at expected path:"; \
+	    echo "         $(HAIFURAIYA_XSA)"; \
+	    echo "       Run 'make haifuraiya-xsa' first to build the XSA."; \
+	    exit 1; \
+	}
+	@echo "==> Re-importing XSA into PetaLinux project..."
+	@echo "    XSA:     $(HAIFURAIYA_XSA)"
+	@echo "    Project: $(HAIFURAIYA_PROJECT)"
+	@echo
+	cd $(HAIFURAIYA_PROJECT) && petalinux-config --silentconfig --get-hw-description=$(HAIFURAIYA_XSA)
+	@echo
+	@echo "==> XSA imported successfully."
+	@echo "    Updated: $(HAIFURAIYA_PROJECT)/project-spec/hw-description/"
+	@echo "    Updated: $(HAIFURAIYA_PROJECT)/.petalinux/metadata (HARDWARE_CHECKSUM)"
+	@echo
+	@echo "==> Next step: run 'make haifuraiya-build' to rebuild the PetaLinux"
+	@echo "    image against the new hardware description."
