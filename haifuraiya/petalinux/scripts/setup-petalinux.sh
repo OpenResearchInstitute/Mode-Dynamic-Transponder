@@ -137,11 +137,18 @@ echo "    HARDWARE_PATH -> ${XSA_PATH}"
 
 if [[ ! -f "${XSA_PATH}" ]]; then
     echo
-    echo "    NOTE: The XSA file does not yet exist at this path. This is"
-    echo "          expected on a fresh clone — the XSA is produced by"
-    echo "          building the ADI hdl submodule in Vivado batch mode."
-    echo "          The HARDWARE_PATH rewrite is still applied; the file"
-    echo "          will be at this location once Vivado builds it."
+    echo "    NOTE: The XSA file does not exist at this path. This is normal"
+    echo "          and IS NOT AN ERROR for the standard build workflow."
+    echo
+    echo "          The XSA is only consulted when REBUILDING HARDWARE via"
+    echo "          'make haifuraiya-xsa' + 'make haifuraiya-import-xsa'."
+    echo "          For normal PetaLinux builds ('make haifuraiya-build'),"
+    echo "          the cached hw-description in project-spec/hw-description/"
+    echo "          is used, NOT this XSA path."
+    echo
+    echo "          The HARDWARE_PATH rewrite is still applied so that if you"
+    echo "          later need to rebuild the bitstream, the path will be"
+    echo "          correct for your clone."
 fi
 
 sed -i \
@@ -161,12 +168,5 @@ echo "    In ${METADATA_FILE}:"
 grep "^HARDWARE_PATH=" "${METADATA_FILE}" | sed 's/^/      /'
 
 echo
-echo "==> Done. Next steps:"
-echo
-echo "    Build the Haifuraiya PetaLinux image:"
-echo "      cd ${MDT_REPO}"
-echo "      make haifuraiya-build"
-echo
-echo "    (Or build manually:)"
-echo "      cd ${PETALINUX_PROJECT}"
-echo "      petalinux-build"
+echo "==> Configure done. (This step is a prerequisite for haifuraiya-build,"
+echo "    haifuraiya-boot, haifuraiya-import-xsa, and haifuraiya-update.)"

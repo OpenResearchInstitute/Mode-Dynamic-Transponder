@@ -29,7 +29,7 @@ HAIFURAIYA_ADI_HDL := $(REPO_ROOT)/haifuraiya/third_party/hdl
 HAIFURAIYA_XSA_PROJECT := $(HAIFURAIYA_ADI_HDL)/projects/adrv9001/zcu102
 HAIFURAIYA_XSA := $(HAIFURAIYA_XSA_PROJECT)/adrv9001_zcu102.sdk/system_top.xsa
 
-.PHONY: help haifuraiya-configure haifuraiya-build haifuraiya-boot haifuraiya-clean haifuraiya-revert-paths haifuraiya-check-env haifuraiya-check-vivado haifuraiya-xsa haifuraiya-import-xsa
+.PHONY: help haifuraiya-configure haifuraiya-build haifuraiya-boot haifuraiya-clean haifuraiya-revert-paths haifuraiya-check-env haifuraiya-check-vivado haifuraiya-xsa haifuraiya-import-xsa haifuraiya-update
 
 help:
 	@echo "Mode-Dynamic-Transponder — top-level Makefile"
@@ -39,14 +39,18 @@ help:
 	@echo "                                Run this once after 'git clone' and"
 	@echo "                                after every petalinux-config edit."
 	@echo "  make haifuraiya-build         Configure + petalinux-build + package."
-	@echo "  make haifuraiya-boot          Configure + JTAG boot to login (TBD;"
-	@echo "                                currently prints the manual recipe)."
+	@echo "  make haifuraiya-boot          Print the manual JTAG boot recipe."
+	@echo "                                Boot itself is not yet automated; this"
+	@echo "                                target shows the steps to run by hand."
 	@echo "  make haifuraiya-clean         Wipe build/ and images/ for a fresh start."
 	@echo "  make haifuraiya-revert-paths  Reset User Layer paths to sentinel form."
 	@echo "                                Run before 'git commit' if you've ever"
 	@echo "                                run haifuraiya-configure."
 	@echo "  make haifuraiya-check-env     Verify that PetaLinux Tools is sourced"
 	@echo "                                and 'petalinux-build' is on PATH."
+	@echo "  make haifuraiya-update        Safely sync with origin/main after running"
+	@echo "                                haifuraiya-configure (revert working tree,"
+	@echo "                                git pull, re-configure for local clone)."
 	@echo
 	@echo "Hardware regeneration (only when RTL/IP-XACT/block-design changes):"
 	@echo "  make haifuraiya-check-vivado  Verify that Vivado 2022.2 is sourced."
@@ -108,9 +112,8 @@ haifuraiya-build: haifuraiya-check-env haifuraiya-configure
 	@echo "      make haifuraiya-boot     # JTAG boot via keroppi"
 
 haifuraiya-boot: haifuraiya-configure
-	@echo "==> JTAG boot script not yet automated (TBD)."
-	@echo
-	@echo "    Manual recipe for now:"
+	@echo "==> Printing manual JTAG boot recipe (target does NOT auto-boot yet)."
+	@echo "    Follow the steps below to boot the ZCU102 via JTAG over keroppi:"
 	@echo
 	@echo "    cd $(HAIFURAIYA_PROJECT)"
 	@echo "    petalinux-boot --jtag --prebuilt 3 \\"
@@ -159,6 +162,25 @@ haifuraiya-revert-paths:
 	@echo
 	@echo "    Safe to 'git commit' the config and metadata now."
 	@echo "    Re-run 'make haifuraiya-configure' before next build."
+
+haifuraiya-update:
+	@echo "==> Safely syncing with origin (revert -> pull -> reconfigure)..."
+	@echo
+	@echo "==> Step 1/3: Reverting working tree paths to sentinel form so 'git pull' is clean..."
+	@$(MAKE) --no-print-directory haifuraiya-revert-paths
+	@echo
+	@echo "==> Step 2/3: Pulling latest from origin..."
+	@git pull
+	@echo
+	@echo "==> Step 3/3: Re-applying local clone paths via setup-petalinux.sh..."
+	@$(MAKE) --no-print-directory haifuraiya-configure
+	@echo
+	@echo "==> Done. Working tree is up to date with origin AND configured for"
+	@echo "    your local clone. Ready to 'make haifuraiya-build'."
+	@echo
+	@echo "    Note: if 'git pull' reported any conflicts above (in files OTHER"
+	@echo "    than config/metadata), those are unrelated local edits you have."
+	@echo "    Resolve them manually before re-running haifuraiya-update."
 
 # ---------------------------------------------------------------------------
 # Vivado / XSA targets (only used when RTL or block-design changes)
