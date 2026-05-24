@@ -39,9 +39,9 @@ help:
 	@echo "                                Run this once after 'git clone' and"
 	@echo "                                after every petalinux-config edit."
 	@echo "  make haifuraiya-build         Configure + petalinux-build + package."
-	@echo "  make haifuraiya-boot          Print the manual JTAG boot recipe."
-	@echo "                                Boot itself is not yet automated; this"
-	@echo "                                target shows the steps to run by hand."
+	@echo "  make haifuraiya-boot          Boot ZCU102 via JTAG over keroppi"
+	@echo "                                (petalinux-boot --jtag --prebuilt 3)."
+	@echo "                                PREREQUISITE: power-cycle the board first.
 	@echo "  make haifuraiya-clean         Wipe build/ and images/ for a fresh start."
 	@echo "  make haifuraiya-revert-paths  Reset User Layer paths to sentinel form."
 	@echo "                                Run before 'git commit' if you've ever"
@@ -119,7 +119,7 @@ haifuraiya-boot:
 	@echo "    Monitor serial console concurrently (on keroppi):"
 	@echo "      ssh keroppi 'screen /dev/zcu102_uart1 115200'"
 	@echo ""
-	cd $(HAIFURAIYA_PETALINUX_PROJECT) && \
+	cd $(HAIFURAIYA_PROJECT) && \
 	petalinux-boot --jtag --prebuilt 3 \
 	    --hw_server-url TCP:keroppi:3121 \
 	    --after-connect 'targets 1'
