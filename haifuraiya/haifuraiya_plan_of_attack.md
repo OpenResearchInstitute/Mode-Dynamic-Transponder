@@ -11,7 +11,7 @@ Quick orientation when you come back to this doc weeks later:
 
 | Status | Item | Notes |
 |:-:|---|---|
-| ✅ | Haifuraiya channelizer RTL | Closes 100 MHz on ZCU102, route clean, bit-true tests pass |
+| ✅ | Haifuraiya channelizer RTL | Closes 100 MHz on ZCU102 standalone. Route clean, bit-true tests pass. |
 | ✅ | **Phase 1 AXI-Stream + AXI-Lite wrapper** | **10/10 testbench PASS. DC → ch0 (639M power) and tone bin 32 → ch32 (266M power) with clean inter-test reset and bounded EMA arithmetic. 8 bugs found and fixed during bring-up (see Bug Hunt section).** |
 | ✅ | **Phase 1 IP-XACT packaging** | **`openresearch.institute:ip:haifuraiya_channelizer_axi:0.1` published to local IP catalog. Integrity check passed. 3 AXI interfaces, 72-register memory map, 2 user-tunable generics. Visible in Vivado IP Catalog as "Haifuraiya Channelizer (AXI)".** |
 | ✅ | **Phase 1 Task 8 block-design smoke test** | **BD with AXI/AXIS/clock/reset VIPs validates without warnings. 72-register memory map auto-maps at 0x0000_0000 [4K]. Reusable smoke-test script at `bd/smoke_test/`. PHASE 1 IS CLOSED.** |
@@ -19,17 +19,24 @@ Quick orientation when you come back to this doc weeks later:
 | ✅ | OPV demodulator RTL | `pluto_msk`, working on LibreSDR; would need 64× or time-shared |
 | ✅ | OPV demodulator software | `opv-cxx-demod`, real-time on Pluto's A9 |
 | ⏳ | lowpass_ema upstream PRs | **TWO open PRs** to `OpenResearchInstitute/lowpass_ema`: `fix/data-ena-gate` (multiplexed-stream gating) and `fix/sum-saturation` (PROD_W-range clamping). Local builds use `ori/integration` branch until both merge. |
+| ✅ | **power_detector width-mismatch fix** | **Upstream fix pushed to `OpenResearchInstitute/power_detector` main: `lowpass_ema` instantiations now pass full width generics so `MULT_DATA_SHIFT` doesn't go negative when power_detector's POWER_WIDTH exceeds lowpass_ema's default DATA_W ≤ 26. Parent repo submodule pointer bumped.** |
 | ✅ | **Phase 2b: PetaLinux on ZCU102 PS** | **PetaLinux Tools 2022.2 build, JTAG boot to login prompt, ADRV9002 driver enumeration confirmed (`adrv9002 spi1.0: ... Firmware 0.22.30, Stream 0.7.11.0, API version: 68.13.7 successfully initialized`). All four AXI infrastructure cores (RX ADC, 2× TX DDS, 2× TDD) come up clean.** |
-| ✅ | **Phase 2a: ADRV9002 + ZCU102 board** | **ADI HDL `hdl_2022_r2` reference design build closed, meta-adi 2022_R2 integration verified, ADRV9002 enumerates and reports valid firmware/stream/API. Sample stream verification (next-tier of 2a) is the immediate next step.** |
-| 🎯 | **Next session focus** | **(a) Clean-clone-rebuild test + commit everything (catches reproducibility issues while details are fresh); (b) First captured sample stream from ADRV9002 via libiio (gate from "Linux works" to "SDR is actually accessible"); (c) Friedrichshafen demo prep is now realistic.** |
-| ⏳ | Sample stream verified through libiio | Driver up, but no `iio_readdev` test yet |
+| ✅ | **Phase 2a: ADRV9002 + ZCU102 board** | **ADI HDL `hdl_2022_r2` reference design build closed, meta-adi 2022_R2 integration verified, ADRV9002 enumerates and reports valid firmware/stream/API.** |
+| ✅ | **Phase 3: Channelizer integrated into ZCU102 build** | **`system_bd.tcl` Phase A+B overrides splice channelizer_rx1 + axis_iq_wrapper_rx1 + CDC FIFO into RX1 datapath; RX2/TX1/TX2 preserved as ADI baseline. Build 12 produces a working bitstream + XSA (with -188ps WNS on FIR MAC chain → `system_top_bad_timing.xsa`; works fine at room temp on real silicon, real fix is pipeline regs). PetaLinux boots with channelizer AXI-Lite responding at 0x84A70000.** |
+| ✅ | **meta-ori orphan layer fix** | **Layer registered as `CONFIG_USER_LAYER_2`, debug-tweaks enabled, openssh replaces dropbear (via `rootfs_config`), coreutils added for `timeout` et al. SSH from external host verified. 96GB stale `/home/abraxas3d/yocto/` from the abandoned pure-Yocto experiment was deleted during this fix (it had been silently masking our in-tree bbappend edits via bitbake's BBFILE_COLLECTIONS deduplication).** |
+| ✅ | **Reproducibility validated** | **Fresh `green/` clone built and booted end-to-end without manual intervention beyond power-cycling the ZCU102. One Makefile bug found (`haifuraiya-boot` referenced undefined `HAIFURAIYA_PETALINUX_PROJECT`) and fixed. The "must manually edit `/tmp/boot.tcl`" dance proved vestigial — PetaLinux's unmodified auto-generated boot.tcl works when the board is power-cycled first.** |
+| ✅ | **Documentation set landed** | **Three subproject READMEs: top-level (slimmed to overview + polyphase intro + getting-started pointers), `mdt_sic/README.md` (extracted from old top-level), `haifuraiya/README.md` (Vivado + PetaLinux build/deploy guide), `docs/README.md` (notebook environment + spotting guide). Cross-references all resolve.** |
+| ⏳ | Sample stream verified through libiio | Driver up, IIO devices enumerate, DMA accepts buffer requests. `iio_readdev` blocks because the radio is in standby (sync_start_enable=disarm, initial_calibrations=off). Requires ADRV9002 profile load + calibration + arm — standard ADI workflow, not yet automated for haifuraiya. |
+| ⏳ | Vivado integrated-build timing closure | -188ps WNS on FIR MAC chain in `fir_branch_parallel.vhd` (10 chained DSP slices, 35 logic levels). Real fix is a pipeline register stage between DSP slices; cheap experiment is `Performance_ExtraTimingOpt` impl strategy. Until then, rename `system_top_bad_timing.xsa` → `system_top.xsa` after the Vivado build. |
 | ⏳ | Yocto Linux on ZCU102 PS | **Superseded by PetaLinux Tools 2022.2** — strategic shift documented in Phase 2. AMD has deprecated PetaLinux for 2024.1+ but it's the canonical happy path for the hdl_2022_r2 stack era. |
+| ⏳ | Phase 5+: production credentials | meta-adi-xilinx hardcodes root password `analog`. Plan: override via meta-ori bbappend with authorized_keys + `PermitRootLogin without-password`, disable debug-tweaks. ADI's own README at `third_party/meta-adi/meta-adi-xilinx/README.md:146` documents the override mechanism. |
+| 🎯 | **Next session focus** | **(a) ADRV9002 profile load + initial calibration + sync_start_enable arm — gate from "Linux works" to "samples actually flow through the channelizer". (b) FIR MAC pipeline regs to close timing (cheap impl-strategy attempt first). (c) Friedrichshafen demo prep — Python MQTT publisher + Katadono spectrum display for the 64-channel output; channel-selection AXI register identification.** |
 | ❓ | HD.CLK_SRC OOC clock prop | Unresolved; cosmetic for now |
 
 If you only have 5 minutes when returning to this doc, read this section,
-then jump to **Phase 2** (now mostly done — see what's left for full 2a closure)
-and **Open Quests** (decisions you owe yourself).
-**Phase 1 is done. Phase 2b is done. Phase 2a is partially done: chip enumerates, sample stream verification is next.**
+then jump to **Phase 3** (channelizer integration, just closed) and
+**Open Quests** (decisions you owe yourself).
+**Phase 1 done. Phase 2a done. Phase 2b done. Phase 3 done (with one timing item open). Phase 4 ground next: get samples flowing through the channelizer, close integrated-build timing, prep the Friedrichshafen demo.**
 
 ---
 
