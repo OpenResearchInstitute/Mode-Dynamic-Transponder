@@ -607,7 +607,7 @@ on any future ZynqMP target.*
 
 - **Cross-machine build + JTAG is a clean architecture.** `petalinux-boot --jtag --hw_server-url TCP:<jtag-host>:3121` lets xsdb on the build host stream binaries through hw_server on the JTAG host to the board. No file-copy step between machines. The old Yocto-era `copy_to_keroppi.sh` and TFTP-orchestration scripts are obsolete and retired.
 
-- **`--tcl` flag to dump the boot script.** `petalinux-boot --jtag ... --tcl /tmp/boot.tcl` generates the xsdb sequence *without running it*. Inspect it, edit it, run via `xsdb /tmp/boot.tcl`. Indispensable when the default sequence has a bug for your hardware combination.
+- **`--tcl` flag to dump the boot script.** `petalinux-boot --jtag ... --tcl /tmp/boot.tcl` generates the xsdb sequence *without running it*. Inspect it, run via `xsdb /tmp/boot.tcl`. Indispensable when the default sequence has a bug for your hardware combination.
 
 - **`--after-connect "<xsdb command>"` flag** is the documented way to inject xsdb commands right after the `connect` step. Useful for JTAG target disambiguation. The bottom of `petalinux-boot --jtag --help` shows the full flag list; the summary `--help` is incomplete.
 
@@ -733,13 +733,6 @@ petalinux-package --prebuilt --force
 # 10. JTAG boot: generate, edit, run
 petalinux-boot --jtag --prebuilt 3 --hw_server-url TCP:<jtag-host>:3121 \
                --after-connect "targets 1" --tcl /tmp/boot.tcl
-# Edit /tmp/boot.tcl to:
-#   (a) Insert `targets -set -filter {name =~ "*PSU*"}; rst -system; after 1000` immediately after `connect`
-#       REQUIRED if the board has been running Linux from a prior boot; xsdb target tree drift will
-#       otherwise produce "Multiple FPGA devices found" or "bitstream is not compatible" errors.
-#   (b) Insert `rst -processor -clear-registers` between `psu_ps_pl_reset_config` and `dow u-boot.elf`
-#       This fixes the MMU-on-after-FSBL bug documented above.
-# Then:
 xsdb /tmp/boot.tcl
 
 # 11. Monitor serial console on the JTAG host in parallel:
@@ -1172,7 +1165,7 @@ reciprocity on the strong components.
 - `<MDT>/haifuraiya/third_party/hdl/` — Branch `hdl_2022_r2`, existing submodule
 - ORI Remote Labs FPGA documentation — "Working on the ZCU102 and attached ADRV9002 with PetaLinux Tools 2022.2" section replaced (verified recipe + rationale + pitfalls)
 - **Verified signature on ZCU102 dmesg:** `adrv9002 spi1.0: adrv9002-phy Rev 12.0, Firmware 0.22.30, Stream 0.7.11.0, API version: 68.13.7 successfully initialized`
-- **Boot recipe:** `petalinux-boot --jtag --prebuilt 3 --hw_server-url TCP:keroppi:3121 --after-connect "targets 1" --tcl /tmp/petalinux-boot.tcl` → hand-edit to inject `rst -processor -clear-registers` between FSBL halt and U-Boot dow → `xsdb /tmp/petalinux-boot.tcl`
+- **Boot recipe:** `petalinux-boot --jtag --prebuilt 3 --hw_server-url TCP:keroppi:3121 --after-connect "targets 1" --tcl /tmp/petalinux-boot.tcl`
 - **Key strategic decision:** Pivoted from pure-Yocto+gen-machine-conf to PetaLinux Tools 2022.2 after pure-Yocto path proved undocumented + broken for ADI reference designs in this stack era
 - Parent repo commit (pending): "Cast SUMMON ADRV9002 (level 7 spell) — PetaLinux Tools 2022.2, meta-adi 2022_R2, full RX/TX/TDD AXI enumeration, root login on JTAG-streamed Linux"
 

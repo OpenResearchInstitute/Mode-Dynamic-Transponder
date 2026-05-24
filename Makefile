@@ -111,32 +111,18 @@ haifuraiya-build: haifuraiya-check-env haifuraiya-configure
 	@echo "==> Next step:"
 	@echo "      make haifuraiya-boot     # JTAG boot via keroppi"
 
-haifuraiya-boot: haifuraiya-configure
-	@echo "==> Printing manual JTAG boot recipe (target does NOT auto-boot yet)."
-	@echo "    Follow the steps below to boot the ZCU102 via JTAG over keroppi:"
-	@echo
-	@echo "    cd $(HAIFURAIYA_PROJECT)"
-	@echo "    petalinux-boot --jtag --prebuilt 3 \\"
-	@echo "        --hw_server-url TCP:keroppi:3121 \\"
-	@echo "        --after-connect 'targets 1' \\"
-	@echo "        --tcl /tmp/boot.tcl"
-	@echo
-	@echo "    Edit /tmp/boot.tcl to insert two reset commands:"
-	@echo "      (a) After 'connect -url ...':"
-	@echo "            targets -set -nocase -filter {name =~ \"*PSU*\"}"
-	@echo "            rst -system"
-	@echo "            after 1000"
-	@echo "      (b) Between 'psu_ps_pl_reset_config' and 'dow u-boot.elf':"
-	@echo "            rst -processor -clear-registers"
-	@echo
-	@echo "    Then run:"
-	@echo "      xsdb /tmp/boot.tcl"
-	@echo
+haifuraiya-boot:
+	@echo "==> Booting ZCU102 via JTAG over keroppi."
+	@echo "    PREREQUISITE: power-cycle the ZCU102 before running this."
+	@echo "    (PetaLinux's generated boot.tcl assumes a freshly-reset board.)"
+	@echo ""
 	@echo "    Monitor serial console concurrently (on keroppi):"
-	@echo "      screen /dev/zcu102_uart1 115200"
-	@echo
-	@echo "==> See haifuraiya/haifuraiya_plan_of_attack.md (PetaLinux Build Lessons)"
-	@echo "    for full context on why these two edits are required."
+	@echo "      ssh keroppi 'screen /dev/zcu102_uart1 115200'"
+	@echo ""
+	cd $(HAIFURAIYA_PETALINUX_PROJECT) && \
+	petalinux-boot --jtag --prebuilt 3 \
+	    --hw_server-url TCP:keroppi:3121 \
+	    --after-connect 'targets 1'
 
 haifuraiya-clean:
 	@echo "==> Wiping Haifuraiya build artifacts (preserving project-spec/)..."
