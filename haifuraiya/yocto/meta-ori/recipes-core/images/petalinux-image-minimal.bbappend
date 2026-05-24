@@ -1,12 +1,11 @@
 # petalinux-image-minimal.bbappend — ORI customization
 #
-# Add packages to the default petalinux-image-minimal image:
-#   - openssh: SSH server + client, so we can ssh into the ZCU102 from
-#     keroppi instead of always going through JTAG console.
+# Add coreutils for GNU command-line tools (timeout, etc) missing from
+# PetaLinux's BusyBox subset.
 #
-# debug-tweaks (set in local.conf) enables empty-password root SSH login;
-# without it, the SSH daemon would refuse root logins by default.
-# For Phase 5+ we'll add authorized_keys files and disable empty-password
-# root.
+# Note: openssh vs dropbear is selected via project-spec/configs/rootfs_config
+# at the menuconfig layer, NOT via this bbappend:
+#   CONFIG_imagefeature-ssh-server-openssh=y
+#   # CONFIG_imagefeature-ssh-server-dropbear is not set
 
-IMAGE_INSTALL:append = " openssh"
+IMAGE_INSTALL:append = " coreutils"

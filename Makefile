@@ -136,13 +136,14 @@ haifuraiya-revert-paths:
 	@sed -i \
 	    -e 's|^CONFIG_USER_LAYER_0=.*|CONFIG_USER_LAYER_0="/PLEASE_RUN_make_haifuraiya-configure_FIRST/meta-adi-core"|' \
 	    -e 's|^CONFIG_USER_LAYER_1=.*|CONFIG_USER_LAYER_1="/PLEASE_RUN_make_haifuraiya-configure_FIRST/meta-adi-xilinx"|' \
+            -e 's|^CONFIG_USER_LAYER_2=.*|CONFIG_USER_LAYER_2="/PLEASE_RUN_make_haifuraiya-configure_FIRST/meta-ori"|' \
 	    $(HAIFURAIYA_PROJECT)/project-spec/configs/config
 	@sed -i \
 	    -e 's|^HARDWARE_PATH=.*|HARDWARE_PATH=/PLEASE_RUN_make_haifuraiya-configure_FIRST/system_top.xsa|' \
 	    $(HAIFURAIYA_PROJECT)/.petalinux/metadata
 	@echo "==> Done. Current state:"
 	@echo "    In project-spec/configs/config:"
-	@grep "^CONFIG_USER_LAYER_[01]=" $(HAIFURAIYA_PROJECT)/project-spec/configs/config | sed 's/^/      /'
+	@grep "^CONFIG_USER_LAYER_[012]=" $(HAIFURAIYA_PROJECT)/project-spec/configs/config | sed 's/^/      /'
 	@echo "    In .petalinux/metadata:"
 	@grep "^HARDWARE_PATH=" $(HAIFURAIYA_PROJECT)/.petalinux/metadata | sed 's/^/      /'
 	@echo

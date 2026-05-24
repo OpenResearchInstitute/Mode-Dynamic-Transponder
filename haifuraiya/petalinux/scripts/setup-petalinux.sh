@@ -56,6 +56,8 @@ METADATA_FILE="${PETALINUX_PROJECT}/.petalinux/metadata"
 META_ADI_BASE="${MDT_REPO}/haifuraiya/third_party/meta-adi"
 META_ADI_CORE="${META_ADI_BASE}/meta-adi-core"
 META_ADI_XILINX="${META_ADI_BASE}/meta-adi-xilinx"
+# ORI's own Yocto layer (in-tree, not a submodule).
+META_ORI="${MDT_REPO}/haifuraiya/yocto/meta-ori"
 
 # The ADI reference design XSA. Produced by Vivado batch-mode build of
 # the ADI hdl submodule's adrv9001/zcu102 project. May not exist on a
@@ -106,6 +108,19 @@ EOF
     exit 1
 fi
 
+
+if [[ ! -d "${META_ORI}" ]]; then
+    cat >&2 <<EOF
+ERROR: meta-ori layer not found at expected location:
+       ${META_ORI}
+
+       This layer is in-tree (not a submodule) and ships with the repo.
+       Its absence suggests an incomplete checkout. Verify with:
+         git status haifuraiya/yocto/meta-ori/
+EOF
+    exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # Rewrite User Layer paths.
 # ---------------------------------------------------------------------------
@@ -114,11 +129,13 @@ echo "    ${CONFIG_FILE}"
 echo
 echo "    CONFIG_USER_LAYER_0 -> ${META_ADI_CORE}"
 echo "    CONFIG_USER_LAYER_1 -> ${META_ADI_XILINX}"
+echo "    CONFIG_USER_LAYER_2 -> ${META_ORI}"
 
 # Use | as sed separator since paths contain / characters.
 sed -i \
     -e "s|^CONFIG_USER_LAYER_0=.*|CONFIG_USER_LAYER_0=\"${META_ADI_CORE}\"|" \
     -e "s|^CONFIG_USER_LAYER_1=.*|CONFIG_USER_LAYER_1=\"${META_ADI_XILINX}\"|" \
+    -e "s|^CONFIG_USER_LAYER_2=.*|CONFIG_USER_LAYER_2=\"${META_ORI}\"|" \
     "${CONFIG_FILE}"
 
 # ---------------------------------------------------------------------------
