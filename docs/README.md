@@ -20,7 +20,7 @@ _What are these documents and models about anyway?_
 
 The `polyphase_channelizer.ipynb` is the one you want to use for the FPGA design for successive interference cancellation. 
 
-The `mdt_model.ipynb` file records the thought process of the original "fast uplink, slow downlink" interpretation of MDT, where known amateur radio modes would be received, stored, and forwarded.
+The `mdt-model.ipynb` file records the thought process of the original "fast uplink, slow downlink" interpretation of MDT, where known amateur radio modes would be received, stored, and forwarded.
 
 The `mdt-sic-wire-protocol.md` file explains the format of the report used to document successive interference cancellation attempts. 
 
@@ -265,7 +265,7 @@ notebook's filter-design cells instead and re-export.
 
 - `haifuraiya/README.md` — Vivado/PetaLinux build flow for the
   channelizer (configure / build / boot).
-- `haifuraiya/syn/zcu102_with_adrv9001/README.md` — block-design
+- `haifuraiya/syn/zcu102/README.md` — block-design
   modifications layered on top of the ADI ADRV9002 reference.
 - `mdt_sic/README.md` — the separate iCE40+STM32 SIC receiver project
   (different toolchain, different board).

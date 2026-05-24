@@ -13,3 +13,4 @@ haifuraiya/sim/vivado_*.jou
 haifuraiya/sim/vivado_*.log
 haifuraiya/sim/vivado_*.backup.*
 haifuraiya/syn/zcu102/synth_project/
+commit.txt
