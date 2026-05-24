@@ -526,7 +526,7 @@ reset" instinct.
 ---
 
 ## 🌉 Phase 2: ADRV9002 Bring-up + PS Infrastructure
-**🟡 Substantially complete. Subphase 2b done; 2a partially done; 2c pending.**
+**🟢 Subphase 2b done + extended (meta-ori orphan layer fix, openssh, coreutils, debug-tweaks, fresh-clone reproducibility validated on green/ clone 2026-05-24). Subphase 2a tasks 1-3 done; tasks 4-6 pending (require ADRV9002 profile load + initial calibration + sync_start_enable arm — standard ADI workflow, not yet automated for haifuraiya). Subphase 2c (Takadono v0 stub) not started.**
 
 ### Goal
 Get RF samples flowing from the ADRV9002 into the PL fabric as AXIS at
@@ -575,7 +575,7 @@ documented happy path of your stack era.
 6. ✅ `petalinux-build` succeeds (4571 tasks, ADI fork kernel 5.15.36-xilinx-v2022.2).
 7. ✅ `petalinux-package --boot --fsbl --fpga --u-boot --force` produces BOOT.BIN.
 8. ✅ `petalinux-package --prebuilt --force` populates the prebuilt directory.
-9. ✅ JTAG boot to login prompt via `xsdb` with rst-processor workaround.
+9. ✅ JTAG boot to login prompt via `xsdb`. *Originally documented as requiring a `rst -processor -clear-registers` workaround inserted into a hand-edited `/tmp/boot.tcl`; on 2026-05-24 we verified this is vestigial when the ZCU102 is power-cycled before each boot attempt. PetaLinux's unmodified auto-generated boot.tcl works as-is. See the updated "🐉 The big one" entry in the PetaLinux Build Lessons section.*
 
 ### Subphase 2c: Takadono v0 (stub) — not started
 Just enough scaffolding to validate that the observability path works
@@ -642,7 +642,7 @@ on any future ZynqMP target.*
 
 - **ZCU102 multi-FPGA JTAG ambiguity.** ZCU102 enumerates both xczu9eg (target 1, ZynqMP PL) and onboard xc7z020 system controller (target 17). PetaLinux's xsdb doesn't auto-disambiguate. Solution: `--after-connect "targets 1"`. The hw_server `-e "set jtag-port-filter Xilinx"` approach picks the WRONG target (both chips match "Xilinx"); `xczu9eg` filter matches nothing (port name filter ≠ chip name).
 
-- **🐉 The big one: MMU translation fault on `dow u-boot.elf` to DDR 0x8000000.** PetaLinux's generated xsdb script halts FSBL via `after 4000; stop` with the A53 still holding active MMU translation tables that FSBL set up during its 4-second run. The subsequent `dow u-boot.elf` writes through the active MMU and faults because FSBL's tables don't cover 0x8000000. **Fix:** `--tcl` to dump, insert `rst -processor -clear-registers` between `psu_ps_pl_reset_config` and `dow u-boot.elf`, run via `xsdb` directly. Open question (Open Quest below): can this be automated cleanly?
+- **🐉 The big one: MMU translation fault on `dow u-boot.elf` to DDR 0x8000000.** PetaLinux's generated xsdb script halts FSBL via `after 4000; stop` with the A53 still holding active MMU translation tables that FSBL set up during its 4-second run. The subsequent `dow u-boot.elf` writes through the active MMU and faults because FSBL's tables don't cover 0x8000000. **Original fix:** `--tcl` to dump, insert `rst -processor -clear-registers` between `psu_ps_pl_reset_config` and `dow u-boot.elf`, run via `xsdb` directly. **Update 2026-05-24:** this workaround turned out to be vestigial when the ZCU102 is power-cycled before each `make haifuraiya-boot` invocation. PetaLinux's unmodified auto-generated boot.tcl works as-is on a freshly-reset board — the assumption baked into PetaLinux's generator is "fresh power-on state," which power-cycling restores. The original fault was triggered by re-booting an already-running board where FSBL's MMU tables persisted from the prior boot. Documented for posterity: if you're trying to re-flash without power-cycling, this is what bites. The Open Quest about "automating the rst-processor insertion" is now moot.
 
 - **JTAG board state wedges between failed boot attempts.** Symptoms on retry: "EDITR timeout" on OCM writes, xsdb segfault. Recovery: `rst -system` via a PSU-filtered target (not target 1 — that returns "Invalid reset type"), then restart hw_server if it died, then retry. Physical power-cycle always works as a last resort.
 
@@ -656,7 +656,7 @@ on any future ZynqMP target.*
 
 - **`zynqmp_clk_divider_set_rate() set divider failed for spi1_ref_div1, ret = -13`** in dmesg is a benign cosmetic warning. PMUFW manages that clock; the kernel driver retries gracefully, no functional impact on ADRV9002 operation.
 
-- **🐉 `rst -system` is required before every JTAG re-boot attempt.** xsdb's debug target tree accumulates state across boots — running A53 cores from a prior Linux session, renamed targets, etc. Yesterday-successful boot scripts fail today because the board never went through a clean reset. Symptoms when you forget: "Multiple FPGA devices found, please use targets command to select one of: 1, 17" (because the debug target tree restructured and `targets 1` now points to "PS TAP" instead of xczu9eg) or "bitstream is not compatible with the target" (selected an FPGA on the wrong chain). **Cure:** add a PSU-target `rst -system` as the first step of the boot sequence:
+- **🐉 `rst -system` is required before every JTAG re-boot attempt.** xsdb's debug target tree accumulates state across boots — running A53 cores from a prior Linux session, renamed targets, etc. Yesterday-successful boot scripts fail today because the board never went through a clean reset. Symptoms when you forget: "Multiple FPGA devices found, please use targets command to select one of: 1, 17" (because the debug target tree restructured and `targets 1` now points to "PS TAP" instead of xczu9eg) or "bitstream is not compatible with the target" (selected an FPGA on the wrong chain). **Original cure:** add a PSU-target `rst -system` as the first step of the boot sequence:
   ```tcl
   connect -url TCP:keroppi:3121
   targets -set -filter {name =~ "*PSU*"}
@@ -664,7 +664,7 @@ on any future ZynqMP target.*
   after 1000
   # ... rest of the boot sequence
   ```
-  This restores the target tree to a clean state where `targets 1` reliably points to the ZynqMP. Bonus: `rst -system` sometimes kills hw_server — restart it on the JTAG host if so.
+  This restores the target tree to a clean state where `targets 1` reliably points to the ZynqMP. Bonus: `rst -system` sometimes kills hw_server — restart it on the JTAG host if so. **Update 2026-05-24:** same vestigial-workaround story as the MMU translation fault entry above. Physical power-cycling the ZCU102 between boot attempts produces the same clean-state result without needing to inject xsdb commands. The Makefile target `make haifuraiya-boot` documents the power-cycle prerequisite explicitly. Keep this entry as reference for cases where physical power-cycling isn't available (remote labs, etc.).
 
 - **🐉 `petalinux-config → Subsystem AUTO Hardware Settings → Ethernet Settings` writes a broken `wired.network` for systemd.** Symptom: `ifconfig eth0` on the booted target shows `inet addr:10.73.1.16  Bcast:10.255.255.255  Mask:255.0.0.0` instead of the expected `/24` (`255.255.255.0`). Same-subnet SSH still works (both sides treat each other as local), but cross-subnet routing is broken. **Initial theory was menuconfig defaults; the actual root cause is worse.** PetaLinux's autogenerator for `project-spec/configs/systemd-conf/wired.network` writes the file in a malformed shape:
   ```
@@ -688,6 +688,8 @@ on any future ZynqMP target.*
   - **HARDWARE_PATH.** `petalinux-config --get-hw-description=<xsa-path>` writes that absolute path into `.petalinux/metadata` (which IS tracked, via explicit un-ignore in `.gitignore`). Only consulted when re-importing hardware, but still a `/home/<user>/...` reference in a committed file.
 
   `petalinux-config` does not support relative paths, environment variables, or any token substitution — the paths it writes are literal strings. The fix we converged on for MDT: a setup script `haifuraiya/petalinux/scripts/setup-petalinux.sh` that derives the repo root from its own filesystem location and rewrites both files in place; a top-level `Makefile` that wraps it (`make haifuraiya-configure`, `make haifuraiya-build`, `make haifuraiya-revert-paths`); and **sentinel placeholder paths** (`/PLEASE_RUN_make_haifuraiya-configure_FIRST/...`) in the committed files that fail loudly with a self-explanatory error if anyone bypasses the Makefile. See the "Repository Portability" subsection below for the full architecture.
+  
+  - **🐉 bitbake silently deduplicates layers by `BBFILE_COLLECTIONS` name.** Two different layer directories that declare the same `BBFILE_COLLECTIONS += "<name>"` in their respective `conf/layer.conf` will both appear in `bblayers.conf` (no error, no warning), but bitbake will register the collection ONCE and load recipes/bbappends from only one of them — typically the first one encountered, NOT the one you most recently added. The other layer's files are silently ignored. We hit this on 2026-05-24 when a stale `/home/abraxas3d/yocto/haifuraiya/sources/meta-ori/` left over from an abandoned pure-Yocto experiment was loaded INSTEAD of our in-tree `haifuraiya/yocto/meta-ori/`, despite both paths appearing in the active `build/conf/bblayers.conf`. Every edit we made to the in-tree bbappend was invisible to the build because bitbake was reading the stale copy. **Diagnostic:** run `bitbake-layers show-layers` and compare the paths shown to what's in `build/conf/bblayers.conf`. If a layer with the same name appears in `show-layers` from a path that's NOT in your bblayers.conf, you have a duplicate collection somewhere. **Cure:** find and delete (or rename) the duplicate. Clear `build/cache/` after to force bitbake to re-scan layers. **Why this is mean:** the deduplication is silent — no log message, no warning, no hint in `bitbake -e` that there's a conflict. The first time you'll notice is when your bbappend edits don't take effect, and you'll spend hours debugging the bbappend before suspecting layer enumeration. This footgun is filed against the bitbake project as a long-standing UX issue; it has not been addressed in the Honister / Kirkstone era. Defensive practice: keep your layer paths CLEAN. One layer name = one layer directory anywhere on the build host.
 
 - **`petalinux-config → Subsystem AUTO Hardware Settings → Ethernet Settings` ALSO defaults netmask to `/8` in menuconfig.** The netmask field exists but defaults to `255.0.0.0` instead of asking. Setting it to `255.255.255.0` makes `init-ifupdown/interfaces` correct but does NOT fix `wired.network` (see above). The menuconfig default is a minor pitfall on top of the bigger systemd-networkd bug.
 
@@ -697,7 +699,7 @@ on any future ZynqMP target.*
   systemctl restart dropbear.socket
   killall dropbear 2>/dev/null
   ```
-  **Permanent fix (rebuild required)** — see Action Item #9: bbappend in `project-spec/meta-user/recipes-core/dropbear/` to override the default, OR replace dropbear with openssh-server + proper sshd_config + per-user authorized_keys. The latter is the correct long-term answer for a multi-developer remote lab.
+  **RESOLVED 2026-05-24:** the permanent fix took the "replace dropbear with openssh" route. The switch is at the rootfs_config layer, not via a dropbear-recipe bbappend: flip both `CONFIG_packagegroup-core-ssh-dropbear` AND `CONFIG_imagefeature-ssh-server-dropbear` to "is not set", flip `CONFIG_imagefeature-ssh-server-openssh=y`. Flipping only one of the two leaves the dependency chain intact and dnf fails at do_rootfs with a dropbear-vs-openssh package conflict. `coreutils` was added to IMAGE_INSTALL in the same change (provides `timeout` and other common commands missing from PetaLinux's BusyBox subset). meta-adi-xilinx hardcodes root password `analog`; per-developer authorized_keys + disabled password login is filed as Phase 5+ work.
 
 ### Workflow recipe (for the next ZynqMP PetaLinux project)
 
@@ -862,16 +864,17 @@ The current `haifuraiya-xsa` target invokes the upstream ADI reference design `m
 ---
 
 ## 🎯 Phase 3: First Light
+**🟡 Task 1 done (integration). Tasks 2-5 blocked on the same ADRV9002 profile/cal/arm sequence as Phase 2a tasks 4-6 — once samples are flowing, those four tasks become a contained Python/Octave + Pluto exercise.**
 
 ### Goal
 See the channelizer working on real RF samples for the first time.
 
 ### Tasks
-1. Build the integration block design: ADRV9002 RX → channelizer IP (from Phase 1) → AXI-DMA → PS DDR. **Note: the Phase 1 IP is already smoke-tested in a BD, so this step is shorter than it would have been.**
-2. PS-side capture program (Python/Octave) reads buffer, FFTs each channel, plots spectrum
-3. Inject known CW from Pluto + Interlocutor at various frequency offsets within the 10 MHz uplink band
-4. Verify peak appears in the expected channel bin
-5. Sweep frequency to walk through all 64 bins; verify channel boundaries
+1. ✅ Build the integration block design: ADRV9002 RX → channelizer IP (from Phase 1) → AXI-DMA → PS DDR. **Note: the Phase 1 IP is already smoke-tested in a BD, so this step is shorter than it would have been.** *Done 2026-05-23 (Builds 9-12 in `system_bd.tcl` Phase A+B overrides — RX1 datapath spliced; RX2/TX1/TX2 preserved as ADI baseline). Build 12 produced a working bitstream + XSA with -188 ps WNS on the FIR MAC chain (`system_top_bad_timing.xsa`, runs reliably at room temp; real fix is FIR MAC pipeline regs). PetaLinux boots, channelizer AXI-Lite responds at 0x84A70000, IIO devices enumerate. Channelizer is alive — just not yet receiving samples.*
+2. ⏳ PS-side capture program (Python/Octave) reads buffer, FFTs each channel, plots spectrum
+3. ⏳ Inject known CW from Pluto + Interlocutor at various frequency offsets within the 10 MHz uplink band
+4. ⏳ Verify peak appears in the expected channel bin
+5. ⏳ Sweep frequency to walk through all 64 bins; verify channel boundaries
 
 ### Why this is the moment of truth
 This is where simulation meets silicon meets reality. Either the spectrum
