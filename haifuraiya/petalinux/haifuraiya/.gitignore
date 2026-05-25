@@ -10,3 +10,4 @@ pre-built/linux/
 *.log
 /components/plnx_workspace
 /components/yocto
+haifuraiya/petalinux/haifuraiya/project-spec/configs/systemd-conf/wired.network
