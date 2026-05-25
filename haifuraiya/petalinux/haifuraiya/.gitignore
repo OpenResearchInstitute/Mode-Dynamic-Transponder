@@ -10,4 +10,5 @@ pre-built/linux/
 *.log
 /components/plnx_workspace
 /components/yocto
-haifuraiya/petalinux/haifuraiya/project-spec/configs/systemd-conf/wired.network
+project-spec/configs/systemd-conf/
+project-spec/hw-description/system_top_bad_timing.bit

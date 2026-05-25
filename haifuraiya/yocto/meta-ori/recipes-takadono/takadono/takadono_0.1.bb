@@ -2,11 +2,12 @@ SUMMARY = "Takadono MQTT telemetry publisher for Haifuraiya channelizer"
 DESCRIPTION = "Reads Haifuraiya channelizer registers via devmem and publishes \
 them to MQTT under haifuraiya/status/#. Companion to the Speculator dashboard \
 pattern from pluto_msk; same shell+mosquitto_pub architecture, instrumenting \
-the channelizer instead of the OVP modem. See \
+the channelizer instead of the OVP modem. Also installs the takadono.html \
+dashboard and Paho MQTT JS library into /usr/share/takadono/www/, served \
+statically by mosquitto's WebSocket listener on port 9001. See \
 ${datadir}/takadono/MQTT_TOPICS.md on the target for the full topic schema."
 HOMEPAGE = "https://github.com/OpenResearchInstitute/Mode-Dynamic-Transponder"
 SECTION = "console/network"
-
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
@@ -14,6 +15,8 @@ SRC_URI = " \
     file://takadono_pub.sh \
     file://takadono.service \
     file://MQTT_TOPICS.md \
+    file://www/takadono.html \
+    file://www/mqttws31.min.js \
 "
 
 S = "${WORKDIR}"
@@ -25,7 +28,9 @@ SYSTEMD_SERVICE:${PN} = "takadono.service"
 SYSTEMD_AUTO_ENABLE:${PN} = "enable"
 
 # Runtime dependencies.
-#   mosquitto         - the broker the publisher connects to (same host)
+#   mosquitto         - the broker the publisher connects to (same host).
+#                       Also serves the dashboard via http_dir on its
+#                       WebSocket listener (port 9001).
 #   mosquitto-clients - provides mosquitto_pub used by the publisher
 # busybox is implicit (part of the base image) and provides devmem, sleep,
 # date, printf, and the POSIX shell.
@@ -45,10 +50,19 @@ do_install() {
     install -d ${D}${datadir}/takadono
     install -m 0644 ${WORKDIR}/MQTT_TOPICS.md \
         ${D}${datadir}/takadono/MQTT_TOPICS.md
+
+    # Dashboard — HTML + vendored Paho MQTT JS, served by mosquitto via
+    # its http_dir setting on the WebSocket listener.
+    install -d ${D}${datadir}/takadono/www
+    install -m 0644 ${WORKDIR}/www/takadono.html \
+        ${D}${datadir}/takadono/www/takadono.html
+    install -m 0644 ${WORKDIR}/www/mqttws31.min.js \
+        ${D}${datadir}/takadono/www/mqttws31.min.js
 }
 
 FILES:${PN} = " \
     ${bindir}/takadono_pub.sh \
     ${systemd_system_unitdir}/takadono.service \
     ${datadir}/takadono/MQTT_TOPICS.md \
+    ${datadir}/takadono/www \
 "

@@ -1005,7 +1005,8 @@ the next strategic chunk. Numbered for ordering; all are near-term.*
 
 2. **Commit everything. ✅ DONE.** The PetaLinux project metadata (`project-spec/configs/config`, `project-spec/meta-user/conf/petalinuxbsp.conf`, custom systemd `wired.network`) is committed. `.gitignore` excludes build artifacts (`components/yocto/`, `images/`, `build/`, `pre-built/`, `.petalinux/*` except `metadata`). meta-adi is a pinned submodule at branch `2022_R2`. Yocto-era work is archived under `haifuraiya/yocto/`. See "Repository Portability" subsection in PetaLinux Build Lessons for the portability machinery.
 
-3. **Lock in the corrected `wired.network` via bbappend (prevent re-corruption).** The current `project-spec/configs/systemd-conf/wired.network` is hand-corrected with proper CIDR notation (`Address=10.73.1.16/24`, real DNS entries). **Risk:** if anyone re-runs `petalinux-config → Subsystem AUTO Hardware Settings → Ethernet Settings`, PetaLinux's autogenerator overwrites the file with the malformed shape again (Address without CIDR, netmask shoved into DNS field — see PetaLinux Build Lessons). The proper fix is a bbappend in `project-spec/meta-user/recipes-core/systemd-conf/` that lays down the correct file unconditionally. Alternatively, port the equivalent `10-eth0.network` from meta-ori. Either way, the goal is "correct format survives a future petalinux-config touch."
+3a. **wired.network source-tree corruption** — gitignored. ✅ DONE. The file is no longer tracked; PetaLinux's autogenerator can overwrite it without creating git churn. See commit <sha> ("Cast SILENCE — gitignore PetaLinux's auto-corrupted wired.network"). Runtime networking is handled by meta-ori's 10-eth0.network which alphabetically wins over wired.network in /etc/systemd/network/.
+3b. **Remove wired.network from the rootfs** entirely (still open). The bbappend or ROOTFS_POSTPROCESS hook that deletes /etc/systemd/network/wired.network from the image — eliminating the alphabetical-ordering dependency — wasn't implemented. The current state works because of ordering luck; future systemd-networkd version updates or interface renames could change the precedence. Low priority while 10-eth0.network's [Match] is solid; promote to medium priority if the network plumbing is ever touched again.
 
 4. **First libiio smoke test.** From the booted target:
    ```
@@ -1078,6 +1079,13 @@ the next strategic chunk. Numbered for ordering; all are near-term.*
     - **Option C: Custom Haifuraiya Vivado project outside the hdl submodule entirely.** Reuse ADI's IP cores via `add_repo_path $hdl_repo/library` but build a project we fully control in `haifuraiya/syn/zcu102/` (where we already have our XDC and synth/impl tcl scripts from Phase 1). Most isolation, most upfront work, most independence from upstream churn. Probably the right long-term answer if Phase 3 reveals we need to do nontrivial topology surgery on the reference design.
 
     The decision affects how `haifuraiya-xsa` evolves. Decision criteria: (a) does upstream offer a hook for B?, (b) how much does Phase 3 need to modify topology vs just add a tap point?, (c) how stable do we expect the ADI reference design to be across hdl_2022_r2 → future revisions?. Worth ~1-2 hours of investigation early in Phase 3 before committing to a path.
+
+17. **Channelizer soft_reset is incomplete** Pulsing control[0] clears frame_count and dropped_frames but NOT the status sticky bits (overflow, backpressure). Suggests partial reset fanout in HDL. Add soft_reset to the FF clear path for both sticky bits in fsm_proc (or equivalent).
+
+18. **Backpressure_sticky W1C path may be missing or saturating** Writing 0x06 to status[2:1] cleared overflow but left backpressure asserted. Test (next session) by writing 0x04 alone with no userspace consumer attached; if it stays set, W1C isn't wired. If it briefly clears then re-asserts, the bit is fine and the backpressure is structural (no DMA consumer).
+
+19. **ADRV9002 default state saturates I/Q briefly at startup** Without explicit profile load + calibration, the front-end's startup transient pushes samples to ±32767 long enough to trip overflow_sticky. Not a bug per se but worth documenting so future "spectrum looks saturated" observations don't waste debugging time.
+
 
 ---
 

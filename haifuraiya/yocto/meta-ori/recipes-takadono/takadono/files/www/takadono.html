@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Takadono — Channelizer Telemetry</title>
+
+    <!-- Paho MQTT client. Vendor this file locally for isolated lab
+         networks (drop it next to takadono.html). Fetch from
+         https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js
+         on a machine with internet, then scp to the deploy host.
+
+         If you have it locally, this <script src> resolves it; if you're
+         online, the CDN fallback inline below will pull it. -->
+    <script src="mqttws31.min.js"></script>
+    <script>
+      // Inline CDN fallback in case the local file is missing.
+      if (typeof Paho === "undefined") {
+        document.write(
+          '<script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"' +
+          '><' + '/script>'
+        );
+      }
+    </script>
+
+    <style>
+        /* ============================================================
+           Takadono — Haifuraiya channelizer dashboard.
+           Sister application to Speculator (pluto_msk). Same architectural
+           DNA (Paho-over-WebSockets, big switch on topic, vanilla canvas),
+           but distinct visual identity: deep violet observatory theme,
+           with the 64-bar live spectrum as the centerpiece.
+
+           The name 高殿 (takadono) means "watchtower." This dashboard is the
+           watchtower's view across the 10 MHz uplink band.
+           ============================================================ */
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* Violet observatory palette */
+            --color-bg-deep: #150828;
+            --color-bg-mid: #2a0f4f;
+            --color-primary: #5d2799;
+            --color-tertiary: #8b3fc7;
+
+            /* Cool-to-hot spectrum gradient stops (canvas uses these) */
+            --color-bar-cold: #1a78d4;
+            --color-bar-cool: #00f5d4;
+            --color-bar-mid: #ffd166;
+            --color-bar-warm: #ff8c42;
+            --color-bar-hot: #ef476f;
+
+            /* Semantic */
+            --color-success: #06d6a0;
+            --color-warning: #ffd166;
+            --color-error: #ef476f;
+            --color-idle: #6b6b8a;
+
+            /* Glass */
+            --bg-glass: rgba(255, 255, 255, 0.05);
+            --bg-glass-hover: rgba(255, 255, 255, 0.08);
+            --bg-glass-strong: rgba(255, 255, 255, 0.10);
+            --border-glass: rgba(160, 110, 220, 0.25);
+            --border-glass-bright: rgba(160, 110, 220, 0.45);
+            --shadow-main: 0 15px 40px rgba(0, 0, 0, 0.4);
+
+            /* Text */
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.78);
+            --text-tertiary: rgba(255, 255, 255, 0.50);
+            --text-faint: rgba(255, 255, 255, 0.30);
+
+            /* Font stack */
+            --font-primary: 'Atkinson Hyperlegible', 'Helvetica Neue', 'Arial', sans-serif;
+            --font-mono: 'Atkinson Hyperlegible', 'JetBrains Mono', 'Courier New', monospace;
+        }
+
+        /* ============================================================
+           Background — layered for atmosphere, not just flat violet.
+           Base radial gradient gives the "looking up at a night sky"
+           feel. Starfield generated via repeating background-position
+           offsets (deterministic so it doesn't shift on reload).
+           ============================================================ */
+        body {
+            background:
+                radial-gradient(ellipse at 50% 0%,
+                    var(--color-primary) 0%,
+                    var(--color-bg-mid) 35%,
+                    var(--color-bg-deep) 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            color: var(--text-primary);
+            line-height: 1.55;
+            font-family: var(--font-primary);
+            font-size: 16px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Starfield overlay — small dots scattered, no animation (would
+           distract from the spectrum). Two layers at different sizes
+           for parallax-of-stillness effect. */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.6) 50%, transparent 51%),
+                radial-gradient(1px 1px at 80% 70%, rgba(255,255,255,0.5) 50%, transparent 51%),
+                radial-gradient(1px 1px at 35% 85%, rgba(255,255,255,0.7) 50%, transparent 51%),
+                radial-gradient(1.5px 1.5px at 60% 15%, rgba(255,255,255,0.8) 50%, transparent 51%),
+                radial-gradient(1px 1px at 90% 40%, rgba(255,255,255,0.5) 50%, transparent 51%),
+                radial-gradient(1px 1px at 10% 60%, rgba(255,255,255,0.4) 50%, transparent 51%),
+                radial-gradient(1.5px 1.5px at 75% 25%, rgba(0,245,212,0.6) 50%, transparent 51%),
+                radial-gradient(1px 1px at 45% 50%, rgba(255,255,255,0.3) 50%, transparent 51%);
+            background-size: 600px 600px;
+            background-repeat: repeat;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.8;
+        }
+
+        /* Subtle noise grain for texture. Inline SVG, no external file. */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 0;
+            mix-blend-mode: overlay;
+        }
+
+        /* All real content sits above the background layers */
+        .main-header, .container { position: relative; z-index: 1; }
+
+        /* ============================================================
+           Header
+           ============================================================ */
+        .main-header {
+            background: rgba(21, 8, 40, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-glass);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .app-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            display: flex;
+            align-items: baseline;
+            gap: 0.6rem;
+            letter-spacing: 0.025em;
+        }
+        .app-title .glyph {
+            display: inline-block;
+            font-size: 1.3rem;
+            color: var(--color-bar-cool);
+            filter: drop-shadow(0 0 6px rgba(0, 245, 212, 0.5));
+            transform: translateY(-2px);
+        }
+        .app-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            font-weight: 500;
+            margin-left: 0.3rem;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.4rem 1rem;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 999px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .connection-status .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--color-error);
+            transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+        .connection-status.connected .dot {
+            background: var(--color-success);
+            box-shadow: 0 0 10px var(--color-success);
+        }
+
+        /* ============================================================
+           Layout
+           ============================================================ */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .card {
+            background: var(--bg-glass);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 1.5rem 1.75rem;
+            box-shadow: var(--shadow-main);
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+        .card:hover {
+            background: var(--bg-glass-hover);
+            border-color: var(--border-glass-bright);
+        }
+
+        .card h2 {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .card h2 .pip {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--color-bar-cool);
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.5rem;
+        }
+        .grid-4 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        /* ============================================================
+           Spectrum centerpiece
+           ============================================================ */
+        .spectrum-card {
+            padding: 1.5rem 1.75rem 1.25rem;
+        }
+        .spectrum-canvas-wrap {
+            position: relative;
+            background:
+                linear-gradient(180deg,
+                    rgba(0, 0, 0, 0.25) 0%,
+                    rgba(0, 0, 0, 0.45) 100%);
+            border: 1px solid rgba(160, 110, 220, 0.18);
+            border-radius: 10px;
+            padding: 1rem 1rem 0.5rem;
+        }
+        #spectrum-canvas {
+            display: block;
+            width: 100%;
+            height: 320px;
+        }
+        .spectrum-axis-x {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.3rem 0.5rem 0;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+            font-variant-numeric: tabular-nums;
+        }
+        .spectrum-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 0.9rem;
+            font-size: 0.85rem;
+            color: var(--text-tertiary);
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .spectrum-meta .max-value {
+            font-family: var(--font-mono);
+            color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
+        }
+        .spectrum-meta button {
+            background: var(--bg-glass);
+            border: 1px solid var(--border-glass);
+            color: var(--text-secondary);
+            padding: 0.3rem 0.8rem;
+            border-radius: 6px;
+            font-family: var(--font-primary);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .spectrum-meta button:hover {
+            background: var(--bg-glass-strong);
+            border-color: var(--border-glass-bright);
+            color: var(--text-primary);
+        }
+
+        /* ============================================================
+           Status indicators
+           ============================================================ */
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+        .metric:last-child { border-bottom: none; }
+        .metric .label {
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+        }
+        .metric .value {
+            font-family: var(--font-mono);
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.02em;
+        }
+
+        .big-number {
+            font-family: var(--font-mono);
+            font-size: 2.4rem;
+            font-weight: 700;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+        }
+        .big-number.ok { color: var(--color-success); }
+        .big-number.warn { color: var(--color-warning); }
+        .big-number.bad { color: var(--color-error); }
+        .big-number-suffix {
+            font-size: 0.95rem;
+            color: var(--text-tertiary);
+            font-weight: 500;
+            font-family: var(--font-primary);
+            letter-spacing: 0;
+            margin-left: 0.3rem;
+        }
+        .big-number-sub {
+            margin-top: 0.5rem;
+            font-size: 0.82rem;
+            color: var(--text-tertiary);
+            font-family: var(--font-mono);
+        }
+
+        /* Status flag indicators */
+        .flag {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.4rem 0;
+        }
+        .flag-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--color-idle);
+            border: 1px solid rgba(255,255,255,0.15);
+            transition: background 0.2s ease, box-shadow 0.2s ease;
+        }
+        .flag-dot.on  { background: var(--color-success); box-shadow: 0 0 8px var(--color-success); }
+        .flag-dot.warn { background: var(--color-warning); box-shadow: 0 0 8px var(--color-warning); }
+        .flag-dot.err  { background: var(--color-error); box-shadow: 0 0 8px var(--color-error); }
+        .flag-label {
+            color: var(--text-secondary);
+            font-size: 0.92rem;
+        }
+
+        /* Signature card states */
+        .signature-state {
+            display: flex;
+            align-items: baseline;
+            gap: 0.75rem;
+        }
+
+        /* Raw registers (collapsible) */
+        details.registers {
+            background: var(--bg-glass);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            padding: 0;
+        }
+        details.registers summary {
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            user-select: none;
+            list-style: none;
+        }
+        details.registers summary::-webkit-details-marker { display: none; }
+        details.registers summary::before {
+            content: '▸ ';
+            color: var(--color-tertiary);
+            margin-right: 0.3rem;
+            transition: transform 0.2s ease;
+            display: inline-block;
+        }
+        details.registers[open] summary::before {
+            content: '▾ ';
+        }
+        details.registers .reg-table {
+            padding: 0 1.5rem 1.25rem;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.4rem 1rem;
+            font-family: var(--font-mono);
+            font-size: 0.88rem;
+            font-variant-numeric: tabular-nums;
+        }
+        .reg-table .reg-name { color: var(--text-secondary); }
+        .reg-table .reg-val  { color: var(--text-primary); text-align: right; }
+
+        /* Footer */
+        .footer {
+            margin-top: 1rem;
+            padding-bottom: 2rem;
+            text-align: center;
+            color: var(--text-faint);
+            font-size: 0.82rem;
+        }
+        .footer code {
+            background: var(--bg-glass);
+            padding: 1px 7px;
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            color: var(--text-tertiary);
+        }
+        .footer a {
+            color: var(--color-bar-cool);
+            text-decoration: none;
+        }
+        .footer a:hover { text-decoration: underline; }
+
+        /* Stale-publisher overlay */
+        .container.stale .card:not(.no-stale) {
+            opacity: 0.55;
+            filter: grayscale(0.4);
+            transition: opacity 0.5s ease, filter 0.5s ease;
+        }
+        .stale-banner {
+            display: none;
+            background: rgba(239, 71, 111, 0.15);
+            border: 1px solid var(--color-error);
+            color: var(--color-error);
+            padding: 0.7rem 1.2rem;
+            border-radius: 10px;
+            font-weight: 600;
+            text-align: center;
+            font-size: 0.92rem;
+        }
+        .container.stale .stale-banner { display: block; }
+
+        /* Heartbeat pulse */
+        @keyframes pulse {
+            0%   { opacity: 0.5; }
+            50%  { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+        .heartbeat-glyph {
+            animation: pulse 1.4s ease-in-out infinite;
+        }
+
+        /* Responsive tweaks */
+        @media (max-width: 640px) {
+            .container { padding: 1.25rem; }
+            .card { padding: 1.25rem; }
+            .app-title { font-size: 1.3rem; }
+            #spectrum-canvas { height: 220px; }
+            .big-number { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+    <header class="main-header">
+        <div class="header-content">
+            <div class="app-title">
+                <span class="glyph">⌬</span>
+                <span>Takadono</span>
+                <span class="app-subtitle">channelizer telemetry</span>
+            </div>
+            <div id="connection-status" class="connection-status">
+                <span class="dot"></span>
+                <span class="text">connecting…</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="container" id="container">
+
+        <div class="stale-banner">
+            ⚠ No heartbeat received in over 6 seconds — publisher may be dead.
+        </div>
+
+        <!-- ============================================================
+             Centerpiece: 64-bar live spectrum
+             ============================================================ -->
+        <section class="card spectrum-card">
+            <h2><span class="pip"></span>Power spectrum · 64 channels</h2>
+            <div class="spectrum-canvas-wrap">
+                <canvas id="spectrum-canvas" width="1280" height="320"></canvas>
+                <div class="spectrum-axis-x">
+                    <span>0</span><span>8</span><span>16</span><span>24</span>
+                    <span>32</span><span>40</span><span>48</span><span>56</span><span>63</span>
+                </div>
+            </div>
+            <div class="spectrum-meta">
+                <div>
+                    last update <span id="spectrum-time">—</span>
+                    &nbsp;·&nbsp; peak channel <span id="spectrum-peak-ch" class="max-value">—</span>
+                    &nbsp;·&nbsp; peak value <span id="spectrum-peak-val" class="max-value">—</span>
+                </div>
+                <button id="spectrum-scale-toggle" type="button">log scale</button>
+            </div>
+        </section>
+
+        <!-- Top-line health/flow status -->
+        <div class="grid-2">
+            <section class="card">
+                <h2><span class="pip"></span>Signature</h2>
+                <div class="signature-state">
+                    <span id="signature-value" class="big-number warn">—</span>
+                    <span class="big-number-suffix" id="signature-version">awaiting version…</span>
+                </div>
+                <div class="big-number-sub">
+                    version register at <code>0x84A70000</code>; <strong>OK</strong> means the channelizer responded with <code>0x00010000</code>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2><span class="pip"></span>Frame flow</h2>
+                <div>
+                    <span id="frame-rate" class="big-number">0</span><span class="big-number-suffix">frames since last cycle</span>
+                </div>
+                <div class="big-number-sub">
+                    total: <span id="frame-total">0</span>
+                    &nbsp;·&nbsp; dropped this cycle: <span id="drop-rate">0</span>
+                    &nbsp;·&nbsp; dropped total: <span id="drop-total">0</span>
+                </div>
+            </section>
+        </div>
+
+        <!-- Detailed status flags & tuning -->
+        <div class="grid-2">
+            <section class="card">
+                <h2><span class="pip"></span>Channelizer state</h2>
+                <div class="flag"><span class="flag-dot" id="flag-ready"></span><span class="flag-label">ready</span></div>
+                <div class="flag"><span class="flag-dot" id="flag-overflow"></span><span class="flag-label">overflow (sticky)</span></div>
+                <div class="flag"><span class="flag-dot" id="flag-backpressure"></span><span class="flag-label">backpressure (sticky)</span></div>
+                <div class="flag"><span class="flag-dot" id="flag-soft-reset"></span><span class="flag-label">soft reset (sticky)</span></div>
+                <div class="flag"><span class="flag-dot" id="flag-enable"></span><span class="flag-label">enable</span></div>
+            </section>
+
+            <section class="card">
+                <h2><span class="pip"></span>Tuning (read-only)</h2>
+                <div class="metric">
+                    <span class="label">output shift</span>
+                    <span class="value" id="tuning-output-shift">—</span>
+                </div>
+                <div class="metric">
+                    <span class="label">power alpha 1 (fast, ~64-sample TC)</span>
+                    <span class="value" id="tuning-alpha1">—</span>
+                </div>
+                <div class="metric">
+                    <span class="label">power alpha 2 (slow, ~4096-sample TC)</span>
+                    <span class="value" id="tuning-alpha2">—</span>
+                </div>
+            </section>
+        </div>
+
+        <!-- Raw register dump for forensics, collapsed by default -->
+        <details class="registers no-stale">
+            <summary>Raw registers (forensics)</summary>
+            <div class="reg-table" id="reg-table">
+                <span class="reg-name">version</span>        <span class="reg-val" data-reg="version">—</span>
+                <span class="reg-name">control</span>        <span class="reg-val" data-reg="control">—</span>
+                <span class="reg-name">status</span>         <span class="reg-val" data-reg="status">—</span>
+                <span class="reg-name">frame_count</span>    <span class="reg-val" data-reg="frame_count">—</span>
+                <span class="reg-name">dropped_frames</span> <span class="reg-val" data-reg="dropped_frames">—</span>
+                <span class="reg-name">output_shift</span>   <span class="reg-val" data-reg="output_shift">—</span>
+                <span class="reg-name">power_alpha1</span>   <span class="reg-val" data-reg="power_alpha1">—</span>
+                <span class="reg-name">power_alpha2</span>   <span class="reg-val" data-reg="power_alpha2">—</span>
+            </div>
+        </details>
+
+        <div class="footer">
+            <span class="heartbeat-glyph">♥</span>
+            heartbeat <span id="heartbeat-time">—</span>
+            &nbsp;·&nbsp; publisher v<span id="pub-version">—</span> (pid <span id="pub-pid">—</span>)
+            &nbsp;·&nbsp; subscribed to <code>haifuraiya/status/#</code>
+            <br>
+            <span style="font-size: 0.78em; color: var(--text-faint);">
+                Companion to <a href="https://github.com/OpenResearchInstitute/pluto_msk" target="_blank" rel="noopener">Speculator</a>,
+                the OPV modem dashboard on the LibreSDR.
+            </span>
+        </div>
+    </main>
+
+    <script>
+    // ============================================================
+    // Configuration
+    // ============================================================
+
+    // Broker host: pick in this order:
+    //   1. URL parameter ?broker=10.73.1.16
+    //   2. The hostname the page was served from (works when ZCU102 hosts it)
+    //   3. Fallback default for typical lab use
+    const params = new URLSearchParams(window.location.search);
+    const brokerHost = params.get('broker') || window.location.hostname || '10.73.1.16';
+    const brokerPort = parseInt(params.get('port') || '9001', 10);
+    const brokerPath = '/wss';
+
+    const clientId = 'takadono-' + Math.floor(Math.random() * 1_000_000);
+    const TOPIC_ROOT = 'haifuraiya/status/';
+
+    // Heartbeat staleness threshold. Publisher cycles every ~3s; gray out
+    // everything if no heartbeat in 6s (two cycles).
+    const STALE_THRESHOLD_MS = 6_000;
+
+    // ============================================================
+    // State buffers
+    // ============================================================
+    const state = {
+        connected: false,
+        spectrum: new Array(64).fill(0),
+        peakChannel: 0,
+        peakValue: 0,
+        scaleMode: 'linear',   // or 'log'
+        lastHeartbeat: 0,
+        staleTimer: null,
+    };
+
+    // ============================================================
+    // Connection status
+    // ============================================================
+    const connEl = document.getElementById('connection-status');
+    function setConnectionStatus(connected) {
+        state.connected = connected;
+        const text = connEl.querySelector('.text');
+        if (connected) {
+            connEl.classList.add('connected');
+            text.textContent = 'connected · ' + brokerHost;
+        } else {
+            connEl.classList.remove('connected');
+            text.textContent = 'disconnected — retrying';
+        }
+    }
+
+    // ============================================================
+    // Spectrum canvas
+    // ============================================================
+    const canvas = document.getElementById('spectrum-canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Cool-to-hot palette for power-level color coding. Lookup by
+    // normalized [0,1] intensity.
+    function powerColor(intensity) {
+        // Anchor stops (matches the CSS --color-bar-* tokens)
+        const stops = [
+            { p: 0.00, r:  26, g:  60, b: 100 }, // deep indigo (idle)
+            { p: 0.15, r:  26, g: 120, b: 212 }, // blue
+            { p: 0.40, r:   0, g: 245, b: 212 }, // cyan
+            { p: 0.65, r: 255, g: 209, b: 102 }, // amber
+            { p: 0.85, r: 255, g: 140, b:  66 }, // orange
+            { p: 1.00, r: 239, g:  71, b: 111 }  // hot pink
+        ];
+        if (intensity <= 0) return `rgb(${stops[0].r},${stops[0].g},${stops[0].b})`;
+        if (intensity >= 1) {
+            const s = stops[stops.length - 1];
+            return `rgb(${s.r},${s.g},${s.b})`;
+        }
+        for (let i = 0; i < stops.length - 1; i++) {
+            const a = stops[i], b = stops[i + 1];
+            if (intensity >= a.p && intensity <= b.p) {
+                const t = (intensity - a.p) / (b.p - a.p);
+                const r = Math.round(a.r + (b.r - a.r) * t);
+                const g = Math.round(a.g + (b.g - a.g) * t);
+                const bl = Math.round(a.b + (b.b - a.b) * t);
+                return `rgb(${r},${g},${bl})`;
+            }
+        }
+        return '#ffffff';
+    }
+
+    function drawSpectrum() {
+        const dpr = window.devicePixelRatio || 1;
+        const cssW = canvas.clientWidth;
+        const cssH = canvas.clientHeight;
+        // Resize backing store if needed (cheap to call every frame)
+        if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+            canvas.width = cssW * dpr;
+            canvas.height = cssH * dpr;
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, cssW, cssH);
+
+        // Grid lines
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+        ctx.lineWidth = 1;
+        const gridDivisions = 4;
+        for (let i = 1; i < gridDivisions; i++) {
+            const y = (cssH - 12) * (i / gridDivisions);
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(cssW, y);
+            ctx.stroke();
+        }
+
+        // Bars
+        const N = state.spectrum.length;
+        const padLeft = 4, padRight = 4, padBottom = 8;
+        const barAreaW = cssW - padLeft - padRight;
+        const barAreaH = cssH - padBottom;
+        const slotW = barAreaW / N;
+        const barW = Math.max(2, slotW - 2);
+
+        // Find max for normalization
+        let maxV = 0;
+        for (let i = 0; i < N; i++) {
+            const v = state.spectrum[i] || 0;
+            if (v > maxV) maxV = v;
+        }
+
+        const useLog = state.scaleMode === 'log';
+        const norm = (v) => {
+            if (maxV <= 0) return 0;
+            if (!useLog) return v / maxV;
+            // log: map (1..maxV) → (0..1). log(0)=−inf so floor at 0 for v≤0.
+            if (v <= 0) return 0;
+            return Math.log(v + 1) / Math.log(maxV + 1);
+        };
+
+        for (let i = 0; i < N; i++) {
+            const v = state.spectrum[i] || 0;
+            const intensity = norm(v);
+            const h = Math.max(1, intensity * (barAreaH - 4));
+            const x = padLeft + i * slotW + 1;
+            const y = barAreaH - h;
+
+            // Gradient: brighter at top, darker at bottom for depth
+            const grad = ctx.createLinearGradient(0, y, 0, y + h);
+            const color = powerColor(intensity);
+            grad.addColorStop(0, color);
+            grad.addColorStop(1, color.replace('rgb(', 'rgba(').replace(')', ',0.6)'));
+            ctx.fillStyle = grad;
+            ctx.fillRect(x, y, barW, h);
+
+            // Top cap for visual definition on tall bars
+            if (h > 6) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+                ctx.fillRect(x, y, barW, 1);
+            }
+        }
+
+        // Peak readout text
+        let peakCh = 0, peakV = 0;
+        for (let i = 0; i < N; i++) {
+            if (state.spectrum[i] > peakV) { peakV = state.spectrum[i]; peakCh = i; }
+        }
+        state.peakChannel = peakCh;
+        state.peakValue = peakV;
+        document.getElementById('spectrum-peak-ch').textContent =
+            (peakV > 0) ? peakCh.toString() : '—';
+        document.getElementById('spectrum-peak-val').textContent =
+            (peakV > 0) ? peakV.toLocaleString() : '—';
+    }
+
+    // Initial empty render
+    drawSpectrum();
+    window.addEventListener('resize', drawSpectrum);
+
+    // Scale toggle
+    document.getElementById('spectrum-scale-toggle').addEventListener('click', function () {
+        state.scaleMode = (state.scaleMode === 'linear') ? 'log' : 'linear';
+        this.textContent = (state.scaleMode === 'linear') ? 'log scale' : 'linear scale';
+        drawSpectrum();
+    });
+
+    // ============================================================
+    // Staleness watchdog
+    // ============================================================
+    function markFresh() {
+        state.lastHeartbeat = Date.now();
+        document.getElementById('container').classList.remove('stale');
+        if (state.staleTimer) clearTimeout(state.staleTimer);
+        state.staleTimer = setTimeout(markStale, STALE_THRESHOLD_MS);
+    }
+    function markStale() {
+        document.getElementById('container').classList.add('stale');
+    }
+
+    // ============================================================
+    // Widget update helpers
+    // ============================================================
+    function setText(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
+
+    function setFlag(id, level) {
+        // level: 'on' | 'off' | 'warn' | 'err'
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('on', 'warn', 'err');
+        if (level !== 'off') el.classList.add(level);
+    }
+
+    function setSignature(payload) {
+        const el = document.getElementById('signature-value');
+        if (payload === 'OK') {
+            el.textContent = 'OK';
+            el.className = 'big-number ok';
+        } else if (payload === 'WRONG') {
+            el.textContent = 'WRONG';
+            el.className = 'big-number bad';
+        } else {
+            el.textContent = payload || '—';
+            el.className = 'big-number warn';
+        }
+    }
+
+    // Local version assembly — major/minor/patch arrive on separate topics
+    const versionBuf = { major: null, minor: null, patch: null };
+    function maybeRenderVersion() {
+        const { major, minor, patch } = versionBuf;
+        if (major !== null && minor !== null && patch !== null) {
+            document.getElementById('signature-version').textContent =
+                `v${major}.${minor}.${patch}`;
+        }
+    }
+
+    function setRegister(name, hex) {
+        const el = document.querySelector(`.reg-val[data-reg="${name}"]`);
+        if (el) el.textContent = hex;
+    }
+
+    // ============================================================
+    // MQTT client setup
+    // ============================================================
+    let client;
+    function newClient() {
+        client = new Paho.MQTT.Client(brokerHost, brokerPort, brokerPath, clientId);
+
+        client.onConnectionLost = function () {
+            setConnectionStatus(false);
+            setTimeout(connect, 5000);
+        };
+
+        client.onMessageArrived = function (message) {
+            const topic = message.destinationName;
+            const payload = message.payloadString;
+            handleMessage(topic, payload);
+        };
+    }
+
+    function connect() {
+        newClient();
+        client.connect({
+            onSuccess: function () {
+                setConnectionStatus(true);
+                client.subscribe(TOPIC_ROOT + '#');
+            },
+            onFailure: function (err) {
+                console.warn('Connection failed:', err);
+                setConnectionStatus(false);
+                setTimeout(connect, 5000);
+            }
+        });
+    }
+
+    // ============================================================
+    // Message dispatch — the big switch
+    // ============================================================
+    function handleMessage(topic, payload) {
+        // Strip the common prefix once
+        if (!topic.startsWith(TOPIC_ROOT)) return;
+        const sub = topic.slice(TOPIC_ROOT.length);
+
+        switch (sub) {
+
+            // ----- Signature & version -----
+            case 'derived/signature':
+                setSignature(payload);
+                break;
+            case 'derived/version/major':
+                versionBuf.major = parseInt(payload, 10);
+                maybeRenderVersion();
+                break;
+            case 'derived/version/minor':
+                versionBuf.minor = parseInt(payload, 10);
+                maybeRenderVersion();
+                break;
+            case 'derived/version/patch':
+                versionBuf.patch = parseInt(payload, 10);
+                maybeRenderVersion();
+                break;
+
+            // ----- Control bits -----
+            case 'derived/control/soft_reset':
+                setFlag('flag-soft-reset', payload === '1' ? 'warn' : 'off');
+                break;
+            case 'derived/control/enable':
+                setFlag('flag-enable', payload === '1' ? 'on' : 'off');
+                break;
+
+            // ----- Status bits -----
+            case 'derived/status/ready':
+                setFlag('flag-ready', payload === '1' ? 'on' : 'off');
+                break;
+            case 'derived/status/overflow_sticky':
+                setFlag('flag-overflow', payload === '1' ? 'err' : 'off');
+                break;
+            case 'derived/status/backpressure_sticky':
+                setFlag('flag-backpressure', payload === '1' ? 'warn' : 'off');
+                break;
+
+            // ----- Frame flow -----
+            case 'derived/frame_count/value':
+                setText('frame-total', parseInt(payload, 10).toLocaleString());
+                break;
+            case 'derived/frame_count/delta':
+                setText('frame-rate', parseInt(payload, 10).toLocaleString());
+                break;
+            case 'derived/dropped_frames/value':
+                setText('drop-total', parseInt(payload, 10).toLocaleString());
+                break;
+            case 'derived/dropped_frames/delta':
+                setText('drop-rate', parseInt(payload, 10).toLocaleString());
+                break;
+
+            // ----- Tuning -----
+            case 'derived/tuning/output_shift':
+                setText('tuning-output-shift', payload);
+                break;
+            case 'derived/tuning/power_alpha1':
+                setText('tuning-alpha1', payload);
+                break;
+            case 'derived/tuning/power_alpha2':
+                setText('tuning-alpha2', payload);
+                break;
+
+            // ----- Power spectrum (the centerpiece) -----
+            case 'derived/power_spectrum':
+                try {
+                    const arr = JSON.parse(payload);
+                    if (Array.isArray(arr) && arr.length === 64) {
+                        state.spectrum = arr;
+                        setText('spectrum-time', new Date().toLocaleTimeString());
+                        drawSpectrum();
+                    }
+                } catch (e) {
+                    console.warn('bad power_spectrum payload:', e);
+                }
+                break;
+
+            // ----- Heartbeat & publisher metadata -----
+            case 'heartbeat':
+                setText('heartbeat-time', payload);
+                markFresh();
+                break;
+            case 'publisher/version':
+                setText('pub-version', payload);
+                break;
+            case 'publisher/pid':
+                setText('pub-pid', payload);
+                break;
+
+            // ----- Raw register topics (forensics pane) -----
+            default:
+                if (sub.startsWith('register/')) {
+                    const regName = sub.slice('register/'.length);
+                    setRegister(regName, payload);
+                }
+                // Silently ignore anything else (publisher/started, channel_power_N, etc.)
+                break;
+        }
+    }
+
+    // ============================================================
+    // Go
+    // ============================================================
+    if (typeof Paho === 'undefined') {
+        // Paho failed to load (no local file and no internet). Show a
+        // helpful message in the connection status.
+        connEl.querySelector('.text').textContent =
+            'Paho MQTT JS not loaded — see header comment in source';
+    } else {
+        connect();
+    }
+
+    </script>
+</body>
+</html>
