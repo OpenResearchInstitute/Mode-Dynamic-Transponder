@@ -29,7 +29,14 @@ HAIFURAIYA_ADI_HDL := $(REPO_ROOT)/haifuraiya/third_party/hdl
 HAIFURAIYA_XSA_PROJECT := $(HAIFURAIYA_ADI_HDL)/projects/adrv9001/zcu102
 HAIFURAIYA_XSA := $(HAIFURAIYA_XSA_PROJECT)/adrv9001_zcu102.sdk/system_top.xsa
 
-.PHONY: help haifuraiya-configure haifuraiya-build haifuraiya-boot haifuraiya-clean haifuraiya-revert-paths haifuraiya-check-env haifuraiya-check-vivado haifuraiya-xsa haifuraiya-import-xsa haifuraiya-update
+# Integrated build (Build 12 style — ADI baseline + Haifuraiya channelizer splice).
+# This is what produces the bitstream actually deployed on real hardware. See
+# haifuraiya/syn/zcu102_with_adrv9001/README.md for the architecture rationale.
+HAIFURAIYA_INTEGRATED_DIR := $(REPO_ROOT)/haifuraiya/syn/zcu102_with_adrv9001
+HAIFURAIYA_INTEGRATED_XSA := $(HAIFURAIYA_INTEGRATED_DIR)/adrv9001_zcu102_ori.sdk/system_top.xsa
+HAIFURAIYA_HW_DESC := $(HAIFURAIYA_PROJECT)/project-spec/hw-description
+
+.PHONY: help haifuraiya-configure haifuraiya-build haifuraiya-boot haifuraiya-clean haifuraiya-revert-paths haifuraiya-check-env haifuraiya-check-vivado haifuraiya-xsa haifuraiya-import-xsa haifuraiya-xsa-integrated haifuraiya-import-xsa-integrated haifuraiya-check-xsa haifuraiya-update
 
 help:
 	@echo "Mode-Dynamic-Transponder — top-level Makefile"
@@ -63,6 +70,20 @@ help:
 	@echo "                                'make haifuraiya-build' if you've rebuilt"
 	@echo "                                the XSA."
 	@echo
+	@echo "Integrated hardware regeneration (produces the deployed bitstream):"
+	@echo "  make haifuraiya-xsa-integrated"
+	@echo "                                Vivado batch build of the integrated"
+	@echo "                                design (ADI baseline + channelizer splice)."
+	@echo "                                Produces system_top.xsa under"
+	@echo "                                haifuraiya/syn/zcu102_with_adrv9001/."
+	@echo "  make haifuraiya-import-xsa-integrated"
+	@echo "                                Re-import the integrated XSA into the"
+	@echo "                                PetaLinux project. Auto-renames the"
+	@echo "                                bad-timing bit. Auto-runs haifuraiya-check-xsa."
+	@echo "  make haifuraiya-check-xsa     Sanity-check that the imported XSA contains"
+	@echo "                                the channelizer at 0x84A70000. Catches the"
+	@echo "                                'fresh clone imported wrong XSA' failure mode."
+	@echo
 	@echo "MDT-SIC (iCE40 + STM32 SIC receiver):"
 	@echo "  Targets not wired up. See mdt_sic/README.md for the Radiant +"
 	@echo "  STM32CubeIDE workflow. (MDT-SIC and Haifuraiya are independent"
@@ -94,7 +115,7 @@ haifuraiya-check-env:
 	}
 	@echo "==> PetaLinux Tools detected on PATH: $$(command -v petalinux-build)"
 
-haifuraiya-build: haifuraiya-check-env haifuraiya-configure
+haifuraiya-build: haifuraiya-check-env haifuraiya-configure haifuraiya-check-xsa
 	cd $(HAIFURAIYA_PROJECT) && petalinux-build
 	cd $(HAIFURAIYA_PROJECT) && petalinux-package --boot --fsbl --fpga --u-boot --force
 	cd $(HAIFURAIYA_PROJECT) && petalinux-package --prebuilt --force
@@ -234,3 +255,106 @@ haifuraiya-import-xsa: haifuraiya-check-env
 	@echo
 	@echo "==> Next step: run 'make haifuraiya-build' to rebuild the PetaLinux"
 	@echo "    image against the new hardware description."
+
+# ---------------------------------------------------------------------------
+# Integrated Vivado / XSA targets — ADI baseline + Haifuraiya channelizer splice.
+# This is the canonical hardware build (the deployed bitstream). The plain
+# 'haifuraiya-xsa' target above builds only the ADI baseline reference design
+# without our channelizer, which is useful for diagnostics but is NOT what
+# boots on real hardware. See haifuraiya/syn/zcu102_with_adrv9001/README.md.
+# ---------------------------------------------------------------------------
+
+haifuraiya-xsa-integrated: haifuraiya-check-vivado
+	@echo "==> Building integrated Vivado XSA (ADI baseline + channelizer splice)..."
+	@echo "    Source:   $(HAIFURAIYA_INTEGRATED_DIR)"
+	@echo "    Output:   $(HAIFURAIYA_INTEGRATED_XSA)"
+	@echo "    Expected duration: Vivado batch synth + impl."
+	@echo
+	cd $(HAIFURAIYA_INTEGRATED_DIR) && vivado -mode batch -source system_project.tcl
+	@# Until the FIR MAC pipeline-register timing fix lands, the build produces
+	@# system_top_bad_timing.xsa instead of system_top.xsa. Rename so downstream
+	@# import works without surgery. Remove this block once timing closes.
+	@if [ -f $(HAIFURAIYA_INTEGRATED_DIR)/adrv9001_zcu102_ori.sdk/system_top_bad_timing.xsa ]; then \
+	    echo "==> Renaming system_top_bad_timing.xsa → system_top.xsa (bad-timing workaround)..."; \
+	    mv $(HAIFURAIYA_INTEGRATED_DIR)/adrv9001_zcu102_ori.sdk/system_top_bad_timing.xsa \
+	       $(HAIFURAIYA_INTEGRATED_XSA); \
+	fi
+	@test -f $(HAIFURAIYA_INTEGRATED_XSA) || { \
+	    echo ""; \
+	    echo "ERROR: integrated XSA was not produced at:"; \
+	    echo "         $(HAIFURAIYA_INTEGRATED_XSA)"; \
+	    echo "       Check the Vivado batch log:"; \
+	    echo "         $(HAIFURAIYA_INTEGRATED_DIR)/vivado.log"; \
+	    exit 1; \
+	}
+	@echo
+	@echo "==> Integrated XSA built successfully."
+	@echo "    Path: $(HAIFURAIYA_INTEGRATED_XSA)"
+	@echo
+	@echo "==> Next step: run 'make haifuraiya-import-xsa-integrated' to update"
+	@echo "    the PetaLinux project's hardware description."
+
+haifuraiya-import-xsa-integrated: haifuraiya-check-env
+	@test -f $(HAIFURAIYA_INTEGRATED_XSA) || { \
+	    echo "ERROR: integrated XSA not found at:"; \
+	    echo "         $(HAIFURAIYA_INTEGRATED_XSA)"; \
+	    echo "       Run 'make haifuraiya-xsa-integrated' first."; \
+	    exit 1; \
+	}
+	@echo "==> Re-importing integrated XSA into PetaLinux project..."
+	@echo "    XSA:     $(HAIFURAIYA_INTEGRATED_XSA)"
+	@echo "    Project: $(HAIFURAIYA_PROJECT)"
+	@echo
+	cd $(HAIFURAIYA_PROJECT) && petalinux-config --silentconfig --get-hw-description=$(HAIFURAIYA_INTEGRATED_XSA)
+	@# petalinux-config extracts the bit from the XSA using whatever name is
+	@# inside it. Build 12's XSA still carries the bad_timing name. Rename the
+	@# extracted bit so petalinux-package's --fpga step finds it. Remove this
+	@# block once timing closes.
+	@if [ -f $(HAIFURAIYA_HW_DESC)/system_top_bad_timing.bit ]; then \
+	    echo "==> Renaming extracted bit (bad-timing workaround)..."; \
+	    mv $(HAIFURAIYA_HW_DESC)/system_top_bad_timing.bit \
+	       $(HAIFURAIYA_HW_DESC)/system_top.bit; \
+	fi
+	@$(MAKE) --no-print-directory haifuraiya-check-xsa
+	@echo
+	@echo "==> Integrated XSA imported successfully."
+	@echo "    Updated: $(HAIFURAIYA_HW_DESC)/"
+	@echo "    Updated: $(HAIFURAIYA_PROJECT)/.petalinux/metadata (HARDWARE_CHECKSUM)"
+	@echo
+	@echo "==> Next step: run 'make haifuraiya-build' to rebuild the PetaLinux"
+	@echo "    image against the new hardware description."
+
+# Sanity gate: fail with a clear message if the imported XSA doesn't contain
+# the channelizer at 0x84A70000. Catches the failure mode where the ADI
+# baseline XSA got imported by mistake (what bit Phase 3 bring-up in green/).
+# Safe to run anytime; invoked automatically by haifuraiya-import-xsa-integrated.
+haifuraiya-check-xsa:
+	@test -f $(HAIFURAIYA_HW_DESC)/system.xsa || { \
+	    echo "ERROR: no XSA found at $(HAIFURAIYA_HW_DESC)/system.xsa"; \
+	    echo "       Did 'make haifuraiya-import-xsa-integrated' run?"; \
+	    exit 1; \
+	}
+	@unzip -p $(HAIFURAIYA_HW_DESC)/system.xsa '*.hwh' 2>/dev/null \
+	    | grep -qiE '0x84A70000|84a70000' || { \
+	    echo ""; \
+	    echo "ERROR: imported XSA lacks channelizer at 0x84A70000."; \
+	    echo ""; \
+	    echo "       The XSA in:"; \
+	    echo "         $(HAIFURAIYA_HW_DESC)/system.xsa"; \
+	    echo ""; \
+	    echo "       does not contain the Haifuraiya channelizer IP. This usually"; \
+	    echo "       means the ADI baseline XSA was imported instead of the"; \
+	    echo "       integrated Build 12 XSA."; \
+	    echo ""; \
+	    echo "       To fix:"; \
+	    echo "         make haifuraiya-xsa-integrated"; \
+	    echo "         make haifuraiya-import-xsa-integrated"; \
+	    echo "         make haifuraiya-build"; \
+	    echo ""; \
+	    echo "       Or if you have a pre-built integrated XSA elsewhere, point"; \
+	    echo "       petalinux-config at it directly:"; \
+	    echo "         cd $(HAIFURAIYA_PROJECT) && \\"; \
+	    echo "             petalinux-config --silentconfig --get-hw-description=<path>"; \
+	    exit 1; \
+	}
+	@echo "==> Imported XSA contains channelizer at 0x84A70000. OK."

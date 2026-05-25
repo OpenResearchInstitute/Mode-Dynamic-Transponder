@@ -1,11 +1,24 @@
 # petalinux-image-minimal.bbappend — ORI customization
 #
-# Add coreutils for GNU command-line tools (timeout, etc) missing from
-# PetaLinux's BusyBox subset.
+# Adds packages required by the Open Research Institute customizations on
+# top of PetaLinux's minimal image.
 #
 # Note: openssh vs dropbear is selected via project-spec/configs/rootfs_config
 # at the menuconfig layer, NOT via this bbappend:
 #   CONFIG_imagefeature-ssh-server-openssh=y
 #   # CONFIG_imagefeature-ssh-server-dropbear is not set
 
-IMAGE_INSTALL:append = " coreutils"
+IMAGE_INSTALL:append = " \
+    coreutils \
+    mosquitto \
+    mosquitto-clients \
+    takadono \
+"
+
+# Package roles:
+#   coreutils         - GNU command-line tools (timeout, etc) missing from busybox subset
+#   mosquitto         - MQTT broker, listens on 1883 (TCP) and 9001 (WebSockets)
+#   mosquitto-clients - provides mosquitto_pub used by takadono_pub.sh
+#   takadono          - the channelizer telemetry publisher (see recipes-takadono/)
+#                       RDEPENDS on mosquitto and mosquitto-clients, so the
+#                       explicit listing here is belt-and-suspenders.

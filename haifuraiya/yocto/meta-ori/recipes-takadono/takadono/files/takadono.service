@@ -1,0 +1,24 @@
+[Unit]
+Description=Takadono v0 MQTT telemetry publisher (Haifuraiya channelizer)
+Documentation=file:/usr/share/takadono/MQTT_TOPICS.md
+After=network-online.target mosquitto.service
+Wants=network-online.target
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/takadono_pub.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# The publisher reads /dev/mem via devmem. devmem requires CAP_SYS_RAWIO
+# and access to /dev/mem; the cleanest v0 posture is to run as root.
+# A v1 hardening pass could switch to a dedicated user with CAP_SYS_RAWIO
+# and an explicit mmap of just the channelizer page rather than full
+# /dev/mem access.
+User=root
+
+[Install]
+WantedBy=multi-user.target

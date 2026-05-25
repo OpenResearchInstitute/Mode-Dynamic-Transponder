@@ -1,0 +1,20 @@
+# Vivado-generated project file — regenerable from system_project.tcl
+adrv9001_zcu102_ori.xpr
+
+# Vivado output trees
+adrv9001_zcu102_ori.cache/
+adrv9001_zcu102_ori.gen/
+adrv9001_zcu102_ori.hw/
+adrv9001_zcu102_ori.ip_user_files/
+adrv9001_zcu102_ori.runs/
+adrv9001_zcu102_ori.sdk/
+adrv9001_zcu102_ori.srcs/
+.Xil/
+
+# Logs / journals
+*.log
+*.jou
+*.backup.jou
+*.backup.log
+*.str
+
