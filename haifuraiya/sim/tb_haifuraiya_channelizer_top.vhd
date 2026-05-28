@@ -48,7 +48,7 @@
 -- TIMING
 -------------------------------------------------------------------------------
 --   Master clock     : 100 MHz (CLK_PERIOD = 10 ns)
---   Sample rate      : 10 Msps  (SAMPLE_PERIOD = 100 ns = 10 clocks/sample)
+--   Sample rate      : 10 Msps default (SAMPLE_CLOCKS=10 generic; =5 for 20 Msps)
 --   Channels         : 64
 --   Channel rate     : 156.25 ksps per channel
 --   FB frame period  : 640 clocks (every N samples at 10 clk/sample)
@@ -63,6 +63,18 @@ use ieee.numeric_std.all;
 use ieee.math_real.all;
 
 entity tb_haifuraiya_channelizer_top is
+    generic (
+        -- Clocks between input samples at the 100 MHz aclk. Sets the
+        -- modeled input sample rate (integer so every simulator can
+        -- override it on the command line; matches tb_..._axi's SMP_PERIOD):
+        --   SAMPLE_CLOCKS = 10  ->  10 MSps  (original design point)
+        --   SAMPLE_CLOCKS = 5   ->  20 MSps  (LVDS production target)
+        -- Override at elaboration without editing source, e.g. in xsim:
+        --   set_property -name {xsim.elaborate.xelab.more_options} \
+        --       -value {-generic_top "SAMPLE_CLOCKS=5"} \
+        --       -objects [get_filesets sim_1]
+        SAMPLE_CLOCKS : integer := 10
+    );
 end entity tb_haifuraiya_channelizer_top;
 
 architecture sim of tb_haifuraiya_channelizer_top is
@@ -85,7 +97,10 @@ architecture sim of tb_haifuraiya_channelizer_top is
     -- Timing
     ---------------------------------------------------------------------------
     constant CLK_PERIOD    : time := 10 ns;     -- 100 MHz
-    constant SAMPLE_PERIOD : time := 100 ns;    -- 10 Msps (10 clk/sample)
+    -- Sample spacing is the SAMPLE_CLOCKS entity generic (default 10 =
+    -- 10 MSps at 100 MHz) so the input rate can be swept without editing
+    -- source. 10 -> 10 MSps, 5 -> 20 MSps. See the entity generic.
+    constant SAMPLE_PERIOD : time := SAMPLE_CLOCKS * CLK_PERIOD;
 
     -- Sample amplitude scaling for tone tests: well below full scale to
     -- avoid overflow margin worries through 6 FFT stages

@@ -39,6 +39,17 @@ use ieee.math_real.all;
 use std.env.all;
 
 entity tb_haifuraiya_channelizer_axi is
+    generic (
+        -- Clocks between input samples at the channelizer's 100 MHz aclk.
+        -- This sets the modeled input sample rate:
+        --   SMP_PERIOD = 10  ->  10 MSps  (original design point)
+        --   SMP_PERIOD = 5   ->  20 MSps  (LVDS production target)
+        -- Override at elaboration without editing source, e.g. in xsim:
+        --   set_property -name {xsim.elaborate.xelab.more_options} \
+        --       -value {-generic_top "SMP_PERIOD=5"} \
+        --       -objects [get_filesets sim_1]
+        SMP_PERIOD : integer := 10
+    );
 end entity tb_haifuraiya_channelizer_axi;
 
 architecture sim of tb_haifuraiya_channelizer_axi is
@@ -385,8 +396,9 @@ begin
         constant TONE_BIN       : integer := 32;          -- known bin 16
         constant TONE_AMP       : integer := 30000;       -- ~92% full scale 30000
         constant DC_LEVEL       : integer := 20000;
-        -- Cycles between samples at 10 MSps with 100 MHz clock
-        constant SMP_PERIOD     : integer := 10;
+        -- SMP_PERIOD (clocks between samples) is now an entity generic so
+        -- the input sample rate can be swept without editing source.
+        -- 10 -> 10 MSps, 5 -> 20 MSps. See the entity generic declaration.
     begin
 
         ---------------------------------------------------------------------

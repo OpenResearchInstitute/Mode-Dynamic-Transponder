@@ -271,14 +271,6 @@ haifuraiya-xsa-integrated: haifuraiya-check-vivado
 	@echo "    Expected duration: Vivado batch synth + impl."
 	@echo
 	cd $(HAIFURAIYA_INTEGRATED_DIR) && vivado -mode batch -source system_project.tcl
-	@# Until the FIR MAC pipeline-register timing fix lands, the build produces
-	@# system_top_bad_timing.xsa instead of system_top.xsa. Rename so downstream
-	@# import works without surgery. Remove this block once timing closes.
-	@if [ -f $(HAIFURAIYA_INTEGRATED_DIR)/adrv9001_zcu102_ori.sdk/system_top_bad_timing.xsa ]; then \
-	    echo "==> Renaming system_top_bad_timing.xsa → system_top.xsa (bad-timing workaround)..."; \
-	    mv $(HAIFURAIYA_INTEGRATED_DIR)/adrv9001_zcu102_ori.sdk/system_top_bad_timing.xsa \
-	       $(HAIFURAIYA_INTEGRATED_XSA); \
-	fi
 	@test -f $(HAIFURAIYA_INTEGRATED_XSA) || { \
 	    echo ""; \
 	    echo "ERROR: integrated XSA was not produced at:"; \
@@ -306,15 +298,6 @@ haifuraiya-import-xsa-integrated: haifuraiya-check-env
 	@echo "    Project: $(HAIFURAIYA_PROJECT)"
 	@echo
 	cd $(HAIFURAIYA_PROJECT) && petalinux-config --silentconfig --get-hw-description=$(HAIFURAIYA_INTEGRATED_XSA)
-	@# petalinux-config extracts the bit from the XSA using whatever name is
-	@# inside it. Build 12's XSA still carries the bad_timing name. Rename the
-	@# extracted bit so petalinux-package's --fpga step finds it. Remove this
-	@# block once timing closes.
-	@if [ -f $(HAIFURAIYA_HW_DESC)/system_top_bad_timing.bit ]; then \
-	    echo "==> Renaming extracted bit (bad-timing workaround)..."; \
-	    mv $(HAIFURAIYA_HW_DESC)/system_top_bad_timing.bit \
-	       $(HAIFURAIYA_HW_DESC)/system_top.bit; \
-	fi
 	@$(MAKE) --no-print-directory haifuraiya-check-xsa
 	@echo
 	@echo "==> Integrated XSA imported successfully."
