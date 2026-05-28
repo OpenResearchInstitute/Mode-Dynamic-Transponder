@@ -55,7 +55,6 @@ entity haifuraiya_channelizer_axi is
         DATA_WIDTH       : positive := 16;
         COEFF_WIDTH      : positive := 16;
         ACCUM_WIDTH      : positive := 40;
-        COEFF_FILE       : string   := "haifuraiya_coeffs.hex";
 
         -- Power detector parameters
         POWER_ALPHA_W    : positive := 18;
@@ -201,8 +200,7 @@ begin
             TAPS_PER_BRANCH => TAPS_PER_BRANCH,
             DATA_WIDTH      => DATA_WIDTH,
             COEFF_WIDTH     => COEFF_WIDTH,
-            ACCUM_WIDTH     => ACCUM_WIDTH,
-            COEFF_FILE      => COEFF_FILE
+            ACCUM_WIDTH     => ACCUM_WIDTH
         )
         port map (
             clk           => aclk,

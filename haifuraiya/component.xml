@@ -812,7 +812,7 @@
         <spirit:parameters>
           <spirit:parameter>
             <spirit:name>viewChecksum</spirit:name>
-            <spirit:value>acb3c0ac</spirit:value>
+            <spirit:value>68ecae52</spirit:value>
           </spirit:parameter>
         </spirit:parameters>
       </spirit:view>
@@ -828,7 +828,7 @@
         <spirit:parameters>
           <spirit:parameter>
             <spirit:name>viewChecksum</spirit:name>
-            <spirit:value>6d4c009d</spirit:value>
+            <spirit:value>b6bc0e70</spirit:value>
           </spirit:parameter>
         </spirit:parameters>
       </spirit:view>
@@ -842,7 +842,7 @@
         <spirit:parameters>
           <spirit:parameter>
             <spirit:name>viewChecksum</spirit:name>
-            <spirit:value>dd3e8ff1</spirit:value>
+            <spirit:value>2ee5ccde</spirit:value>
           </spirit:parameter>
         </spirit:parameters>
       </spirit:view>
@@ -1309,11 +1309,6 @@
         <spirit:displayName>Accum Width</spirit:displayName>
         <spirit:value spirit:format="long" spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.ACCUM_WIDTH" spirit:minimum="0" spirit:rangeType="long">40</spirit:value>
       </spirit:modelParameter>
-      <spirit:modelParameter spirit:dataType="string">
-        <spirit:name>COEFF_FILE</spirit:name>
-        <spirit:displayName>Coeff File</spirit:displayName>
-        <spirit:value spirit:resolve="generated" spirit:id="MODELPARAM_VALUE.COEFF_FILE">haifuraiya_coeffs.hex</spirit:value>
-      </spirit:modelParameter>
       <spirit:modelParameter spirit:dataType="integer">
         <spirit:name>POWER_ALPHA_W</spirit:name>
         <spirit:displayName>Power Alpha W</spirit:displayName>
@@ -1337,8 +1332,8 @@
     <spirit:fileSet>
       <spirit:name>xilinx_anylanguagesynthesis_view_fileset</spirit:name>
       <spirit:file>
-        <spirit:name>rtl/coeffs/haifuraiya_coeffs.hex</spirit:name>
-        <spirit:fileType>unknown</spirit:fileType>
+        <spirit:name>rtl/channelizer/haifuraiya_coeffs_pkg.vhd</spirit:name>
+        <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
         <spirit:name>rtl/axi/axi_lite_regs.vhd</spirit:name>
@@ -1375,11 +1370,16 @@
       <spirit:file>
         <spirit:name>rtl/axi/haifuraiya_channelizer_axi.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
-        <spirit:userFileType>CHECKSUM_27b7ccd7</spirit:userFileType>
+        <spirit:userFileType>CHECKSUM_c18463ed</spirit:userFileType>
       </spirit:file>
     </spirit:fileSet>
     <spirit:fileSet>
       <spirit:name>xilinx_anylanguagebehavioralsimulation_view_fileset</spirit:name>
+      <spirit:file>
+        <spirit:name>rtl/channelizer/haifuraiya_coeffs_pkg.vhd</spirit:name>
+        <spirit:fileType>vhdlSource</spirit:fileType>
+        <spirit:userFileType>USED_IN_ipstatic</spirit:userFileType>
+      </spirit:file>
       <spirit:file>
         <spirit:name>rtl/axi/axi_lite_regs.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
@@ -1426,7 +1426,7 @@
       <spirit:file>
         <spirit:name>xgui/haifuraiya_channelizer_axi_v0_1.tcl</spirit:name>
         <spirit:fileType>tclSource</spirit:fileType>
-        <spirit:userFileType>CHECKSUM_dd3e8ff1</spirit:userFileType>
+        <spirit:userFileType>CHECKSUM_2ee5ccde</spirit:userFileType>
         <spirit:userFileType>XGUI_VERSION_2</spirit:userFileType>
       </spirit:file>
     </spirit:fileSet>
@@ -1506,18 +1506,6 @@
       </spirit:vendorExtensions>
     </spirit:parameter>
     <spirit:parameter>
-      <spirit:name>COEFF_FILE</spirit:name>
-      <spirit:displayName>Coeff File</spirit:displayName>
-      <spirit:value spirit:resolve="user" spirit:id="PARAM_VALUE.COEFF_FILE">haifuraiya_coeffs.hex</spirit:value>
-      <spirit:vendorExtensions>
-        <xilinx:parameterInfo>
-          <xilinx:enablement>
-            <xilinx:isEnabled xilinx:id="PARAM_ENABLEMENT.COEFF_FILE">false</xilinx:isEnabled>
-          </xilinx:enablement>
-        </xilinx:parameterInfo>
-      </spirit:vendorExtensions>
-    </spirit:parameter>
-    <spirit:parameter>
       <spirit:name>POWER_ALPHA_W</spirit:name>
       <spirit:displayName>Power Alpha W</spirit:displayName>
       <spirit:value spirit:format="long" spirit:resolve="user" spirit:id="PARAM_VALUE.POWER_ALPHA_W" spirit:minimum="8" spirit:maximum="32" spirit:rangeType="long">18</spirit:value>
@@ -1569,16 +1557,16 @@
       <xilinx:vendorDisplayName>Open Research Institute</xilinx:vendorDisplayName>
       <xilinx:vendorURL>https://www.openresearch.institute/</xilinx:vendorURL>
       <xilinx:coreRevision>2</xilinx:coreRevision>
-      <xilinx:coreCreationDateTime>2026-05-17T18:49:20Z</xilinx:coreCreationDateTime>
+      <xilinx:coreCreationDateTime>2026-05-24T01:23:07Z</xilinx:coreCreationDateTime>
     </xilinx:coreExtensions>
     <xilinx:packagingInfo>
       <xilinx:xilinxVersion>2022.2</xilinx:xilinxVersion>
-      <xilinx:checksum xilinx:scope="busInterfaces" xilinx:value="13dc1fef"/>
+      <xilinx:checksum xilinx:scope="busInterfaces" xilinx:value="6c84cd56"/>
       <xilinx:checksum xilinx:scope="memoryMaps" xilinx:value="14c3f1fe"/>
-      <xilinx:checksum xilinx:scope="fileGroups" xilinx:value="09868d4c"/>
+      <xilinx:checksum xilinx:scope="fileGroups" xilinx:value="bc372121"/>
       <xilinx:checksum xilinx:scope="ports" xilinx:value="6e924c76"/>
-      <xilinx:checksum xilinx:scope="hdlParameters" xilinx:value="0796bf92"/>
-      <xilinx:checksum xilinx:scope="parameters" xilinx:value="8e5b324f"/>
+      <xilinx:checksum xilinx:scope="hdlParameters" xilinx:value="e1f64911"/>
+      <xilinx:checksum xilinx:scope="parameters" xilinx:value="4929c48c"/>
       <xilinx:targetDRCs>
         <xilinx:targetDRC xilinx:tool="ipi">
           <xilinx:targetDRCOption xilinx:name="ignore_freq_hz" xilinx:value="false"/>

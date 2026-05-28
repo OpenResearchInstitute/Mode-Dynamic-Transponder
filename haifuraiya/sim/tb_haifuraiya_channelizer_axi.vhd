@@ -150,7 +150,6 @@ begin
             DATA_WIDTH              => DATA_WIDTH,
             COEFF_WIDTH             => 16,
             ACCUM_WIDTH             => ACCUM_WIDTH,
-            COEFF_FILE              => "haifuraiya_coeffs.hex",
             POWER_ALPHA_W           => 18,
             C_S_AXI_CTRL_ADDR_WIDTH => ADDR_WIDTH
         )

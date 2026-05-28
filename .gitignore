@@ -13,4 +13,38 @@ haifuraiya/sim/vivado_*.jou
 haifuraiya/sim/vivado_*.log
 haifuraiya/sim/vivado_*.backup.*
 haifuraiya/syn/zcu102/synth_project/
+
+# Vivado project artifacts (in any haifuraiya/syn/*/ subdirectory)
+haifuraiya/syn/*/*.cache/
+haifuraiya/syn/*/*.gen/
+haifuraiya/syn/*/*.hw/
+haifuraiya/syn/*/*.ip_user_files/
+haifuraiya/syn/*/*.runs/
+haifuraiya/syn/*/*.sim/
+haifuraiya/syn/*/*.srcs/
+haifuraiya/syn/*/*.xpr
+haifuraiya/syn/*/mem_init_sys.txt
+haifuraiya/syn/*/vivado.jou
+haifuraiya/syn/*/vivado.log
+haifuraiya/syn/*/vivado_*.backup.*
+haifuraiya/syn/*/.Xil/
+
+# Build logs
+haifuraiya-xsa-integrated-*.log
+haifuraiya-build-*.log
+
+# Backup files from sed edits
+*.bak
+
+# Stray drafts
 commit.txt
+.venv-channelizer/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Accidentally-created notebooks
+Untitled*.ipynb
+
+# Build/repackage logs
+repackage-*.log

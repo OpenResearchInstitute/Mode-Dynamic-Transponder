@@ -20,15 +20,6 @@ proc validate_PARAM_VALUE.ACCUM_WIDTH { PARAM_VALUE.ACCUM_WIDTH } {
 	return true
 }
 
-proc update_PARAM_VALUE.COEFF_FILE { PARAM_VALUE.COEFF_FILE } {
-	# Procedure called to update COEFF_FILE when any of the dependent parameters in the arguments change
-}
-
-proc validate_PARAM_VALUE.COEFF_FILE { PARAM_VALUE.COEFF_FILE } {
-	# Procedure called to validate COEFF_FILE
-	return true
-}
-
 proc update_PARAM_VALUE.COEFF_WIDTH { PARAM_VALUE.COEFF_WIDTH } {
 	# Procedure called to update COEFF_WIDTH when any of the dependent parameters in the arguments change
 }
@@ -121,11 +112,6 @@ proc update_MODELPARAM_VALUE.COEFF_WIDTH { MODELPARAM_VALUE.COEFF_WIDTH PARAM_VA
 proc update_MODELPARAM_VALUE.ACCUM_WIDTH { MODELPARAM_VALUE.ACCUM_WIDTH PARAM_VALUE.ACCUM_WIDTH } {
 	# Procedure called to set VHDL generic/Verilog parameter value(s) based on TCL parameter value
 	set_property value [get_property value ${PARAM_VALUE.ACCUM_WIDTH}] ${MODELPARAM_VALUE.ACCUM_WIDTH}
-}
-
-proc update_MODELPARAM_VALUE.COEFF_FILE { MODELPARAM_VALUE.COEFF_FILE PARAM_VALUE.COEFF_FILE } {
-	# Procedure called to set VHDL generic/Verilog parameter value(s) based on TCL parameter value
-	set_property value [get_property value ${PARAM_VALUE.COEFF_FILE}] ${MODELPARAM_VALUE.COEFF_FILE}
 }
 
 proc update_MODELPARAM_VALUE.POWER_ALPHA_W { MODELPARAM_VALUE.POWER_ALPHA_W PARAM_VALUE.POWER_ALPHA_W } {

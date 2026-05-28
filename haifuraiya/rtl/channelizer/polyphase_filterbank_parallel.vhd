@@ -86,8 +86,7 @@ entity polyphase_filterbank_parallel is
         TAPS_PER_BRANCH  : positive := 24;
         DATA_WIDTH       : positive := 16;
         COEFF_WIDTH      : positive := 16;
-        ACCUM_WIDTH      : positive := 40;
-        COEFF_FILE       : string   := "haifuraiya_coeffs.hex"
+        ACCUM_WIDTH      : positive := 40
     );
     port (
         clk             : in  std_logic;
@@ -164,7 +163,6 @@ begin
                 DATA_WIDTH      => DATA_WIDTH,
                 COEFF_WIDTH     => COEFF_WIDTH,
                 ACCUM_WIDTH     => ACCUM_WIDTH,
-                COEFF_FILE      => COEFF_FILE,
                 BRANCH_INDEX    => i
             )
             port map (

@@ -80,7 +80,6 @@ architecture sim of tb_haifuraiya_channelizer_top is
     constant DATA_WIDTH      : positive := 16;
     constant COEFF_WIDTH     : positive := 16;
     constant ACCUM_WIDTH     : positive := 40;
-    constant COEFF_FILE      : string   := "haifuraiya_coeffs.hex";
 
     ---------------------------------------------------------------------------
     -- Timing
@@ -161,8 +160,7 @@ begin
             TAPS_PER_BRANCH => TAPS_PER_BRANCH,
             DATA_WIDTH      => DATA_WIDTH,
             COEFF_WIDTH     => COEFF_WIDTH,
-            ACCUM_WIDTH     => ACCUM_WIDTH,
-            COEFF_FILE      => COEFF_FILE
+            ACCUM_WIDTH     => ACCUM_WIDTH
         )
         port map (
             clk           => clk,
@@ -386,7 +384,6 @@ begin
         report "  TAPS_PER_BRANCH = " & integer'image(TAPS_PER_BRANCH) severity note;
         report "  DATA_WIDTH      = " & integer'image(DATA_WIDTH) severity note;
         report "  ACCUM_WIDTH     = " & integer'image(ACCUM_WIDTH) severity note;
-        report "  COEFF_FILE      = " & COEFF_FILE severity note;
 
         ---------------------------------------------------------------------
         -- Reset

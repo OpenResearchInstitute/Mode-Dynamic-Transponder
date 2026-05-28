@@ -23,7 +23,6 @@ architecture sim of tb_polyphase_M_timing is
     constant DATA_W_C      : positive := 16;
     constant COEFF_W_C     : positive := 16;
     constant ACCUM_W_C     : positive := 40;
-    constant COEFF_FILE_C  : string   := "haifuraiya_coeffs.hex";
     constant CLK_PERIOD    : time     := 10 ns;  -- 100 MHz
 
     -- Per-test signals (one set per configuration)
@@ -66,8 +65,7 @@ begin
             TAPS_PER_BRANCH  => TAPS_C,
             DATA_WIDTH       => DATA_W_C,
             COEFF_WIDTH      => COEFF_W_C,
-            ACCUM_WIDTH      => ACCUM_W_C,
-            COEFF_FILE       => COEFF_FILE_C
+            ACCUM_WIDTH      => ACCUM_W_C
         )
         port map (
             clk            => clk,
@@ -85,8 +83,7 @@ begin
             TAPS_PER_BRANCH  => TAPS_C,
             DATA_WIDTH       => DATA_W_C,
             COEFF_WIDTH      => COEFF_W_C,
-            ACCUM_WIDTH      => ACCUM_W_C,
-            COEFF_FILE       => COEFF_FILE_C
+            ACCUM_WIDTH      => ACCUM_W_C
         )
         port map (
             clk            => clk,
@@ -104,8 +101,7 @@ begin
             TAPS_PER_BRANCH  => TAPS_C,
             DATA_WIDTH       => DATA_W_C,
             COEFF_WIDTH      => COEFF_W_C,
-            ACCUM_WIDTH      => ACCUM_W_C,
-            COEFF_FILE       => COEFF_FILE_C
+            ACCUM_WIDTH      => ACCUM_W_C
         )
         port map (
             clk            => clk,

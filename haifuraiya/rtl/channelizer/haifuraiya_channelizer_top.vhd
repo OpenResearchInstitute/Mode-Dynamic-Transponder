@@ -16,8 +16,9 @@
 --
 -- This version uses parallel-MAC filterbanks: each branch instantiates
 -- TAPS_PER_BRANCH multipliers (24 DSP48E2 per branch on ZU9EG) and
--- holds its coefficient slice as elaboration-time constants read from
--- COEFF_FILE. Compared to the iCE40-style serial MAC, this drops:
+-- holds its coefficient slice as elaboration-time constants, sliced
+-- out of the constant ALL_COEFFS array from haifuraiya_coeffs_pkg.
+-- Compared to the iCE40-style serial MAC, this drops:
 --   * the coeff_rom instances
 --   * the LOAD_COEFFS state machine inside the filterbank
 --   * the multi-cycle ready latency at startup
@@ -85,10 +86,7 @@ entity haifuraiya_channelizer_top is
         -- Data path widths
         DATA_WIDTH       : positive := 16;
         COEFF_WIDTH      : positive := 16;
-        ACCUM_WIDTH      : positive := 40;
-
-        -- Coefficient file (passed down to each branch)
-        COEFF_FILE       : string   := "haifuraiya_coeffs.hex"
+        ACCUM_WIDTH      : positive := 40
     );
     port (
         clk              : in  std_logic;
@@ -206,8 +204,7 @@ begin
             TAPS_PER_BRANCH => TAPS_PER_BRANCH,
             DATA_WIDTH      => DATA_WIDTH,
             COEFF_WIDTH     => COEFF_WIDTH,
-            ACCUM_WIDTH     => ACCUM_WIDTH,
-            COEFF_FILE      => COEFF_FILE
+            ACCUM_WIDTH     => ACCUM_WIDTH
         )
         port map (
             clk            => clk,
@@ -228,8 +225,7 @@ begin
             TAPS_PER_BRANCH => TAPS_PER_BRANCH,
             DATA_WIDTH      => DATA_WIDTH,
             COEFF_WIDTH     => COEFF_WIDTH,
-            ACCUM_WIDTH     => ACCUM_WIDTH,
-            COEFF_FILE      => COEFF_FILE
+            ACCUM_WIDTH     => ACCUM_WIDTH
         )
         port map (
             clk            => clk,
