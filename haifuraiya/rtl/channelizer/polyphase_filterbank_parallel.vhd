@@ -19,22 +19,25 @@
 --   * The COMPUTING / OUTPUT_READY 2-state output dance
 --   * All branch-coefficient packed registers
 --
--- Each branch finishes its MAC 3 clocks after its sample arrives (a
--- 3-stage pipeline: taps -> two 12-tap half-MACs -> final add).  The
--- filterbank pulses outputs_valid 3 clocks after the Nth sample of a
--- frame (one for the d0 wrap-detect, two more to let the last branch's
--- MAC pipeline drain into mac_reg).
+-- Each branch finishes its MAC 4 clocks after its sample arrives (a
+-- 4-stage pipeline: taps -> four 6-tap quarter-MACs -> combine quarters
+-- into two halves -> final add).  The filterbank pulses outputs_valid 4
+-- clocks after the Nth sample of a frame (one for the d0 wrap-detect,
+-- three more to let the last branch's MAC pipeline drain into mac_reg).
 --
 -- The output interface (branch_outputs packed bus + outputs_valid
 -- pulse) is identical to polyphase_filterbank.vhd, so the downstream
--- parallel-to-sequential adapter and FFT need no changes.
+-- parallel-to-sequential adapter and FFT need no changes -- the one
+-- extra branch-pipeline clock simply shifts the outputs_valid pulse one
+-- cycle later, and the consumers key off that pulse rather than a fixed
+-- cycle count.
 --
 -------------------------------------------------------------------------------
 -- TIMING
 -------------------------------------------------------------------------------
---   Latency from first sample to first outputs_valid: N + 3 clocks
---     (N samples to fill the commutator, 3 for the pipelined MAC
---      stages: half-MAC_a/half-MAC_b in parallel, then mac_reg)
+--   Latency from first sample to first outputs_valid: N + 4 clocks
+--     (N samples to fill the commutator, 4 for the pipelined MAC
+--      stages: quarter-MACs, combine to halves, then mac_reg)
 --
 --   With Haifuraiya at 100 MHz / 10 Msps (10 clk/sample):
 --     - Sample period:        100 ns
@@ -49,25 +52,25 @@
 -- BLOCK DIAGRAM
 -------------------------------------------------------------------------------
 --
---                       ┌─────────────────────────────────────────────┐
---                       │       polyphase_filterbank_parallel         │
---                       │                                             │
---                       │   ┌─────────────────────┐                   │
---    sample_in ────────►│──►│                     │                   │
---    sample_valid ─────►│──►│   commutator FSM    │                   │
---                       │   │   (branch_select)   │                   │
---                       │   └──────────┬──────────┘                   │
---                       │              │ branch_sample_valid(i)       │
---                       │              ▼                              │
---                       │   ┌─────────────────────┐                   │
---                       │   │  N branches, each   │── result(i) ──────│──► branch_outputs (packed)
---                       │   │  fir_branch_parallel│                   │
---                       │   │  with own COEFFS    │                   │
---                       │   └─────────────────────┘                   │
---                       │                                             │
---                       │   wrap-detect ──► d0 ──► d1 ──► d2 ─────────│──► outputs_valid
---                       │                                             │
---                       └─────────────────────────────────────────────┘
+--                       +---------------------------------------------+
+--                       |       polyphase_filterbank_parallel         |
+--                       |                                             |
+--                       |   +---------------------+                   |
+--    sample_in -------->|-->|                     |                   |
+--    sample_valid ----->|-->|   commutator FSM    |                   |
+--                       |   |   (branch_select)   |                   |
+--                       |   +----------+----------+                   |
+--                       |              | branch_sample_valid(i)       |
+--                       |              v                              |
+--                       |   +---------------------+                   |
+--                       |   |  N branches, each   |-- result(i) ------|--> branch_outputs (packed)
+--                       |   |  fir_branch_parallel|                   |
+--                       |   |  with own COEFFS    |                   |
+--                       |   +---------------------+                   |
+--                       |                                             |
+--                       |   wrap-detect -> d0 -> d1 -> d2 -> d3 ------|--> outputs_valid
+--                       |                                             |
+--                       +---------------------------------------------+
 --
 -------------------------------------------------------------------------------
 
@@ -132,12 +135,13 @@ architecture rtl of polyphase_filterbank_parallel is
     -- Independent of branch_select; drives output frame timing.
     signal samples_since_fc     : unsigned(M_IDX_WIDTH - 1 downto 0)
                                   := (others => '0');
-    -- Frame-complete pipeline
+    -- Frame-complete pipeline.  Four stages (d0..d3) so outputs_valid
+    -- fires exactly when the last branch's mac_reg latches, matching the
+    -- now-4-cycle MAC pipeline inside fir_branch_parallel (quarter-MAC).
     signal frame_complete_d0    : std_logic := '0';
     signal frame_complete_d1    : std_logic := '0';
-    -- d2 added so outputs_valid matches the now-3-cycle MAC pipeline
-    -- inside fir_branch_parallel.
     signal frame_complete_d2    : std_logic := '0';
+    signal frame_complete_d3    : std_logic := '0';
 
 begin
 
@@ -185,15 +189,13 @@ begin
     --   samples_since_fc: counts 0..M-1.  When it wraps (was M-1 and a new
     --                     sample arrives) we fire frame_complete_d0.
     --
-    --   frame_complete_d1: one-clock pipeline of d0.
-    --
-    --   frame_complete_d2: another one-clock pipeline so outputs_valid
+    --   frame_complete_d1..d3: three-clock pipeline of d0 so outputs_valid
     --                     fires exactly when the last branch's mac_reg
-    --                     latches the new partial-MAC sum.  With
-    --                     fir_branch_parallel's 3-stage pipeline the
-    --                     last branch's MAC settles 3 clocks after its
-    --                     sample arrives, so outputs_valid lives 3
-    --                     clocks downstream of the d0 wrap pulse.
+    --                     latches the final MAC sum.  With
+    --                     fir_branch_parallel's 4-stage quarter-MAC
+    --                     pipeline the last branch's MAC settles 4 clocks
+    --                     after its sample arrives, so outputs_valid lives
+    --                     4 clocks downstream of the d0 wrap pulse.
     --
     -- For M = N_CHANNELS the two counters wrap on the same cycle, giving
     -- behaviour identical to the original M=N implementation.
@@ -207,6 +209,7 @@ begin
                 frame_complete_d0 <= '0';
                 frame_complete_d1 <= '0';
                 frame_complete_d2 <= '0';
+                frame_complete_d3 <= '0';
             else
                 -- Default deassertion (gets overridden on wrap)
                 frame_complete_d0 <= '0';
@@ -228,11 +231,12 @@ begin
                     end if;
                 end if;
 
-                -- Two-stage pulse pipeline so outputs_valid fires 3
+                -- Three-stage pulse pipeline so outputs_valid fires 4
                 -- clocks after the M-th sample (last branch's pipelined
-                -- MAC has settled by then).
+                -- quarter-MAC has settled by then).
                 frame_complete_d1 <= frame_complete_d0;
                 frame_complete_d2 <= frame_complete_d1;
+                frame_complete_d3 <= frame_complete_d2;
             end if;
         end if;
     end process p_select;
@@ -245,6 +249,6 @@ begin
             <= branch_results(i);
     end generate gen_pack;
 
-    outputs_valid <= frame_complete_d2;
+    outputs_valid <= frame_complete_d3;
 
 end architecture rtl;
