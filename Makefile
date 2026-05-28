@@ -36,7 +36,7 @@ HAIFURAIYA_INTEGRATED_DIR := $(REPO_ROOT)/haifuraiya/syn/zcu102_with_adrv9001
 HAIFURAIYA_INTEGRATED_XSA := $(HAIFURAIYA_INTEGRATED_DIR)/adrv9001_zcu102_ori.sdk/system_top.xsa
 HAIFURAIYA_HW_DESC := $(HAIFURAIYA_PROJECT)/project-spec/hw-description
 
-.PHONY: help haifuraiya-configure haifuraiya-build haifuraiya-boot haifuraiya-clean haifuraiya-revert-paths haifuraiya-check-env haifuraiya-check-vivado haifuraiya-xsa haifuraiya-import-xsa haifuraiya-xsa-integrated haifuraiya-import-xsa-integrated haifuraiya-check-xsa haifuraiya-update
+.PHONY: help haifuraiya-configure haifuraiya-build haifuraiya-boot haifuraiya-clean haifuraiya-revert-paths haifuraiya-check-env haifuraiya-check-vivado haifuraiya-xsa haifuraiya-import-xsa haifuraiya-adi-lib haifuraiya-xsa-integrated haifuraiya-import-xsa-integrated haifuraiya-check-xsa haifuraiya-update
 
 help:
 	@echo "Mode-Dynamic-Transponder — top-level Makefile"
@@ -264,7 +264,35 @@ haifuraiya-import-xsa: haifuraiya-check-env
 # boots on real hardware. See haifuraiya/syn/zcu102_with_adrv9001/README.md.
 # ---------------------------------------------------------------------------
 
-haifuraiya-xsa-integrated: haifuraiya-check-vivado
+# ADI HDL library IP that the adrv9001/zcu102 design depends on. This list
+# mirrors LIB_DEPS in third_party/hdl/projects/adrv9001/zcu102/Makefile.
+# These IP must be packaged into the Vivado IP catalog BEFORE the integrated
+# block-design build can instantiate them — otherwise system_bd.tcl fails with
+# "No Catalog IPs found / Please specify VLNV" on the first ad_ip_instance
+# (e.g. axi_sysid). ADI's own project Makefile builds these automatically;
+# our integrated build sources system_project.tcl via vivado directly, so it
+# must build them itself. Each IP's Makefile builds its own sub-dependencies
+# recursively and no-ops if already current, so this is cheap on rebuilds.
+HAIFURAIYA_ADI_LIB_DEPS := \
+	axi_adrv9001 \
+	axi_dmac \
+	axi_sysid \
+	sysid_rom \
+	util_pack/util_cpack2 \
+	util_pack/util_upack2
+
+haifuraiya-adi-lib: haifuraiya-check-vivado
+	@echo "==> Building ADI HDL library IP (one-time; no-ops if already current)..."
+	@for dep in $(HAIFURAIYA_ADI_LIB_DEPS); do \
+	    echo "    -> $$dep"; \
+	    $(MAKE) -C $(HAIFURAIYA_ADI_HDL)/library/$$dep || { \
+	        echo "ERROR: failed to build ADI library IP '$$dep'"; \
+	        exit 1; \
+	    }; \
+	done
+	@echo "==> ADI library IP ready in the catalog."
+
+haifuraiya-xsa-integrated: haifuraiya-check-vivado haifuraiya-adi-lib
 	@echo "==> Building integrated Vivado XSA (ADI baseline + channelizer splice)..."
 	@echo "    Source:   $(HAIFURAIYA_INTEGRATED_DIR)"
 	@echo "    Output:   $(HAIFURAIYA_INTEGRATED_XSA)"
