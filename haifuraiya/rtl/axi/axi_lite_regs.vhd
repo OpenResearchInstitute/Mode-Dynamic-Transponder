@@ -116,6 +116,18 @@ end entity axi_lite_regs;
 architecture rtl of axi_lite_regs is
 
     ---------------------------------------------------------------------------
+    -- Internal mirrors of AXI handshake out-ports.
+    -- VHDL-93 forbids reading an 'out' port within the architecture. Since
+    -- the write-path FSM and read-path FSM both need to read these ready
+    -- signals to decide whether a handshake has occurred this cycle, we
+    -- drive internal signals and pass them through to the ports below
+    -- (see concurrent assignments near the start of the architecture body).
+    ---------------------------------------------------------------------------
+    signal s_axi_awready_int : std_logic;
+    signal s_axi_wready_int  : std_logic;
+    signal s_axi_arready_int : std_logic;
+
+    ---------------------------------------------------------------------------
     -- Register storage
     ---------------------------------------------------------------------------
     -- CONTROL fields
@@ -211,8 +223,13 @@ begin
     -- Two-state FSM: wait for both AW and W to be valid (in either order
     -- or simultaneously), then assert B and wait for it to be accepted.
     ---------------------------------------------------------------------------
-    aw_handshake <= s_axi_awvalid and s_axi_awready;
-    w_handshake  <= s_axi_wvalid  and s_axi_wready;
+    -- Pass-through: drive the AXI out-ports from the internal mirrors.
+    s_axi_awready <= s_axi_awready_int;
+    s_axi_wready  <= s_axi_wready_int;
+    s_axi_arready <= s_axi_arready_int;
+
+    aw_handshake <= s_axi_awvalid and s_axi_awready_int;
+    w_handshake  <= s_axi_wvalid  and s_axi_wready_int;
 
     p_write : process(aclk)
     begin
@@ -220,8 +237,8 @@ begin
             if aresetn = '0' then
                 w_state                  <= W_IDLE;
                 latched_awaddr           <= (others => '0');
-                s_axi_awready            <= '0';
-                s_axi_wready             <= '0';
+                s_axi_awready_int            <= '0';
+                s_axi_wready_int             <= '0';
                 s_axi_bvalid             <= '0';
                 s_axi_bresp              <= "00";
                 reg_soft_reset           <= '0';
@@ -245,8 +262,8 @@ begin
                 when W_IDLE =>
                     -- Accept both AW and W in any order; require both
                     -- before transitioning. Simplest correct AXI-Lite slave.
-                    s_axi_awready <= '1';
-                    s_axi_wready  <= '1';
+                    s_axi_awready_int <= '1';
+                    s_axi_wready_int  <= '1';
                     s_axi_bvalid  <= '0';
 
                     if aw_handshake = '1' then
@@ -284,8 +301,8 @@ begin
                                 null;  -- writes to RO addresses are ignored
                         end case;
 
-                        s_axi_awready <= '0';
-                        s_axi_wready  <= '0';
+                        s_axi_awready_int <= '0';
+                        s_axi_wready_int  <= '0';
                         s_axi_bresp   <= "00";  -- OKAY
                         s_axi_bvalid  <= '1';
                         w_state       <= W_RESP;
@@ -294,8 +311,8 @@ begin
                 when W_RESP =>
                     if s_axi_bready = '1' then
                         s_axi_bvalid  <= '0';
-                        s_axi_awready <= '1';
-                        s_axi_wready  <= '1';
+                        s_axi_awready_int <= '1';
+                        s_axi_wready_int  <= '1';
                         w_state       <= W_IDLE;
                     end if;
 
@@ -315,7 +332,7 @@ begin
         if rising_edge(aclk) then
             if aresetn = '0' then
                 r_state        <= R_IDLE;
-                s_axi_arready  <= '0';
+                s_axi_arready_int  <= '0';
                 s_axi_rvalid   <= '0';
                 s_axi_rresp    <= "00";
                 r_data_int     <= (others => '0');
@@ -323,12 +340,12 @@ begin
             else
                 case r_state is
                 when R_IDLE =>
-                    s_axi_arready <= '1';
+                    s_axi_arready_int <= '1';
                     s_axi_rvalid  <= '0';
 
-                    if s_axi_arvalid = '1' and s_axi_arready = '1' then
+                    if s_axi_arvalid = '1' and s_axi_arready_int = '1' then
                         latched_araddr <= s_axi_araddr;
-                        s_axi_arready  <= '0';
+                        s_axi_arready_int  <= '0';
 
                         -- Decode immediately on capture
                         if s_axi_araddr >= ADDR_POWER_BASE and
@@ -381,7 +398,7 @@ begin
                 when R_RESP =>
                     if s_axi_rready = '1' then
                         s_axi_rvalid  <= '0';
-                        s_axi_arready <= '1';
+                        s_axi_arready_int <= '1';
                         r_state       <= R_IDLE;
                     end if;
 
