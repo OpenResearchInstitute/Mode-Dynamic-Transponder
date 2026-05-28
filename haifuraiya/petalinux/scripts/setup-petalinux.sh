@@ -59,11 +59,13 @@ META_ADI_XILINX="${META_ADI_BASE}/meta-adi-xilinx"
 # ORI's own Yocto layer (in-tree, not a submodule).
 META_ORI="${MDT_REPO}/haifuraiya/yocto/meta-ori"
 
-# The ADI reference design XSA. Produced by Vivado batch-mode build of
-# the ADI hdl submodule's adrv9001/zcu102 project. May not exist on a
-# fresh clone (the user must build Vivado first); we still rewrite the
-# path so that when they DO build, the path is correct.
-XSA_PATH="${MDT_REPO}/haifuraiya/third_party/hdl/projects/adrv9001/zcu102/adrv9001_zcu102.sdk/system_top.xsa"
+# The integrated XSA — the canonical Haifuraiya hardware artifact, produced
+# by 'make haifuraiya-xsa-integrated' (ADI baseline + channelizer splice).
+# This is what 'make haifuraiya-import-xsa-integrated' imports, and what
+# the deployed PetaLinux build runs against. May not exist on a fresh clone
+# (the user must build Vivado first); we still rewrite the path so that
+# when they DO build, PetaLinux's HARDWARE_PATH points at the right file.
+XSA_PATH="${MDT_REPO}/haifuraiya/syn/zcu102_with_adrv9001/adrv9001_zcu102_ori.sdk/system_top.xsa"
 
 # ---------------------------------------------------------------------------
 # Sanity checks: fail fast with clear messages.
@@ -154,18 +156,17 @@ echo "    HARDWARE_PATH -> ${XSA_PATH}"
 
 if [[ ! -f "${XSA_PATH}" ]]; then
     echo
-    echo "    NOTE: The XSA file does not exist at this path. This is normal"
-    echo "          and IS NOT AN ERROR for the standard build workflow."
+    echo "    NOTE: The XSA file does not exist at this path yet. This is normal"
+    echo "          on a fresh clone before Vivado has run, and IS NOT AN ERROR."
     echo
     echo "          The XSA is only consulted when REBUILDING HARDWARE via"
-    echo "          'make haifuraiya-xsa' + 'make haifuraiya-import-xsa'."
+    echo "          'make haifuraiya-xsa-integrated' + 'make haifuraiya-import-xsa-integrated'."
     echo "          For normal PetaLinux builds ('make haifuraiya-build'),"
     echo "          the cached hw-description in project-spec/hw-description/"
     echo "          is used, NOT this XSA path."
     echo
-    echo "          The HARDWARE_PATH rewrite is still applied so that if you"
-    echo "          later need to rebuild the bitstream, the path will be"
-    echo "          correct for your clone."
+    echo "          The HARDWARE_PATH rewrite is still applied so that when you"
+    echo "          do build the bitstream, the path will be correct for your clone."
 fi
 
 sed -i \
@@ -186,4 +187,4 @@ grep "^HARDWARE_PATH=" "${METADATA_FILE}" | sed 's/^/      /'
 
 echo
 echo "==> Configure done. (This step is a prerequisite for haifuraiya-build,"
-echo "    haifuraiya-boot, haifuraiya-import-xsa, and haifuraiya-update.)"
+echo "    haifuraiya-boot, haifuraiya-import-xsa-integrated, and haifuraiya-update.)"
