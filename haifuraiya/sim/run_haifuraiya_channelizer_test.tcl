@@ -92,6 +92,7 @@ safe_add_files sources_1 {
 # fft_pkg must come before fft_n_pt (the FFT uses helpers from the package)
 puts "\n--- Channelizer Building Blocks ---"
 safe_add_files sources_1 {
+    ../rtl/channelizer/haifuraiya_coeffs_pkg.vhd
     ../rtl/channelizer/fir_branch_parallel.vhd
     ../rtl/channelizer/polyphase_filterbank_parallel.vhd
     ../rtl/channelizer/fft_pkg.vhd

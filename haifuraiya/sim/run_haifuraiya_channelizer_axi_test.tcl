@@ -61,6 +61,7 @@ safe_add_files sources_1 {
     ../third_party/power_detector/src/power_detector.vhd
     ../rtl/channelizer/fft_pkg.vhd
     ../rtl/channelizer/fft_n_pt.vhd
+    ../rtl/channelizer/haifuraiya_coeffs_pkg.vhd
     ../rtl/channelizer/fir_branch_parallel.vhd
     ../rtl/channelizer/polyphase_filterbank_parallel.vhd
     ../rtl/channelizer/haifuraiya_channelizer_top.vhd
