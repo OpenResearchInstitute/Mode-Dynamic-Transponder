@@ -57,3 +57,6 @@ haifuraiya/sim/axi_test*.txt
 
 # Top-level ad-hoc build logs
 blue-*.log
+
+# Build logs from current rebuild flow (underscore convention)
+*_build.log
