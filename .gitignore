@@ -48,3 +48,12 @@ Untitled*.ipynb
 
 # Build/repackage logs
 repackage-*.log
+
+# Script run logs (discover, repackage, future helpers)
+haifuraiya/scripts/*.log
+
+# Testbench console captures
+haifuraiya/sim/axi_test*.txt
+
+# Top-level ad-hoc build logs
+blue-*.log
