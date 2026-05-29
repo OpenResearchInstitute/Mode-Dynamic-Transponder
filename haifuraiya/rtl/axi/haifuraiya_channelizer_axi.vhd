@@ -108,7 +108,28 @@ entity haifuraiya_channelizer_axi is
         s_axi_ctrl_rdata    : out std_logic_vector(31 downto 0);
         s_axi_ctrl_rresp    : out std_logic_vector(1 downto 0);
         s_axi_ctrl_rvalid   : out std_logic;
-        s_axi_ctrl_rready   : in  std_logic
+        s_axi_ctrl_rready   : in  std_logic;
+
+
+	---------------------------------------------------------------------
+        -- Debug ports for ILA probing (Phase B hardware debug)
+        -- Exposes internal signals so a BD-level ILA can watch the
+        -- channelizer -> power_detector signal path to diagnose the
+        -- hardware-only bimodal failure (sim shows clean skirt; HW reads
+        -- 0 or 0x7FFFFFFF per channel).
+        ---------------------------------------------------------------------
+        dbg_chan_re_q      : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+        dbg_chan_im_q      : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+        dbg_chan_valid_r   : out std_logic;
+        dbg_chan_idx_int_r : out std_logic_vector(5 downto 0);
+        dbg_chan_valid     : out std_logic;
+        dbg_chan_idx_int   : out std_logic_vector(5 downto 0);
+        dbg_pd_data_ena    : out std_logic_vector(N_CHANNELS - 1 downto 0);
+        dbg_core_reset     : out std_logic;
+        dbg_core_dropped   : out std_logic;
+        dbg_chan_last      : out std_logic
+
+
     );
 end entity haifuraiya_channelizer_axi;
 
@@ -452,5 +473,22 @@ end process p_dispatch_align;
             dropped_frames_in   => stat_dropped_frames,
             channel_power_flat  => stat_channel_power
         );
+
+
+
+    ---------------------------------------------------------------------------
+    -- Debug port drivers — straight passthrough of internal signals
+    ---------------------------------------------------------------------------
+    dbg_chan_re_q      <= chan_re_q;
+    dbg_chan_im_q      <= chan_im_q;
+    dbg_chan_valid_r   <= chan_valid_r;
+    dbg_chan_idx_int_r <= chan_idx_int_r;
+    dbg_chan_valid     <= chan_valid;
+    dbg_chan_idx_int   <= chan_idx_int;
+    dbg_pd_data_ena    <= pd_data_ena;
+    dbg_core_reset     <= core_reset;
+    dbg_core_dropped   <= core_dropped;
+    dbg_chan_last      <= chan_last;
+
 
 end architecture rtl;

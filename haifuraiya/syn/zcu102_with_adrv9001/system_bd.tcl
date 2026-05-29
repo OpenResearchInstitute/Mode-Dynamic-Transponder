@@ -289,8 +289,78 @@ ad_connect $sys_cpu_clk axi_adrv9001_rx1_dma/s_axis_aclk
 
 ad_cpu_interconnect 0x44A70000 channelizer_rx1
 
-
 puts "INFO: haifuraiya — RX1 channelizer integration complete"
 puts "INFO: haifuraiya — channelizer control AXI-Lite at 0x84A70000 (TCL arg 0x44A70000)"
 puts "INFO: haifuraiya — channelizer output via axi_adrv9001_rx1_dma at 0x84A30000 (unchanged)"
 puts "INFO: haifuraiya — channelizer + DMA run at PS clock; wrapper at adc_1_clk; CDC FIFO bridges"
+
+
+
+##############################################################################
+# ILA Debug Core - Channelizer / Power-Detector Path
+##############################################################################
+# Diagnoses the hardware-only bimodal failure: simulation shows a clean
+# per-channel skirt (ch0=2.6M peak, ch1/63=1059 sidelobes, ch30-33=0
+# stopband, bit-exact mirror symmetry), but hardware reads either 0
+# or 0x7FFFFFFF on every channel with no intermediate values. The HDL
+# is provably correct in sim against the same source that built the
+# bitstream, so the bug is hardware-specific (timing, build, or real-
+# RF edge case the synthetic DC/tone testbench doesn't exercise).
+#
+# Probes (all in aclk = PS clock domain, 100 MHz):
+#   probe0: chan_re_q[15:0]       I sample on shared bus
+#   probe1: chan_im_q[15:0]       Q sample on shared bus
+#   probe2: chan_valid_r          registered valid (used by pd_data_ena)
+#   probe3: chan_idx_int_r[5:0]   registered idx (used by pd_data_ena)
+#   probe4: chan_valid            raw valid (one cycle ahead of _r)
+#   probe5: chan_idx_int[5:0]     raw idx
+#   probe6: pd_data_ena[63:0]     per-channel enables
+#   probe7: core_reset            reset signal
+#   probe8: core_dropped          drop pulse
+#   probe9: chan_last             frame boundary
+#
+# Total: 113 bits/sample. Depth 4096 -> ~57 KB BRAM. Plenty on ZU9EG.
+#
+# Suggested triggers once connected via hw_manager:
+#   1. pd_data_ena[0] rising edge - capture every time ch 0's PD fires;
+#      verify chan_re_q at that instant is real ADC data
+#   2. chan_valid_r=1 AND chan_idx_int_r=32 - capture mid-band channel
+#   3. chan_idx_int_r vs chan_idx_int delta - alignment sanity
+##############################################################################
+create_bd_cell -type ip -vlnv xilinx.com:ip:ila:6.2 ila_channelizer_pd
+set_property -dict [list \
+    CONFIG.C_PROBE0_WIDTH {16} \
+    CONFIG.C_PROBE1_WIDTH {16} \
+    CONFIG.C_PROBE2_WIDTH {1} \
+    CONFIG.C_PROBE3_WIDTH {6} \
+    CONFIG.C_PROBE4_WIDTH {1} \
+    CONFIG.C_PROBE5_WIDTH {6} \
+    CONFIG.C_PROBE6_WIDTH {64} \
+    CONFIG.C_PROBE7_WIDTH {1} \
+    CONFIG.C_PROBE8_WIDTH {1} \
+    CONFIG.C_PROBE9_WIDTH {1} \
+    CONFIG.C_NUM_OF_PROBES {10} \
+    CONFIG.C_DATA_DEPTH {4096} \
+    CONFIG.C_TRIGIN_EN {false} \
+    CONFIG.C_EN_STRG_QUAL {1} \
+    CONFIG.ALL_PROBE_SAME_MU_CNT {2} \
+] [get_bd_cells ila_channelizer_pd]
+
+# Clock the ILA with the channelizer's aclk (PS clock domain)
+ad_connect $sys_cpu_clk ila_channelizer_pd/clk
+
+# Wire each debug port to its probe
+ad_connect channelizer_rx1/dbg_chan_re_q      ila_channelizer_pd/probe0
+ad_connect channelizer_rx1/dbg_chan_im_q      ila_channelizer_pd/probe1
+ad_connect channelizer_rx1/dbg_chan_valid_r   ila_channelizer_pd/probe2
+ad_connect channelizer_rx1/dbg_chan_idx_int_r ila_channelizer_pd/probe3
+ad_connect channelizer_rx1/dbg_chan_valid     ila_channelizer_pd/probe4
+ad_connect channelizer_rx1/dbg_chan_idx_int   ila_channelizer_pd/probe5
+ad_connect channelizer_rx1/dbg_pd_data_ena    ila_channelizer_pd/probe6
+ad_connect channelizer_rx1/dbg_core_reset     ila_channelizer_pd/probe7
+ad_connect channelizer_rx1/dbg_core_dropped   ila_channelizer_pd/probe8
+ad_connect channelizer_rx1/dbg_chan_last      ila_channelizer_pd/probe9
+
+puts "INFO: haifuraiya — ILA core ila_channelizer_pd inserted"
+puts "INFO: haifuraiya —   10 probes, 113 bits/sample, depth 4096 (~57 KB BRAM)"
+puts "INFO: haifuraiya —   open hw_manager + debug_nets.ltx to trigger and capture"
