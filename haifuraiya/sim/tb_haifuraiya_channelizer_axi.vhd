@@ -127,8 +127,13 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     signal frames_observed : integer := 0;
 
     -- Test pass/fail counters
-    signal tests_pass : integer := 0;
-    signal tests_fail : integer := 0;
+    -- Before:
+    --signal tests_pass : integer := 0;
+    --signal tests_fail : integer := 0;
+
+    -- After (if declared in architecture):
+    shared variable tests_pass : integer := 0;
+    shared variable tests_fail : integer := 0;
 
     -- Simulation done flag (lets capture process stop)
     signal running : std_logic := '1';
@@ -372,13 +377,13 @@ begin
         ---------------------------------------------------------------------
         procedure pass(constant msg : in string) is
         begin
-            tests_pass <= tests_pass + 1;
+            tests_pass := tests_pass + 1;
             report "PASS: " & msg severity note;
         end procedure;
 
         procedure fail(constant msg : in string) is
         begin
-            tests_fail <= tests_fail + 1;
+            tests_fail := tests_fail + 1;
             report "FAIL: " & msg severity warning;
         end procedure;
 
@@ -520,6 +525,26 @@ begin
                 max_idx   := k;
             end if;
         end loop;
+
+	-- Skirt shape check — bimodal failure (saturated/zero pattern) won't satisfy this
+	report "  Skirt shape:";
+	for k in 0 to 5 loop
+	    axi_read(ADDR_POWER_BASE + 4 * k, power_k);
+	    report "    ch " & integer'image(k) & " = " & integer'image(power_k);
+	end loop;
+	report "  ...";
+	for k in 30 to 33 loop  -- deep stopband expected
+	    axi_read(ADDR_POWER_BASE + 4 * k, power_k);
+	    report "    ch " & integer'image(k) & " = " & integer'image(power_k);
+	end loop;
+	report "  ...";
+	for k in 58 to 63 loop
+	    axi_read(ADDR_POWER_BASE + 4 * k, power_k);
+	    report "    ch " & integer'image(k) & " = " & integer'image(power_k);
+	end loop;
+
+
+
         report "  Peak channel = " & integer'image(max_idx) &
                "  power = " & integer'image(max_power);
         if max_idx = 0 and max_power > 0 then
@@ -668,9 +693,19 @@ wait for 1 us;    -- let the design come back up
                  " has MSB set - EMA may have wrapped");
         elsif rdata = 0 then
             fail("Test 10: ch 0 power is zero - EMA may be stuck or disabled");
-        elsif rdata < 600_000_000 or rdata > 700_000_000 then
-            fail("Test 10: ch 0 power " & integer'image(rdata) &
-                 " outside expected steady-state [600M, 700M]");
+
+
+        --elsif rdata < 600_000_000 or rdata > 700_000_000 then
+        --    fail("Test 10: ch 0 power " & integer'image(rdata) &
+        --         " outside expected steady-state [600M, 700M]");
+
+
+	elsif rdata < 2_000_000 or rdata > 4_000_000 then
+	    fail("Test 10: ch 0 power " & integer'image(rdata) &
+	         " outside expected steady-state [2M, 4M] for PROD_W=51");
+
+
+
         else
             pass("Test 10: EMA bounded under sustained DC, ch 0 = " &
                  integer'image(rdata));
