@@ -26,7 +26,7 @@ Quick orientation when you come back to this doc weeks later:
 | ✅ | **meta-ori orphan layer fix** | **Layer registered as `CONFIG_USER_LAYER_2`, debug-tweaks enabled, openssh replaces dropbear (via `rootfs_config`), coreutils added for `timeout` et al. SSH from external host verified. 96GB stale `/home/abraxas3d/yocto/` from the abandoned pure-Yocto experiment was deleted during this fix (it had been silently masking our in-tree bbappend edits via bitbake's BBFILE_COLLECTIONS deduplication).** |
 | ✅ | **Reproducibility validated** | **Fresh `green/` clone built and booted end-to-end without manual intervention beyond power-cycling the ZCU102. One Makefile bug found (`haifuraiya-boot` referenced undefined `HAIFURAIYA_PETALINUX_PROJECT`) and fixed. The "must manually edit `/tmp/boot.tcl`" dance proved vestigial — PetaLinux's unmodified auto-generated boot.tcl works when the board is power-cycled first.** |
 | ✅ | **Documentation set landed** | **Three subproject READMEs: top-level (slimmed to overview + polyphase intro + getting-started pointers), `mdt_sic/README.md` (extracted from old top-level), `haifuraiya/README.md` (Vivado + PetaLinux build/deploy guide), `docs/README.md` (notebook environment + spotting guide). Cross-references all resolve.** |
-| 🟡 | **Sample stream verified through libiio** | **Chip-side configuration is unblocked (see Phase 4 Ground update). TES-generated 1T1R FDD CMOS profile loads cleanly on the board, LOs retune to W2 frequencies (5.6 GHz RX, 5.8 GHz TX verified), and the channelizer keeps producing frames through the profile reload (Takadono confirms). dma_listen still shows "DEFAULT-PROFILE BINARY (no real ADC)" because `oriinit-cli run-calibrations` hits a libiio failure on disabled RX2/TX2 channels in 1T1R mode — needs a small patch (filter disabled channels before iio writes) to actually run the LO-Change Procedure at the new frequency. Once cal completes at the new LO, real ADC samples should flow.** |
+| 🟡 | **Sample stream verified through libiio** | **Chip-side configuration is unblocked (see Phase 4 Ground update). TES-generated 1T1R FDD CMOS profile loads cleanly on the board, LOs retune to W2 frequencies (5.6 GHz RX, 5.8 GHz TX verified), and the channelizer keeps producing frames through the profile reload (Bouro confirms). dma_listen still shows "DEFAULT-PROFILE BINARY (no real ADC)" because `oriinit-cli run-calibrations` hits a libiio failure on disabled RX2/TX2 channels in 1T1R mode — needs a small patch (filter disabled channels before iio writes) to actually run the LO-Change Procedure at the new frequency. Once cal completes at the new LO, real ADC samples should flow.** |
 | ✅ | **TES profile generation pipeline** | **End-to-end validated 2026-05-27: TES 0.23.1 → JSON export at 38.4 MHz device clock → board load → chip state matches every prediction (RX mask 0x41, TX mask 0x4, VCO 8.847 GHz, FDD CMOS, 1.92 Msps). Dead-zone table from UG-1828 page 100-101 navigated; CMOS 1-Lane SDR has a hard ceiling near 1.92 Msps (pin-rate physics: 32 bits × 1.92 Msps = 61.44 Mbps lane rate). Production target profile generated: 1T1R FDD LVDS 20 Msps / 10 MHz BW for the LVDS HDL build. LO carrier frequencies are NOT serialized into the JSON — they're set separately at runtime via `iio_attr altvoltage{0,1,2,3}/frequency`. |
 | ✅ | **Driver enforces HDL ↔ profile SSI consistency** | **Discovered 2026-05-27: loading an LVDS profile against the CMOS HDL build produces `adrv9002: SSI interface mismatch. PHY=1, RX1=2` followed by `cat: write error: Invalid argument`. The driver validates the profile's SSI mode against the FPGA's reported capability. **Important caveat: the rejection is NOT cleanly transactional** — even though the write returns an error, the chip's data path can land in a wedged state where no frames flow. Recovery: reload the previously-working profile (or reboot the board). Verified on the bench. |
 | ✅ | **Vivado integrated-build timing closure** | **CLOSED 2026-05-27 via the quarter-MAC split ("Cast HASTE", commit `6ffc273`). The -188 ps WNS path was a 12-DSP cascade in `fir_branch_parallel.vhd` spilling across DSP columns (forcing ~600 ps fabric CARRY8 hops). Fix: partition each branch MAC into four registered 6-tap quarter-MACs (`mac_quarter` regs + `p_combine_halves`) so each cascade fits a single DSP column. Branch latency 3→4 cycles; MAC result bit-identical (xsim: tones in bins 4/16/28/40, 59.8 dB adjacent rejection, 0 dropped). Result: `clk_pl_0` WNS -0.188 → **+0.341 ns**; overall design WNS **+0.010 ns**, all constraints met. No more `bad_timing` rename. (The +0.010 global path lives off `clk_pl_0` — see Open Quest #25.)** |
@@ -211,7 +211,7 @@ in any ZCU102 block design.
    | 0x1C | POWER_ALPHA2 | RW | second-stage EMA α (default: slower smoother, e.g. α=2^-12) |
    | 0x100-0x1FC | CHANNEL_POWER[0..63] | RO | per-channel latest integrated power, 32-bit each |
 
-   Stable offsets — treated as a versioned interface for Takadono telemetry. **All 72 registers are encoded in the IP-XACT memory map and visible to Vivado's Address Editor / Vitis header generation / Petalinux device tree.**
+   Stable offsets — treated as a versioned interface for Bouro telemetry. **All 72 registers are encoded in the IP-XACT memory map and visible to Vivado's Address Editor / Vitis header generation / Petalinux device tree.**
 
 6. **Testbench.** `tb_haifuraiya_channelizer_axi.vhd` drives AXIS in, reads AXIS out, exercises AXI-Lite reads/writes, and verifies bit-true output behavior. 10/10 PASS with inter-test reset between Test 5 and Test 6 (Test 10 is the sustained-DC stress regression).
 
@@ -528,12 +528,12 @@ reset" instinct.
 ---
 
 ## 🌉 Phase 2: ADRV9002 Bring-up + PS Infrastructure
-**🟢 Subphase 2b done + extended (meta-ori orphan layer fix, openssh, coreutils, debug-tweaks, fresh-clone reproducibility validated on green/ clone 2026-05-24). Subphase 2a tasks 1-3 done; tasks 4-6 pending (require ADRV9002 profile load + initial calibration + sync_start_enable arm — standard ADI workflow, not yet automated for haifuraiya). Subphase 2c (Takadono v0 stub) not started.**
+**🟢 Subphase 2b done + extended (meta-ori orphan layer fix, openssh, coreutils, debug-tweaks, fresh-clone reproducibility validated on green/ clone 2026-05-24). Subphase 2a tasks 1-3 done; tasks 4-6 pending (require ADRV9002 profile load + initial calibration + sync_start_enable arm — standard ADI workflow, not yet automated for haifuraiya). Subphase 2c (Bouro v0 stub) not started.**
 
 ### Goal
 Get RF samples flowing from the ADRV9002 into the PL fabric as AXIS at
 10 MSps complex, with PS-side control plane (tuning, gain, AGC). Establish
-Linux on the PS and the early Takadono observability scaffolding so
+Linux on the PS and the early Bouro observability scaffolding so
 that downstream phases have a working OS and a place to put telemetry.
 
 ### Strategic shift: PetaLinux Tools 2022.2, not pure Yocto
@@ -579,7 +579,7 @@ documented happy path of your stack era.
 8. ✅ `petalinux-package --prebuilt --force` populates the prebuilt directory.
 9. ✅ JTAG boot to login prompt via `xsdb`. *Originally documented as requiring a `rst -processor -clear-registers` workaround inserted into a hand-edited `/tmp/boot.tcl`; on 2026-05-24 we verified this is vestigial when the ZCU102 is power-cycled before each boot attempt. PetaLinux's unmodified auto-generated boot.tcl works as-is. See the updated "🐉 The big one" entry in the PetaLinux Build Lessons section.*
 
-### Subphase 2c: Takadono v0 (stub) — not started
+### Subphase 2c: Bouro v0 (stub) — not started
 Just enough scaffolding to validate that the observability path works
 end-to-end. Defers the dashboard work until Phase 4 when there's more to
 observe.
@@ -604,7 +604,7 @@ cf_axi_tdd 84a0cc00.axi-adrv9002-core-tdd2-lpc: CF_AXI_TDD MASTER
 ADRV9002 driver alive, all RX/TX/TDD AXI cores enumerated, Linux user space
 booting to login on the four A53 cores from a JTAG-streamed build. **Done.**
 What remains for full Phase 2: configure the RFIC profile, capture a first
-sample stream, build the Takadono v0 MQTT publisher.
+sample stream, build the Bouro v0 MQTT publisher.
 
 ---
 
@@ -874,7 +874,7 @@ The current `haifuraiya-xsa` target invokes the upstream ADI reference design `m
 See the channelizer working on real RF samples for the first time.
 
 ### Tasks
-1. ✅ Build the integration block design: ADRV9002 RX → channelizer IP (from Phase 1) → AXI-DMA → PS DDR. **Note: the Phase 1 IP is already smoke-tested in a BD, so this step is shorter than it would have been.** *Done 2026-05-23 (Builds 9-12 in `system_bd.tcl` Phase A+B overrides — RX1 datapath spliced; RX2/TX1/TX2 preserved as ADI baseline). Build 12 produced a working bitstream + XSA with -188 ps WNS on the FIR MAC chain (`system_top_bad_timing.xsa`, ran reliably at room temp). **Timing CLOSED 2026-05-27 via the quarter-MAC split (commit `6ffc273`, "Cast HASTE"): each branch MAC partitioned into four registered 6-tap quarter-MACs so the DSP cascade fits one column — `clk_pl_0` WNS -0.188 → +0.341 ns, clean `system_top.xsa`, rebuilt and rebooted from the green clone; channelizer answers at 0x84A70000 (devmem version 1.0).** PetaLinux boots, channelizer AXI-Lite responds at 0x84A70000, IIO devices enumerate. **2026-05-27: channelizer confirmed receiving frames from the ADRV9002** (Takadono reports moving `frame_count/delta` through profile reloads). Frames carry `DEFAULT-PROFILE BINARY` zero samples pre-calibration; real ADC samples gated on the `liboriinit` 1T1R patch.*
+1. ✅ Build the integration block design: ADRV9002 RX → channelizer IP (from Phase 1) → AXI-DMA → PS DDR. **Note: the Phase 1 IP is already smoke-tested in a BD, so this step is shorter than it would have been.** *Done 2026-05-23 (Builds 9-12 in `system_bd.tcl` Phase A+B overrides — RX1 datapath spliced; RX2/TX1/TX2 preserved as ADI baseline). Build 12 produced a working bitstream + XSA with -188 ps WNS on the FIR MAC chain (`system_top_bad_timing.xsa`, ran reliably at room temp). **Timing CLOSED 2026-05-27 via the quarter-MAC split (commit `6ffc273`, "Cast HASTE"): each branch MAC partitioned into four registered 6-tap quarter-MACs so the DSP cascade fits one column — `clk_pl_0` WNS -0.188 → +0.341 ns, clean `system_top.xsa`, rebuilt and rebooted from the green clone; channelizer answers at 0x84A70000 (devmem version 1.0).** PetaLinux boots, channelizer AXI-Lite responds at 0x84A70000, IIO devices enumerate. **2026-05-27: channelizer confirmed receiving frames from the ADRV9002** (Bouro reports moving `frame_count/delta` through profile reloads). Frames carry `DEFAULT-PROFILE BINARY` zero samples pre-calibration; real ADC samples gated on the `liboriinit` 1T1R patch.*
 2. ⏳ PS-side capture program (Python/Octave) reads buffer, FFTs each channel, plots spectrum
 3. ⏳ Inject known CW from Pluto + Interlocutor at various frequency offsets within the 10 MHz uplink band
 4. ⏳ Verify peak appears in the expected channel bin
@@ -893,11 +893,11 @@ analysis working.
 
 ---
 
-## 🎤 Phase 4: Single-Channel OPV End-to-End + Takadono Dashboard
+## 🎤 Phase 4: Single-Channel OPV End-to-End + Bouro Dashboard
 
 ### Goal
 Recover one real OPV transmission, all the way from RF to decoded
-voice/data. Build out Takadono's HTML/CSS layer now that there's interesting
+voice/data. Build out Bouro's HTML/CSS layer now that there's interesting
 state worth visualizing.
 
 ### Subphase 4a: Single-channel OPV recovery
@@ -908,8 +908,8 @@ state worth visualizing.
 5. Confirm: frame sync acquires, FEC decodes, payload bits come out, voice plays
 6. Measure: uplink-to-decoded-voice latency baseline
 
-### Subphase 4b: Takadono dashboard
-With Takadono v0's MQTT scaffolding from Phase 2 already in place, this is
+### Subphase 4b: Bouro dashboard
+With Bouro v0's MQTT scaffolding from Phase 2 already in place, this is
 just the presentation layer.
 
 1. HTML/CSS dashboard derived from Speculator (CSS via Interlocutor)
@@ -924,12 +924,12 @@ just the presentation layer.
 ### Why one channel first
 Proves the full chain from RF to recovered voice/data works before we worry
 about scale. Debugging at this stage is much easier with one stream than
-with 64. And Takadono's dashboard becomes the natural debugging surface
+with 64. And Bouro's dashboard becomes the natural debugging surface
 for the multi-channel work in Phase 5.
 
 ### Deliverable
 One OPV stream recovered end-to-end. Baseline latency and BER numbers.
-Live Takadono dashboard showing channelizer + demod state.
+Live Bouro dashboard showing channelizer + demod state.
 
 ---
 
@@ -1092,7 +1092,7 @@ the next strategic chunk. Numbered for ordering; all are near-term.*
 
 20. **ADRV9002 TES profile generation is an ADI ecosystem trap** TES is published only for the most-recent linux/driver versions, which don't match our PetaLinux 2022.2 build. ORI has tried to get help through official channels (IMS2023 in-person) and been unsuccessful. The practical implication: we cannot easily generate custom profiles for our deployed configuration. Mitigation paths: (a) work from saved TES exports we already have, (b) drive a stock profile via the kernel's built-in defaults and parameterize only what we strictly need at runtime, (c) reverse-engineer the JSON schema enough to hand-edit profiles, (d) eventually fork the driver to accept a more recent profile schema. None of these are appealing. The driver auto-loads SOMETHING at boot (we've seen profile_config return a populated description) so option (b) is at least a working starting point.
 
-21. **ADRV9002+AXI-ADC streaming is a brittle dance, not the AD9363 hands-off model** Dialogus on Pluto uses the standard libiio pattern (configure → enable channels → create buffer → refill loop) with no manual ENSM or sync_start_enable touching, and the AD9363 driver handles all state internally. The ADRV9002+axi-adrv9002-rx-lpc combination on ZCU102 does NOT exhibit this property — userspace writes to initial_calibrations or sync_start_enable while channels are in rf_enabled can leave the FPGA-side bridge wedged with no driver complaint. Recovery requires reboot because the driver is statically compiled (no module reload). Future ARM-side init code must (a) never touch these attributes after streaming has begun, (b) follow a strict configure-before-rf-enable ordering, and (c) consider a userspace watchdog that detects the wedged state via frame_count stagnation in Takadono and triggers a controlled reboot or driver reset.
+21. **ADRV9002+AXI-ADC streaming is a brittle dance, not the AD9363 hands-off model** Dialogus on Pluto uses the standard libiio pattern (configure → enable channels → create buffer → refill loop) with no manual ENSM or sync_start_enable touching, and the AD9363 driver handles all state internally. The ADRV9002+axi-adrv9002-rx-lpc combination on ZCU102 does NOT exhibit this property — userspace writes to initial_calibrations or sync_start_enable while channels are in rf_enabled can leave the FPGA-side bridge wedged with no driver complaint. Recovery requires reboot because the driver is statically compiled (no module reload). Future ARM-side init code must (a) never touch these attributes after streaming has begun, (b) follow a strict configure-before-rf-enable ordering, and (c) consider a userspace watchdog that detects the wedged state via frame_count stagnation in Bouro and triggers a controlled reboot or driver reset.
 
 22. **Build a Python "TES replacement" notebook (long-term)** The notebook should: (a) parse the saved TES-generated profile JSONs we already have, (b) write the profile to the chip via libiio attribute writes, (c) sequence calibrations correctly from the CALIBRATED state, (d) bring RX/TX channels through PRIMED→RF_ENABLED in the correct order, (e) document each step against what TES would have done. This is the path out of the TES versioning trap. Initial scope: just enough to replicate today's default-profile behavior reproducibly; full custom-profile support is a deeper future project.
 
@@ -1156,7 +1156,7 @@ reciprocity on the strong components.
 
 ### Wrapper bring-up session (earlier)
 - `haifuraiya/rtl/axi/haifuraiya_channelizer_axi.vhd` — AXIS + AXI-Lite wrapper with 64 power detectors
-- `haifuraiya/rtl/axi/axi_lite_regs.vhd` — AXI-Lite register block (stable offsets, Takadono-versioned)
+- `haifuraiya/rtl/axi/axi_lite_regs.vhd` — AXI-Lite register block (stable offsets, Bouro-versioned)
 - `haifuraiya/sim/tb_haifuraiya_channelizer_axi.vhd` — testbench (later expanded to 9 tests + Test 10 with inter-test reset)
 - `haifuraiya/third_party/lowpass_ema/` — submodule, initially on branch `fix/data-ena-gate`, SHA `ee5879a`
 - **Upstream PR #1 open:** `OpenResearchInstitute/lowpass_ema` — "Gate EMA accumulator on data_ena for multiplexed-stream use cases"
@@ -1253,14 +1253,14 @@ reciprocity on the strong components.
 **Verified on the bench (CMOS profile load):**
 - `cat $CMOS > $PROF` returned exit code 0, dmesg silent — no version-mismatch issues despite TES 0.23.1 expecting FW 0.22.13 / API 68.5.0 and the board running FW 0.22.30 / API 68.13.7 (JSON parser is backwards-compatible, as hoped)
 - Every predicted post-load state matched: RX Channel Mask `0xc3 → 0x41`, TX Channel Mask `0xc → 0x4`, VCO unchanged at 8.847 GHz, sample rate stays 1.92 Msps, FDD/CMOS preserved, RX2/TX2 now in `ensm: unknown / enabled: no` state
-- Takadono kept publishing throughout — `frame_count/delta` continued advancing through the profile reload (the channelizer pipes survived the chip reconfiguration cleanly)
+- Bouro kept publishing throughout — `frame_count/delta` continued advancing through the profile reload (the channelizer pipes survived the chip reconfiguration cleanly)
 - LO retune to W2 territory via `iio_attr -c adrv9002-phy -o altvoltage0 frequency 5600000000` actually changed the chip state this time (was silently ignored before the new profile was loaded); RX1_lo_hz = 5.6 GHz, TX1_lo_hz = 5.8 GHz both confirmed via `oriinit-cli status`
 
 **Discovered driver behavior (cross-SSI profile load):**
 - Loading `LVDS_20Msps_10MHz.json` against the CMOS HDL build returns: `adrv9002 spi1.0: SSI interface mismatch. PHY=1, RX1=2` → `cat: write error: Invalid argument` (exit 1)
 - The driver validates the profile's SSI mode against the FPGA's reported capability (`PHY=1` = HDL reports CMOS, `RX1=2` = profile requests LVDS) and refuses the write
-- **However**, the rejection is NOT cleanly transactional — the failed write leaves the chip's data path in a wedged state. Takadono shows zero `frame_count/delta` after the rejected write.
-- **Recovery is reloading the previously-known-good profile** (not a reboot). Verified: `cat $CMOS > $PROF` after the rejected LVDS load brought the radio fully back to a working 1T1R FDD CMOS state, Takadono frames resumed flowing.
+- **However**, the rejection is NOT cleanly transactional — the failed write leaves the chip's data path in a wedged state. Bouro shows zero `frame_count/delta` after the rejected write.
+- **Recovery is reloading the previously-known-good profile** (not a reboot). Verified: `cat $CMOS > $PROF` after the rejected LVDS load brought the radio fully back to a working 1T1R FDD CMOS state, Bouro frames resumed flowing.
 
 **Known small bug (tomorrow's patch):**
 - `oriinit-cli run-calibrations` returns `libiio read/write failure` in the 1T1R configuration. Root cause: the safe-sequence implementation iterates over RX1/RX2/TX1/TX2 doing iio writes, but RX2/TX2 are now `ensm: unknown / enabled: no` in 1T1R mode, so iio operations on those channels fail. **Fix scope:** filter out disabled channels (or check enable state) before the iio calls in `liboriinit/src/oriinit.c`. Small, well-scoped patch. Until this is fixed, calibrations don't complete after a profile load → RX path doesn't fully wake up → `dma_listen` reads `DEFAULT-PROFILE BINARY (no real ADC)` zeros instead of real samples.
@@ -1334,4 +1334,4 @@ The schema work we did (parser header inspection, top-level structure mapping, F
 
 ---
 
-*Last updated: 2026-05-27 (evening) — integrated-build timing CLOSED via the quarter-MAC split ("Cast HASTE", commit `6ffc273`): `clk_pl_0` -0.188 → +0.341 ns, clean `system_top.xsa` rebuilt and rebooted from the green fresh clone, channelizer answering at 0x84A70000 (version 1.0). The green clone caught two reproducibility gaps (stale power_detector submodule pointer; meta-adi configure sentinel) — both resolved. Earlier the same day (Phase 4 Ground lab session): chip-side configuration unblocked. TES-generated 1T1R FDD CMOS profile loaded cleanly on the ZCU102+ADRV9002 for the first time, all predicted state changes verified, LOs retuned to W2 frequencies (5.6 GHz RX, 5.8 GHz TX confirmed), channelizer survived the reload (Takadono frames flowing throughout). Three TES profiles generated and validated: CMOS 1.92 Msps (current HDL), LVDS 20 Msps (production target), LVDS 30.72 Msps (high-rate test). Driver-side SSI mismatch protection discovered (PHY=1 vs RX1=2 rejection), with the important caveat that rejection is not transactional — recovery is reload-previous-profile. Known small `liboriinit` 1T1R bug surfaced: `run-calibrations` fails on disabled channels (RX2/TX2 in `ensm: unknown` state); patch is to filter disabled channels before iio writes. Adauchi (programmatic profile generation) downgraded from critical-path to Phase 6+ research project — TES + this workflow is sufficient through Phase 5. When you come back, start at "You Are Here" — the next session is the small `liboriinit` patch + first real ADC samples + then the LVDS HDL port to enable the production 20 Msps 10 MHz profile. The forest remembers.*
+*Last updated: 2026-05-27 (evening) — integrated-build timing CLOSED via the quarter-MAC split ("Cast HASTE", commit `6ffc273`): `clk_pl_0` -0.188 → +0.341 ns, clean `system_top.xsa` rebuilt and rebooted from the green fresh clone, channelizer answering at 0x84A70000 (version 1.0). The green clone caught two reproducibility gaps (stale power_detector submodule pointer; meta-adi configure sentinel) — both resolved. Earlier the same day (Phase 4 Ground lab session): chip-side configuration unblocked. TES-generated 1T1R FDD CMOS profile loaded cleanly on the ZCU102+ADRV9002 for the first time, all predicted state changes verified, LOs retuned to W2 frequencies (5.6 GHz RX, 5.8 GHz TX confirmed), channelizer survived the reload (Bouro frames flowing throughout). Three TES profiles generated and validated: CMOS 1.92 Msps (current HDL), LVDS 20 Msps (production target), LVDS 30.72 Msps (high-rate test). Driver-side SSI mismatch protection discovered (PHY=1 vs RX1=2 rejection), with the important caveat that rejection is not transactional — recovery is reload-previous-profile. Known small `liboriinit` 1T1R bug surfaced: `run-calibrations` fails on disabled channels (RX2/TX2 in `ensm: unknown` state); patch is to filter disabled channels before iio writes. Adauchi (programmatic profile generation) downgraded from critical-path to Phase 6+ research project — TES + this workflow is sufficient through Phase 5. When you come back, start at "You Are Here" — the next session is the small `liboriinit` patch + first real ADC samples + then the LVDS HDL port to enable the production 20 Msps 10 MHz profile. The forest remembers.*

@@ -40,7 +40,7 @@ meta-ori/
 │       ├── systemd_%.bbappend          # extends systemd recipe
 │       └── systemd/
 │           └── 10-eth0.network         # static IP config file
-├── recipes-takadono/                   # (planned) M5: MQTT telemetry publisher
+├── recipes-bouro/                   # (planned) M5: MQTT telemetry publisher
 └── recipes-haifuraiya/                 # (planned) M3: channelizer DT fragments
 ```
 
@@ -72,7 +72,7 @@ of where the board is physically located.
 - `recipes-haifuraiya/` — channelizer-specific device tree fragments
   added when integrating Phase 2a's `.xsa` (Vivado export). Defines the
   channelizer register block, DMA, IRQs.
-- `recipes-takadono/` — Takadono v0 MQTT telemetry publisher; reads
+- `recipes-bouro/` — Bouro v0 MQTT telemetry publisher; reads
   channelizer status registers via mmap, publishes via paho-mqtt.
 
 ## License

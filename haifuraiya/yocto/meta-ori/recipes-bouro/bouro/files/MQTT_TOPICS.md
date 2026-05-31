@@ -1,7 +1,7 @@
-# Takadono MQTT Topic Surface (v0)
+# Bouro MQTT Topic Surface (v0)
 
 This document describes the MQTT topic structure published by
-`takadono_pub.sh` on the ZCU102. Subscribe at `mqtt://<zcu102-ip>:1883`
+`bouro_pub.sh` on the ZCU102. Subscribe at `mqtt://<zcu102-ip>:1883`
 (TCP) or `ws://<zcu102-ip>:9001/wss` (WebSockets, browser-friendly).
 Anonymous, no auth, broker is `mosquitto`.
 
@@ -47,7 +47,7 @@ mosquitto_sub -h <zcu102-ip> -t 'haifuraiya/status/+/frame_count/#' -v
 ```
 
 From a browser, use the Paho MQTT JavaScript library connecting to
-`ws://<zcu102-ip>:9001/wss`. See `takadono.html` for the reference
+`ws://<zcu102-ip>:9001/wss`. See `bouro.html` for the reference
 dashboard.
 
 ## Raw register topics
@@ -143,7 +143,7 @@ spikes.
 | `derived/power_spectrum` | JSON array | `[v0, v1, …, v63]` of 64 channel powers, decimal integers |
 
 One MQTT message per cycle carries the full 64-channel snapshot. This
-is what the 64-bar live spectrum widget in `takadono.html` subscribes
+is what the 64-bar live spectrum widget in `bouro.html` subscribes
 to. Per-channel raw values are still available at
 `register/channel_power_N` for forensic use.
 
@@ -157,7 +157,7 @@ length stable at 64.
 | `heartbeat` | ISO 8601 string | Published once per cycle; absence indicates publisher dead |
 | `publisher/started` | ISO 8601 string | Published once at startup |
 | `publisher/pid` | int | PID of publisher process |
-| `publisher/version` | string | Version of `takadono_pub.sh` (currently `0.1`) |
+| `publisher/version` | string | Version of `bouro_pub.sh` (currently `0.1`) |
 
 ## What's NOT here (yet)
 
@@ -174,7 +174,7 @@ length stable at 64.
 
 ## Adding new topics
 
-Edit `takadono_pub.sh`. Two patterns:
+Edit `bouro_pub.sh`. Two patterns:
 
 **For a new register-derived value**, add a `pub_derived` call after the
 relevant scalar read. Example:
@@ -188,6 +188,6 @@ pub_derived "status/some_new_bit" "$(((VAL_DEC >> 8) & 1))"
 online), copy the `pub_iio` helper pattern from
 `pluto_msk/firmware/ori/board/pluto/overlay/root/ovp_status_pub.sh`.
 
-After editing, sanity-check with `sh -n takadono_pub.sh` before
+After editing, sanity-check with `sh -n bouro_pub.sh` before
 deploying. Bump the `PUB_VERSION` string when shipping changes;
 subscribers can use it to detect stale publisher versions.

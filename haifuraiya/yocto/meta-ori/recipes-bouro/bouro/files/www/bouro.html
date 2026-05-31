@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Takadono — Channelizer Telemetry</title>
+    <title>Bouro — Channelizer Telemetry</title>
 
     <!-- Paho MQTT client. Vendor this file locally for isolated lab
-         networks (drop it next to takadono.html). Fetch from
+         networks (drop it next to bouro.html). Fetch from
          https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js
          on a machine with internet, then scp to the deploy host.
 
@@ -25,13 +25,13 @@
 
     <style>
         /* ============================================================
-           Takadono — Haifuraiya channelizer dashboard.
+           Bouro — Haifuraiya channelizer dashboard.
            Sister application to Speculator (pluto_msk). Same architectural
            DNA (Paho-over-WebSockets, big switch on topic, vanilla canvas),
            but distinct visual identity: deep violet observatory theme,
            with the 64-bar live spectrum as the centerpiece.
 
-           The name 高殿 (takadono) means "watchtower." This dashboard is the
+           The name 望楼 (bouro) means "watchtower." This dashboard is the
            watchtower's view across the 10 MHz uplink band.
            ============================================================ */
 
@@ -509,7 +509,7 @@
         <div class="header-content">
             <div class="app-title">
                 <span class="glyph">⌬</span>
-                <span>Takadono</span>
+                <span>Bouro</span>
                 <span class="app-subtitle">channelizer telemetry</span>
             </div>
             <div id="connection-status" class="connection-status">
@@ -643,7 +643,7 @@
     const brokerPort = parseInt(params.get('port') || '9001', 10);
     const brokerPath = '/wss';
 
-    const clientId = 'takadono-' + Math.floor(Math.random() * 1_000_000);
+    const clientId = 'bouro-' + Math.floor(Math.random() * 1_000_000);
     const TOPIC_ROOT = 'haifuraiya/status/';
 
     // Heartbeat staleness threshold. Publisher cycles every ~3s; gray out
