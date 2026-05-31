@@ -127,7 +127,14 @@ entity haifuraiya_channelizer_axi is
         dbg_pd_data_ena    : out std_logic_vector(N_CHANNELS - 1 downto 0);
         dbg_core_reset     : out std_logic;
         dbg_core_dropped   : out std_logic;
-        dbg_chan_last      : out std_logic
+        dbg_chan_last      : out std_logic;
+
+        -- Channel-0 EMA cascade taps (Phase B silicon bring-up)
+        dbg_pd0_dsum       : out std_logic_vector(2*DATA_WIDTH - 2 downto 0);
+        dbg_pd0_dsum_e2    : out std_logic;
+        dbg_pd0_ema_1      : out std_logic_vector(2*DATA_WIDTH - 2 downto 0);
+        dbg_pd0_ema_1_ena  : out std_logic;
+        dbg_pd0_ema_2      : out std_logic_vector(2*DATA_WIDTH - 2 downto 0)
 
 
     );
@@ -142,6 +149,20 @@ architecture rtl of haifuraiya_channelizer_axi is
     -- (power_detector declares port as std_logic_vector(2*DATA_W-2 DOWNTO 0),
     -- so the WIDTH is one more than the MSB index. Easy to misread.)
     constant POWER_WIDTH : positive := 2 * DATA_WIDTH - 1;
+
+
+
+
+    -- Per-channel power-detector taps; only ch0 is routed to ports,
+    -- synthesis trims the other 63.
+    type pd_dbg_word_t is array (0 to N_CHANNELS - 1)
+        of std_logic_vector(POWER_WIDTH - 1 downto 0);
+    signal pd_dbg_dsum     : pd_dbg_word_t;
+    signal pd_dbg_ema_1    : pd_dbg_word_t;
+    signal pd_dbg_dsum_e2  : std_logic_vector(N_CHANNELS - 1 downto 0);
+    signal pd_dbg_ema1_ena : std_logic_vector(N_CHANNELS - 1 downto 0);
+
+
 
     ---------------------------------------------------------------------------
     -- Control plane signals (driven by axi_lite_regs)
@@ -381,9 +402,24 @@ end process p_dispatch_align;
                 data_I        => chan_re_q,
                 data_Q        => chan_im_q,
                 data_ena      => pd_data_ena(k),
-                power_squared => stat_channel_power(
+                
+
+		--power_squared => stat_channel_power(
+                --                     (k + 1) * POWER_WIDTH - 1 downto
+                --                     k * POWER_WIDTH)
+
+
+
+		power_squared => stat_channel_power(
                                      (k + 1) * POWER_WIDTH - 1 downto
-                                     k * POWER_WIDTH)
+                                     k * POWER_WIDTH),
+                dbg_dsum      => pd_dbg_dsum(k),
+                dbg_dsum_e2   => pd_dbg_dsum_e2(k),
+                dbg_ema_1     => pd_dbg_ema_1(k),
+                dbg_ema_1_ena => pd_dbg_ema1_ena(k)
+            );
+
+
             );
     end generate;
 
@@ -489,6 +525,12 @@ end process p_dispatch_align;
     dbg_core_reset     <= core_reset;
     dbg_core_dropped   <= core_dropped;
     dbg_chan_last      <= chan_last;
+
+    dbg_pd0_dsum      <= pd_dbg_dsum(0);
+    dbg_pd0_dsum_e2   <= pd_dbg_dsum_e2(0);
+    dbg_pd0_ema_1     <= pd_dbg_ema_1(0);
+    dbg_pd0_ema_1_ena <= pd_dbg_ema1_ena(0);
+    dbg_pd0_ema_2     <= stat_channel_power(POWER_WIDTH - 1 downto 0);
 
 
 end architecture rtl;
