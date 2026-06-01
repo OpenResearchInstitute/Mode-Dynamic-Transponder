@@ -3,7 +3,7 @@
 # =============================================================================
 #
 # One-shot IP repackaging for the haifuraiya_channelizer_axi IP. Adds the
-# ten dbg_* output ports that were added to the entity for ILA debugging
+# fifteen dbg_* output ports that were added to the entity for ILA debugging
 # of the channelizer -> power_detector signal path on hardware.
 #
 # Once these are in component.xml, the BD's `ad_connect channelizer_rx1/
@@ -49,7 +49,8 @@ ipx::open_core $component_xml
 # Each entry:  { name  left_index }
 #   left_index = -1   -> scalar std_logic
 #   left_index = N    -> vector std_logic_vector(N downto 0), width = N+1
-# All ten dbg_* ports are direction = out.
+# All fifteen dbg_* ports are direction = out.
+#   dbg_pd0_* are channel-0 power-detector internals (dsum/ema), width 31 -> left=30.
 # -----------------------------------------------------------------------------
 set dbg_ports [list \
     [list dbg_chan_re_q       15] \
@@ -62,6 +63,11 @@ set dbg_ports [list \
     [list dbg_core_reset      -1] \
     [list dbg_core_dropped    -1] \
     [list dbg_chan_last       -1] \
+    [list dbg_pd0_dsum         30] \
+    [list dbg_pd0_dsum_e2      -1] \
+    [list dbg_pd0_ema_1        30] \
+    [list dbg_pd0_ema_1_ena    -1] \
+    [list dbg_pd0_ema_2        30] \
 ]
 
 set added 0

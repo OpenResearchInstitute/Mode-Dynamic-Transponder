@@ -99,7 +99,7 @@ set_property top tb_haifuraiya_channelizer_axi [get_filesets sim_1]
 
 # Reasonable simulation runtime - the testbench's stim process drives
 # everything explicitly and calls finish, so this is just an upper bound.
-set_property -name {xsim.simulate.runtime} -value {2 ms} \
+set_property -name {xsim.simulate.runtime} -value {6 ms} \
     -objects [get_filesets sim_1]
 
 puts "\nLaunching simulation..."
@@ -111,3 +111,17 @@ puts "PASS/FAIL summary, or:"
 puts "  - 'ALL TESTS PASSED' note -> green"
 puts "  - 'TESTS FAILED' error    -> investigate"
 puts "========================================"
+
+set pd0 {/tb_haifuraiya_channelizer_axi/u_dut/gen_pd[0].u_pd}
+add_wave ${pd0}/data_ena
+add_wave ${pd0}/dsum_e2
+add_wave ${pd0}/dsum
+add_wave ${pd0}/ema_1
+add_wave ${pd0}/ema_1_ena
+add_wave ${pd0}/ema_2
+add_wave ${pd0}/u_ema_1/data_ena
+add_wave ${pd0}/u_ema_1/sum
+add_wave ${pd0}/u_ema_1/sum_shift
+add_wave ${pd0}/u_ema_1/average
+restart
+run all

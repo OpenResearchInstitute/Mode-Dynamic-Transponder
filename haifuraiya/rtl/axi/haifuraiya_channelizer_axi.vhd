@@ -417,8 +417,6 @@ end process p_dispatch_align;
                 dbg_dsum_e2   => pd_dbg_dsum_e2(k),
                 dbg_ema_1     => pd_dbg_ema_1(k),
                 dbg_ema_1_ena => pd_dbg_ema1_ena(k)
-            );
-
 
             );
     end generate;

@@ -48,7 +48,7 @@ entity tb_haifuraiya_channelizer_axi is
         --   set_property -name {xsim.elaborate.xelab.more_options} \
         --       -value {-generic_top "SMP_PERIOD=5"} \
         --       -objects [get_filesets sim_1]
-        SMP_PERIOD : integer := 10
+        SMP_PERIOD : integer := 5
     );
 end entity tb_haifuraiya_channelizer_axi;
 
@@ -404,6 +404,17 @@ begin
         -- SMP_PERIOD (clocks between samples) is now an entity generic so
         -- the input sample rate can be swept without editing source.
         -- 10 -> 10 MSps, 5 -> 20 MSps. See the entity generic declaration.
+        variable seed1         : positive := 13;
+        variable seed2         : positive := 97;
+        variable rnd           : real;
+        variable noise_re      : integer;
+        variable noise_im      : integer;
+        variable n_zero        : integer;
+        variable n_rail        : integer;
+        variable n_mid         : integer;
+        constant NOISE_AMP     : integer := 3000;   -- input peak; RMS ~1700, like the ADC
+        constant NOISE_SAMPLES : integer := 15000;  -- enough frames for the ema_2 cascade to settle
+
     begin
 
         ---------------------------------------------------------------------
@@ -710,6 +721,54 @@ wait for 1 us;    -- let the design come back up
             pass("Test 10: EMA bounded under sustained DC, ch 0 = " &
                  integer'image(rdata));
         end if;
+
+---------------------------------------------------------------------
+        -- Test 11: BROADBAND NOISE  (the real-antenna regime)
+        ---------------------------------------------------------------------
+        report "--- Test 11: broadband noise, reproduce the hardware bimodal ---";
+
+        -- NO aresetn toggle: a register write in the first cycles out of
+        -- aresetn hangs the AXI-Lite handshake. Clear the EMAs via the soft-
+        -- reset bit instead (core_reset <= not aresetn OR ctrl_soft_reset).
+        axi_write(ADDR_OUTPUT_SHIFT, 14);   -- match the board
+        axi_write(ADDR_CONTROL, 1);         -- soft reset: core_reset=1, clears EMA cascade
+        axi_write(ADDR_CONTROL, 2);         -- release + enable: core_reset=0, run
+        -- alpha defaults are already 4096/64 (correct) -- no alpha writes needed
+
+        for i in 0 to NOISE_SAMPLES - 1 loop
+            uniform(seed1, seed2, rnd);
+            noise_re := integer(round((rnd - 0.5) * 2.0 * real(NOISE_AMP)));
+            uniform(seed1, seed2, rnd);
+            noise_im := integer(round((rnd - 0.5) * 2.0 * real(NOISE_AMP)));
+            send_sample(noise_re, noise_im);
+            wait for (SMP_PERIOD - 1) * CLK_PERIOD;
+        end loop;
+
+        wait for 200 * CLK_PERIOD;
+
+        n_zero := 0; n_rail := 0; n_mid := 0;
+        for k in 0 to N_CHANNELS - 1 loop
+            axi_read(ADDR_POWER_BASE + 4 * k, power_k);
+            report "    ch " & integer'image(k) & " = 0x" &
+                   to_hstring(to_unsigned(power_k, 32));
+            if power_k = 0 then
+                n_zero := n_zero + 1;
+            elsif power_k = 16#7FFFFFFF# then
+                n_rail := n_rail + 1;
+            else
+                n_mid := n_mid + 1;
+            end if;
+        end loop;
+        report "  NOISE RESULT: zero=" & integer'image(n_zero) &
+               "  railed(0x7FFFFFFF=-1)=" & integer'image(n_rail) &
+               "  intermediate=" & integer'image(n_mid);
+        if n_mid = 0 then
+            fail("Test 11: NO intermediate values -- BIMODAL REPRODUCED IN SIM.");
+        else
+            pass("Test 11: " & integer'image(n_mid) & " channels intermediate.");
+        end if;
+
+
 
         ---------------------------------------------------------------------
         -- Summary
