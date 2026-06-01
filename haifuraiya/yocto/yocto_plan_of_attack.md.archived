@@ -35,7 +35,7 @@ channelizer's Linux runtime.
 | 🎯 | **Next concrete action** | **M2 step 4 (phase 2): integrate ADI XSA into Yocto build via XSA-substitution mechanism (TBD); write system-conf.dtsi stub via meta-ori bbappend (closes Petalinux-vs-Yocto seam); rebuild Yocto; update JTAG boot to load bitstream; validate `dmesg \| grep -i adrv9002` and `iio_info`.** |
 | ⏳ | M3: image built against Phase 2a .xsa (Haifuraiya in PL) | Hardware design integrated; channelizer in bitstream |
 | ⏳ | M4: userspace mmap reads VERSION register = 0x00010000 | Round-trip Linux-to-IP communication confirmed |
-| ⏳ | M5: Takadono v0 MQTT publish working | First observability output |
+| ⏳ | M5: Bouro v0 MQTT publish working | First observability output |
 
 If you're returning to this doc after a hiatus, start at "You Are Here,"
 then jump to whichever milestone is the current 🎯.
@@ -294,7 +294,7 @@ haifuraiya/yocto/
 │   │   └── images/                   # custom image recipes (TBD)
 │   ├── recipes-network/              # NEW: static IP systemd dropin
 │   │   └── systemd-network/
-│   ├── recipes-takadono/             # Takadono v0 publisher (M5)
+│   ├── recipes-bouro/             # Bouro v0 publisher (M5)
 │   └── recipes-haifuraiya/           # channelizer device tree fragments (M3)
 ├── scripts/
 │   ├── copy_to_keroppi.sh            # ✅ working
@@ -355,7 +355,7 @@ core/meta + core/meta-poky    (oe-core + bitbake + reference distro)
                                                libiio integration, 
                                                device-tree.bbappend; 
                                                registered and compiles cleanly)
-                           └── meta-ori        (M2+: static IP, Takadono
+                           └── meta-ori        (M2+: static IP, Bouro
                                                 publisher, channelizer DT)
 ```
 
@@ -748,7 +748,7 @@ but functional). Vivado log tail: "Successfully created Hardware Platform",
 
 (Unchanged from previous plan.)
 
-### M5: Takadono v0 publishes channelizer state via MQTT ⏳
+### M5: Bouro v0 publishes channelizer state via MQTT ⏳
 
 (Unchanged from previous plan.)
 

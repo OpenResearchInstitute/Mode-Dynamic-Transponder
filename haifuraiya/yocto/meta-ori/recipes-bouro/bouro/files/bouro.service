@@ -1,13 +1,13 @@
 [Unit]
-Description=Takadono v0 MQTT telemetry publisher (Haifuraiya channelizer)
-Documentation=file:/usr/share/takadono/MQTT_TOPICS.md
+Description=Bouro v0 MQTT telemetry publisher (Haifuraiya channelizer)
+Documentation=file:/usr/share/bouro/MQTT_TOPICS.md
 After=network-online.target mosquitto.service
 Wants=network-online.target
 Requires=mosquitto.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/takadono_pub.sh
+ExecStart=/usr/bin/bouro_pub.sh
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

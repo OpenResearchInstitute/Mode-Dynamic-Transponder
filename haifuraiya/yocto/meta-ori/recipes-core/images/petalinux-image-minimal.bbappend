@@ -12,13 +12,13 @@ IMAGE_INSTALL:append = " \
     coreutils \
     mosquitto \
     mosquitto-clients \
-    takadono \
+    bouro \
 "
 
 # Package roles:
 #   coreutils         - GNU command-line tools (timeout, etc) missing from busybox subset
 #   mosquitto         - MQTT broker, listens on 1883 (TCP) and 9001 (WebSockets)
-#   mosquitto-clients - provides mosquitto_pub used by takadono_pub.sh
-#   takadono          - the channelizer telemetry publisher (see recipes-takadono/)
+#   mosquitto-clients - provides mosquitto_pub used by bouro_pub.sh
+#   bouro          - the channelizer telemetry publisher (see recipes-bouro/)
 #                       RDEPENDS on mosquitto and mosquitto-clients, so the
 #                       explicit listing here is belt-and-suspenders.

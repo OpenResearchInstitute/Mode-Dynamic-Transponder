@@ -1,7 +1,7 @@
-# mosquitto_%.bbappend — ORI customization for Takadono / Speculator-style dashboards
+# mosquitto_%.bbappend — ORI customization for Bouro / Speculator-style dashboards
 #
 # Replaces the default mosquitto.conf with one that enables WebSockets on
-# port 9001 (in addition to the default MQTT on 1883), so the Takadono
+# port 9001 (in addition to the default MQTT on 1883), so the Bouro
 # browser dashboard can connect over WS from a developer laptop. Mirrors
 # the broker configuration used by Speculator on the pluto_msk LibreSDR build.
 #

@@ -12,7 +12,7 @@
 -- OVERVIEW
 -------------------------------------------------------------------------------
 -- AXI4-Lite slave that exposes the channelizer wrapper's control and
--- telemetry to PS software. Designed as a stable interface for Takadono
+-- telemetry to PS software. Designed as a stable interface for Bouro
 -- (the Speculator-pattern observability stack on ZCU102) — register
 -- offsets are versioned and treated as a public contract.
 --

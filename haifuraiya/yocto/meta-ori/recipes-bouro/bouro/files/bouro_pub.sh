@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# takadono_pub.sh - Haifuraiya channelizer telemetry publisher
+# bouro_pub.sh - Haifuraiya channelizer telemetry publisher
 #
 # v0 stub. Companion to Speculator's ovp_status_pub.sh on pluto_msk;
 # same architecture, ported to ZCU102 + Haifuraiya channelizer.
