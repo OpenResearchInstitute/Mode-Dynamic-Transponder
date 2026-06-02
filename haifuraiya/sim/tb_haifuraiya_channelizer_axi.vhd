@@ -398,7 +398,7 @@ begin
         variable tone_phase     : real;
         variable tone_re        : integer;
         variable tone_im        : integer;
-        constant TONE_BIN       : integer := 32;          -- known bin 16
+        constant TONE_BIN       : integer := 16;   -- target CHANNELIZER channel (post-decimator)
         constant TONE_AMP       : integer := 30000;       -- ~92% full scale 30000
         constant DC_LEVEL       : integer := 20000;
         -- SMP_PERIOD (clocks between samples) is now an entity generic so
@@ -585,12 +585,14 @@ wait for 1 us;    -- let the design come back up
                ", expect channel " & integer'image(TONE_BIN) & " hot ---";
         tone_phase := 0.0;
         for i in 0 to 5000 loop
+            -- 2:1 halfband decimator => channelizer runs at half the wrapper rate, so
+            -- generate the tone at half the digital frequency (denominator 2*N_CHANNELS)
+            -- to land it in channel TONE_BIN. A tone with TONE_BIN >= 32 sits above
+            -- wrapper fs/4 and the halfband rejects it (that's what killed the old bin-32).
             tone_re := integer(real(TONE_AMP) *
-                cos(2.0 * MATH_PI * real(TONE_BIN) * real(i) /
-                    real(N_CHANNELS)));
+                cos(2.0 * MATH_PI * real(TONE_BIN) * real(i) / real(2 * N_CHANNELS)));
             tone_im := integer(real(TONE_AMP) *
-                sin(2.0 * MATH_PI * real(TONE_BIN) * real(i) /
-                    real(N_CHANNELS)));
+                sin(2.0 * MATH_PI * real(TONE_BIN) * real(i) / real(2 * N_CHANNELS)));
             send_sample(tone_re, tone_im);
             wait for (SMP_PERIOD - 1) * CLK_PERIOD;
         end loop;
@@ -673,10 +675,9 @@ wait for 1 us;    -- let the design come back up
         aresetn <= '1';
         wait for 20 * CLK_PERIOD;
 
-        -- Apply 5,000 samples of DC at the level that previously caused
-        -- wrapping. At 10 cycles/sample, this is ~500 us -- about 1.8x
-        -- the original wrap period.
-        for i in 0 to 5000 loop
+        -- Apply 15,000 samples of DC at the level that previously caused
+        -- wrapping.
+        for i in 0 to 15000 loop
             send_sample(DC_LEVEL, 0);
             wait for (SMP_PERIOD - 1) * CLK_PERIOD;
         end loop;

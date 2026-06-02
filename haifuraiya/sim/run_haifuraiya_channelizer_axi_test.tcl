@@ -66,6 +66,10 @@ safe_add_files sources_1 {
     ../rtl/channelizer/polyphase_filterbank_parallel.vhd
     ../rtl/channelizer/haifuraiya_channelizer_top.vhd
     ../rtl/axi/axi_lite_regs.vhd
+    ../rtl/resampler/halfband_taps_pkg.vhd
+    ../rtl/resampler/halfband_decimator.vhd
+    ../rtl/resampler/channel_gain_pkg.vhd
+    ../rtl/resampler/channel_eq.vhd
     ../rtl/axi/haifuraiya_channelizer_axi.vhd
 }
 
@@ -112,16 +116,17 @@ puts "  - 'ALL TESTS PASSED' note -> green"
 puts "  - 'TESTS FAILED' error    -> investigate"
 puts "========================================"
 
-set pd0 {/tb_haifuraiya_channelizer_axi/u_dut/gen_pd[0].u_pd}
-add_wave ${pd0}/data_ena
-add_wave ${pd0}/dsum_e2
-add_wave ${pd0}/dsum
-add_wave ${pd0}/ema_1
-add_wave ${pd0}/ema_1_ena
-add_wave ${pd0}/ema_2
-add_wave ${pd0}/u_ema_1/data_ena
-add_wave ${pd0}/u_ema_1/sum
-add_wave ${pd0}/u_ema_1/sum_shift
-add_wave ${pd0}/u_ema_1/average
+#set pd0 {/tb_haifuraiya_channelizer_axi/u_dut/gen_pd[0].u_pd}
+#add_wave ${pd0}/data_ena
+#add_wave ${pd0}/dsum_e2
+#add_wave ${pd0}/dsum
+#add_wave ${pd0}/ema_1
+#add_wave ${pd0}/ema_1_ena
+#add_wave ${pd0}/ema_2
+#add_wave ${pd0}/u_ema_1/data_ena
+#add_wave ${pd0}/u_ema_1/sum
+#add_wave ${pd0}/u_ema_1/sum_shift
+#add_wave ${pd0}/u_ema_1/average
+
 restart
 run all
