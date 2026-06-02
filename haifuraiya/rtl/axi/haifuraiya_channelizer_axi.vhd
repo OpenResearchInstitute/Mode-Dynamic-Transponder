@@ -210,6 +210,18 @@ architecture rtl of haifuraiya_channelizer_axi is
     -- Per-channel data_ena pulses for the 64 power_detector instances
     signal pd_data_ena : std_logic_vector(N_CHANNELS - 1 downto 0);
 
+    -- Decimator output (20 -> 10 Msps into the channelizer core)
+    signal dec_re, dec_im : signed(DATA_WIDTH - 1 downto 0);
+    signal dec_valid      : std_logic;
+
+    -- EQ output: flattened channel stream feeding BOTH power detectors and AXIS
+    signal eq_valid : std_logic;
+    signal eq_chan  : unsigned(5 downto 0);
+    signal eq_re, eq_im : signed(DATA_WIDTH - 1 downto 0);
+
+    -- chan_last delayed to align with the EQ output (1 dispatch + 3 EQ cycles)
+    signal chan_last_d : std_logic_vector(3 downto 0) := (others => '0');
+
 begin
 
     ---------------------------------------------------------------------------
@@ -232,6 +244,19 @@ begin
 
     s_axis_data_tready <= '1';
 
+    -- 2:1 halfband decimator: 20 Msps SSI stream -> clean 10.000 Msps for the core.
+    u_decim : entity work.halfband_decimator
+        port map (
+            clk       => aclk,
+            rst       => core_reset,
+            in_valid  => sample_valid_int,
+            in_i      => signed(sample_re_int),
+            in_q      => signed(sample_im_int),
+            out_valid => dec_valid,
+            out_i     => dec_re,
+            out_q     => dec_im
+        );
+
     ---------------------------------------------------------------------------
     -- Channelizer instance
     ---------------------------------------------------------------------------
@@ -248,9 +273,9 @@ begin
             clk           => aclk,
             reset         => core_reset,
 
-            sample_re     => sample_re_int,
-            sample_im     => sample_im_int,
-            sample_valid  => sample_valid_int,
+            sample_re     => std_logic_vector(dec_re),
+            sample_im     => std_logic_vector(dec_im),
+            sample_valid  => dec_valid,
 
             channel_re    => chan_re_acc,
             channel_im    => chan_im_acc,
@@ -338,6 +363,38 @@ begin
 end process p_dispatch_align;
 
     ---------------------------------------------------------------------------
+    -- Per-channel EQ: flatten the halfband edge-droop. Sits on the chan_re_q/
+    -- chan_im_q fork that feeds BOTH the power detectors and the AXIS output,
+    -- so one stage corrects telemetry and demod together. in_valid/in_chan are
+    -- the dispatch-aligned copies (already matched to the 1-cycle-late requant).
+    ---------------------------------------------------------------------------
+    u_eq : entity work.channel_eq
+        port map (
+            clk       => aclk,
+            rst       => core_reset,
+            in_valid  => chan_valid_r,
+            in_chan   => unsigned(chan_idx_int_r),
+            in_i      => signed(chan_re_q),
+            in_q      => signed(chan_im_q),
+            out_valid => eq_valid,
+            out_chan  => eq_chan,
+            out_i     => eq_re,
+            out_q     => eq_im
+        );
+
+    -- delay chan_last to land with the EQ output (dispatch reg + 3 EQ stages = 4)
+    p_chan_last_delay : process(aclk)
+    begin
+        if rising_edge(aclk) then
+            if core_reset = '1' then
+                chan_last_d <= (others => '0');
+            else
+                chan_last_d <= chan_last_d(2 downto 0) & chan_last;
+            end if;
+        end if;
+    end process p_chan_last_delay;
+
+    ---------------------------------------------------------------------------
     -- Output AXIS adapter
     -- The channelizer's channel_valid/idx/last already produces a clean
     -- one-channel-per-clock stream. We just rename to AXIS conventions.
@@ -356,10 +413,10 @@ end process p_dispatch_align;
             else
                 -- chan_re_q / chan_im_q updated this cycle from data that
                 -- arrived as chan_valid='1' one cycle ago.
-                m_axis_chans_tvalid <= chan_valid;
-                m_axis_chans_tdata  <= chan_im_q & chan_re_q;
-                m_axis_chans_tdest  <= "00" & chan_idx_int;
-                m_axis_chans_tlast  <= chan_last;
+                m_axis_chans_tvalid <= eq_valid;
+                m_axis_chans_tdata  <= std_logic_vector(eq_im) & std_logic_vector(eq_re);
+                m_axis_chans_tdest  <= "00" & std_logic_vector(eq_chan);
+                m_axis_chans_tlast  <= chan_last_d(3);
             end if;
         end if;
     end process p_axis_out;
@@ -373,8 +430,8 @@ end process p_dispatch_align;
     -- Point the dispatch to the registered copies to resolve off-by-one.
     ---------------------------------------------------------------------------
     gen_pd_ena : for k in 0 to N_CHANNELS - 1 generate
-        pd_data_ena(k) <= chan_valid_r when
-            unsigned(chan_idx_int_r) = to_unsigned(k, chan_idx_int'length)
+        pd_data_ena(k) <= eq_valid when
+            eq_chan = to_unsigned(k, eq_chan'length)
             else '0';
     end generate;
 
@@ -399,8 +456,8 @@ end process p_dispatch_align;
                 init          => core_reset,
                 alpha1        => ctrl_alpha1,
                 alpha2        => ctrl_alpha2,
-                data_I        => chan_re_q,
-                data_Q        => chan_im_q,
+                data_I        => std_logic_vector(eq_re),
+                data_Q        => std_logic_vector(eq_im),
                 data_ena      => pd_data_ena(k),
                 
 
