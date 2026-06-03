@@ -3,87 +3,37 @@
 -- Top-Level Polyphase Channelizer for Haifuraiya (Opulent Voice uplinks)
 -------------------------------------------------------------------------------
 -- Open Research Institute
--- Project: Polyphase Channelizer (Haifuraiya configuration)
 -- Target:  Xilinx Zynq UltraScale+ MPSoC (ZCU102, xczu9eg-ffvb1156-2-e)
--- Tools:   Vivado 2022.2, VHDL-2008
+-- Tools:   Vivado 2022.2.  RTL is VHDL-93-clean; compiles under -2008 too
+--          (the surrounding filterbank/FIR files are -2008).
 --
+-- PIPELINED-FFT BACK END (drop-free by construction)
+-- ---------------------------------------------------
+-- The output stage is a single pipelined R2SDF FFT (r2sdf_fft) fed by the
+-- existing parallel-to-sequential adapter. This REPLACES the previous
+-- dual fft_n_pt round-robin + frame-drop path. The R2SDF ingests one frame
+-- in N cycles against the >= N-cycle inter-frame interval at the production
+-- M_DECIMATION, with no arbitration and no drop path to fire -- so frames
+-- cannot be dropped by construction. r2sdf_fft is bit-exact to fft_n_pt
+-- (verified: r2sdf == golden model == fft_n_pt), so OUTPUT_SHIFT, the power
+-- detectors, EQ and m_axis are unaffected.
+--
+--   I/Q -> 2x polyphase_filterbank_parallel -> P2S adapter -> r2sdf_fft
+--          -> channel_re/im/idx/valid/last
+--
+-- frame_dropped is retained as a health monitor: it can only assert if a new
+-- filterbank frame arrives while the P2S is still streaming the previous one
+-- (a "miss"), which does not occur at the production cadence. Structurally 0.
 -------------------------------------------------------------------------------
--- OVERVIEW (parallel-MAC version)
--------------------------------------------------------------------------------
--- Receiver-side polyphase channelizer for the Haifuraiya FDMA uplink
--- system. Channelizes complex baseband I/Q into N=64 channels of
--- 156.25 kHz spacing, suitable for per-channel Opulent Voice demod.
---
--- This version uses parallel-MAC filterbanks: each branch instantiates
--- TAPS_PER_BRANCH multipliers (24 DSP48E2 per branch on ZU9EG) and
--- holds its coefficient slice as elaboration-time constants, sliced
--- out of the constant ALL_COEFFS array from haifuraiya_coeffs_pkg.
--- Compared to the iCE40-style serial MAC, this drops:
---   * the coeff_rom instances
---   * the LOAD_COEFFS state machine inside the filterbank
---   * the multi-cycle ready latency at startup
---
--- Architecture:
---
---   1. Two polyphase_filterbank_parallel instances (I and Q paths).
---      Each branch in each filterbank reads its own coefficient slice
---      at elaboration. No shared state between I and Q.
---
---   2. Parallel-to-sequential adapter. Filterbanks emit all 64 branch
---      outputs simultaneously on a packed bus; fft_64pt expects them
---      sequentially. The adapter latches on outputs_valid and walks
---      indices 0..63 over the next 64 clocks.
---
---   3. fft_64pt. Iterative radix-2 DIF FFT, ~320 cycles per frame.
---      (See note in fft_64pt regarding the OUTPUTTING-stage buffer
---      selection -- still pending review before tone-test runs.)
---
--------------------------------------------------------------------------------
--- BLOCK DIAGRAM
--------------------------------------------------------------------------------
---
---   +--------------------------------------------------------------------------------+
---   |                       haifuraiya_channelizer_top                               |
---   |                                                                                |
---   |              +------------------------+                                        |
---   |              | polyphase_filterbank_  |                                        |
---   |  sample_re ->| parallel (I)           |-- parallel bus (I) --+                 |
---   |              | 64 branches x 24 taps  |                      |                 |
---   |              | coeffs from .hex       |                      v                 |
---   |              +------------------------+             +--------------+           |
---   |                                                     | parallel-to- |           |
---   |                                                     |  sequential  |---------- |---> fft_64pt
---   |                                                     |   adapter    |           |    -> channel out
---   |                                                     +--------------+           |
---   |              +------------------------+                      ^                 |
---   |              | polyphase_filterbank_  |                      |                 |
---   |  sample_im ->| parallel (Q)           |-- parallel bus (Q) --+                 |
---   |              | 64 branches x 24 taps  |                                        |
---   |              | coeffs from .hex       |                                        |
---   |              +------------------------+                                        |
---   |                                                                                |
---   +--------------------------------------------------------------------------------+
---
--------------------------------------------------------------------------------
-
-
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity haifuraiya_channelizer_top is
     generic (
-        -- Channelizer dimensions (Haifuraiya defaults)
         N_CHANNELS       : positive := 64;
-        -- Decimation factor (samples per output frame).
-        --   M = N_CHANNELS: critically sampled (default, backward compatible).
-        --   M < N_CHANNELS: oversampled / guard-band channelizer.
-        --                   For Haifuraiya production: M_DECIMATION = 16
-        --                   (4x oversampled, M divides N).
         M_DECIMATION     : positive := 64;
         TAPS_PER_BRANCH  : positive := 24;
-
-        -- Data path widths
         DATA_WIDTH       : positive := 16;
         COEFF_WIDTH      : positive := 16;
         ACCUM_WIDTH      : positive := 40
@@ -123,6 +73,13 @@ architecture rtl of haifuraiya_channelizer_top is
 
     constant CHANNEL_IDX_WIDTH : positive := clog2(N_CHANNELS);
 
+    -- Pipeline-fill output frames to suppress before channel_valid goes live.
+    -- The R2SDF latency is the cascade (N-1 samples) plus the reorder's
+    -- one-frame ping-pong; the first real bin emerges after the initial
+    -- partial sweep plus one full fill frame. Exact value confirmed in
+    -- simulation against the iterative core (tb_channelizer_equiv).
+    constant FILL_FRAMES : natural := 2;
+
     ---------------------------------------------------------------------------
     -- Filterbank outputs (packed buses + valid pulses)
     ---------------------------------------------------------------------------
@@ -144,53 +101,23 @@ architecture rtl of haifuraiya_channelizer_top is
     signal p2s_idx   : unsigned(CHANNEL_IDX_WIDTH - 1 downto 0) := (others => '0');
 
     ---------------------------------------------------------------------------
-    -- Dual-FFT arbitration
-    --
-    -- For M_DECIMATION < N_CHANNELS the polyphase produces frames faster
-    -- than a single sequential FFT can process them (the FFT takes
-    -- ~320 cycles for N=64). We instantiate two FFTs in parallel and the
-    -- P2S routes each captured frame to whichever FFT is currently idle,
-    -- with a round-robin preference encoded in next_fft. current_fft
-    -- remembers which FFT we're streaming to during P2S_STREAMING.
-    --
-    -- For M_DECIMATION = N_CHANNELS (default / regression), only FFT_0 is
-    -- ever needed; FFT_1 sits idle. No behavioral change vs. single-FFT
-    -- design.
+    -- Single pipelined FFT (R2SDF) I/O
     ---------------------------------------------------------------------------
-    signal next_fft     : std_logic := '0';  -- preferred FFT for next capture
-    signal current_fft  : std_logic := '0';  -- which FFT the active stream targets
-
-    -- FFT 0 input/output signal set
-    signal fft0_x_re    : std_logic_vector(ACCUM_WIDTH - 1 downto 0) := (others => '0');
-    signal fft0_x_im    : std_logic_vector(ACCUM_WIDTH - 1 downto 0) := (others => '0');
-    signal fft0_x_idx   : std_logic_vector(5 downto 0) := (others => '0');
-    signal fft0_x_valid : std_logic := '0';
-    signal fft0_x_last  : std_logic := '0';
-    signal fft0_busy      : std_logic;
-    signal fft0_out_re    : std_logic_vector(ACCUM_WIDTH - 1 downto 0);
-    signal fft0_out_im    : std_logic_vector(ACCUM_WIDTH - 1 downto 0);
-    signal fft0_out_idx   : std_logic_vector(5 downto 0);
-    signal fft0_out_valid : std_logic;
-    signal fft0_out_last  : std_logic;
-
-    -- FFT 1 input/output signal set
-    signal fft1_x_re    : std_logic_vector(ACCUM_WIDTH - 1 downto 0) := (others => '0');
-    signal fft1_x_im    : std_logic_vector(ACCUM_WIDTH - 1 downto 0) := (others => '0');
-    signal fft1_x_idx   : std_logic_vector(5 downto 0) := (others => '0');
-    signal fft1_x_valid : std_logic := '0';
-    signal fft1_x_last  : std_logic := '0';
-    signal fft1_busy      : std_logic;
-    signal fft1_out_re    : std_logic_vector(ACCUM_WIDTH - 1 downto 0);
-    signal fft1_out_im    : std_logic_vector(ACCUM_WIDTH - 1 downto 0);
-    signal fft1_out_idx   : std_logic_vector(5 downto 0);
-    signal fft1_out_valid : std_logic;
-    signal fft1_out_last  : std_logic;
+    signal r2_in_re    : signed(ACCUM_WIDTH - 1 downto 0) := (others => '0');
+    signal r2_in_im    : signed(ACCUM_WIDTH - 1 downto 0) := (others => '0');
+    signal r2_in_valid : std_logic := '0';
+    signal r2_out_re   : signed(ACCUM_WIDTH - 1 downto 0);
+    signal r2_out_im   : signed(ACCUM_WIDTH - 1 downto 0);
+    signal r2_out_idx  : unsigned(CHANNEL_IDX_WIDTH - 1 downto 0);
+    signal r2_out_valid: std_logic;
 
     ---------------------------------------------------------------------------
-    -- Status
+    -- Priming / status
     ---------------------------------------------------------------------------
-    signal ready_r          : std_logic := '0';
-    signal frame_dropped_r  : std_logic := '0';
+    signal out_frame_cnt   : natural range 0 to FILL_FRAMES := 0;
+    signal primed          : std_logic;
+    signal ready_r         : std_logic := '0';
+    signal frame_dropped_r : std_logic := '0';
 
 begin
 
@@ -237,8 +164,7 @@ begin
         );
 
     ---------------------------------------------------------------------------
-    -- Ready: trivial now - just deasserted during reset, asserted otherwise.
-    -- Kept as a port for compatibility with downstream consumers.
+    -- Ready
     ---------------------------------------------------------------------------
     p_ready : process(clk)
     begin
@@ -252,120 +178,49 @@ begin
     end process p_ready;
 
     ---------------------------------------------------------------------------
-    -- Dual-FFT P2S Adapter
+    -- P2S adapter -> single FFT
     --
-    -- Round-robin: each captured frame goes to whichever FFT is preferred
-    -- by next_fft. If the preferred FFT is busy, we try the other one. If
-    -- both are busy, we drop. With the FFT's anticipated-IDLE busy signal
-    -- and frames arriving every M_DECIMATION * (clk/sample) cycles, the
-    -- arbitration sustains drop-free operation for M_DECIMATION as low as
-    -- N_CHANNELS/2 (e.g. M=32 for N=64). For more aggressive oversampling
-    -- (M=16 with N=64) the two FFTs together still keep up because they
-    -- alternate frames exactly.
-    --
-    -- During STREAMING, current_fft selects which FFT's input port we
-    -- drive. The other FFT's input port holds its default deassertion.
+    -- Latch all N branch outputs on a filterbank frame, then stream them
+    -- (idx 0..N-1) into the R2SDF, one per clock. No FFT arbitration, no
+    -- round-robin, no drop path. frame_dropped flags only the impossible-at-
+    -- production "new frame while still streaming" miss.
     ---------------------------------------------------------------------------
     p_p2s : process(clk)
     begin
         if rising_edge(clk) then
-            -- Default deassertions every cycle
-            fft0_x_valid    <= '0';
-            fft0_x_last     <= '0';
-            fft1_x_valid    <= '0';
-            fft1_x_last     <= '0';
+            r2_in_valid     <= '0';
             frame_dropped_r <= '0';
 
             if reset = '1' then
-                p2s_state   <= P2S_WAITING;
-                p2s_idx     <= (others => '0');
-                next_fft    <= '0';
-                current_fft <= '0';
+                p2s_state <= P2S_WAITING;
+                p2s_idx   <= (others => '0');
             else
                 case p2s_state is
 
                     when P2S_WAITING =>
                         if fb_i_outputs_valid = '1' then
-                            -- Pick an idle FFT, preferring next_fft.
-                            if next_fft = '0' and fft0_busy = '0' then
-                                -- Latch and route to FFT_0
-                                for i in 0 to N_CHANNELS - 1 loop
-                                    latched_re(i) <= fb_i_outputs(
-                                        (i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
-                                    latched_im(i) <= fb_q_outputs(
-                                        (i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
-                                end loop;
-                                p2s_state   <= P2S_STREAMING;
-                                p2s_idx     <= (others => '0');
-                                current_fft <= '0';
-                                next_fft    <= '1';
-                            elsif next_fft = '1' and fft1_busy = '0' then
-                                for i in 0 to N_CHANNELS - 1 loop
-                                    latched_re(i) <= fb_i_outputs(
-                                        (i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
-                                    latched_im(i) <= fb_q_outputs(
-                                        (i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
-                                end loop;
-                                p2s_state   <= P2S_STREAMING;
-                                p2s_idx     <= (others => '0');
-                                current_fft <= '1';
-                                next_fft    <= '0';
-                            elsif fft0_busy = '0' then
-                                -- Preferred FFT busy but the other is free
-                                for i in 0 to N_CHANNELS - 1 loop
-                                    latched_re(i) <= fb_i_outputs(
-                                        (i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
-                                    latched_im(i) <= fb_q_outputs(
-                                        (i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
-                                end loop;
-                                p2s_state   <= P2S_STREAMING;
-                                p2s_idx     <= (others => '0');
-                                current_fft <= '0';
-                                next_fft    <= '1';
-                            elsif fft1_busy = '0' then
-                                for i in 0 to N_CHANNELS - 1 loop
-                                    latched_re(i) <= fb_i_outputs(
-                                        (i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
-                                    latched_im(i) <= fb_q_outputs(
-                                        (i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
-                                end loop;
-                                p2s_state   <= P2S_STREAMING;
-                                p2s_idx     <= (others => '0');
-                                current_fft <= '1';
-                                next_fft    <= '0';
-                            else
-                                -- Both FFTs busy: drop this frame
-                                frame_dropped_r <= '1';
-                            end if;
+                            for i in 0 to N_CHANNELS - 1 loop
+                                latched_re(i) <= fb_i_outputs(
+                                    (i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
+                                latched_im(i) <= fb_q_outputs(
+                                    (i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH);
+                            end loop;
+                            p2s_state <= P2S_STREAMING;
+                            p2s_idx   <= (others => '0');
                         end if;
 
                     when P2S_STREAMING =>
-                        -- Drive the currently-selected FFT only; the other
-                        -- holds its default deassertions from the top.
-                        if current_fft = '0' then
-                            fft0_x_valid <= '1';
-                            fft0_x_re    <= latched_re(to_integer(p2s_idx));
-                            fft0_x_im    <= latched_im(to_integer(p2s_idx));
-                            fft0_x_idx   <= std_logic_vector(resize(p2s_idx, 6));
-                            if p2s_idx = N_CHANNELS - 1 then
-                                fft0_x_last <= '1';
-                                p2s_state   <= P2S_WAITING;
-                                p2s_idx     <= (others => '0');
-                            else
-                                p2s_idx <= p2s_idx + 1;
-                            end if;
+                        r2_in_valid <= '1';
+                        r2_in_re    <= signed(latched_re(to_integer(p2s_idx)));
+                        r2_in_im    <= signed(latched_im(to_integer(p2s_idx)));
+                        if fb_i_outputs_valid = '1' then
+                            frame_dropped_r <= '1';   -- miss (cannot happen at production M)
+                        end if;
+                        if p2s_idx = N_CHANNELS - 1 then
+                            p2s_state <= P2S_WAITING;
+                            p2s_idx   <= (others => '0');
                         else
-                            fft1_x_valid <= '1';
-                            fft1_x_re    <= latched_re(to_integer(p2s_idx));
-                            fft1_x_im    <= latched_im(to_integer(p2s_idx));
-                            fft1_x_idx   <= std_logic_vector(resize(p2s_idx, 6));
-                            if p2s_idx = N_CHANNELS - 1 then
-                                fft1_x_last <= '1';
-                                p2s_state   <= P2S_WAITING;
-                                p2s_idx     <= (others => '0');
-                            else
-                                p2s_idx <= p2s_idx + 1;
-                            end if;
+                            p2s_idx <= p2s_idx + 1;
                         end if;
 
                 end case;
@@ -374,89 +229,56 @@ begin
     end process p_p2s;
 
     ---------------------------------------------------------------------------
-    -- Dual N-Point FFTs
-    --
-    -- Two identical FFT instances. Each one runs the same fft_n_pt logic
-    -- (320 cycles busy per frame for N=64). The P2S round-robins frames
-    -- between them, so combined throughput is one frame per 160 cycles.
-    -- That meets M_DECIMATION=16 budget at 100 MHz / 10 Msps.
-    --
-    -- The two FFTs' OUTPUTTING phases are offset by the inter-frame period
-    -- and each lasts 64 cycles, so they never produce out_valid='1'
-    -- simultaneously: the output mux below picks whichever is currently
-    -- emitting.
+    -- Single pipelined R2SDF FFT (drop-free by construction)
     ---------------------------------------------------------------------------
-    u_fft_0 : entity work.fft_n_pt
+    u_fft : entity work.r2sdf_fft
         generic map (
-            N          => N_CHANNELS,
-            DATA_WIDTH => ACCUM_WIDTH
+            N             => N_CHANNELS,
+            DATA_WIDTH    => ACCUM_WIDTH,
+            TWIDDLE_WIDTH => 16
         )
         port map (
             clk       => clk,
-            reset     => reset,
-            x_re      => fft0_x_re,
-            x_im      => fft0_x_im,
-            x_idx     => fft0_x_idx,
-            x_valid   => fft0_x_valid,
-            x_last    => fft0_x_last,
-            out_re    => fft0_out_re,
-            out_im    => fft0_out_im,
-            out_idx   => fft0_out_idx,
-            out_valid => fft0_out_valid,
-            out_last  => fft0_out_last,
-            busy      => fft0_busy
-        );
-
-    u_fft_1 : entity work.fft_n_pt
-        generic map (
-            N          => N_CHANNELS,
-            DATA_WIDTH => ACCUM_WIDTH
-        )
-        port map (
-            clk       => clk,
-            reset     => reset,
-            x_re      => fft1_x_re,
-            x_im      => fft1_x_im,
-            x_idx     => fft1_x_idx,
-            x_valid   => fft1_x_valid,
-            x_last    => fft1_x_last,
-            out_re    => fft1_out_re,
-            out_im    => fft1_out_im,
-            out_idx   => fft1_out_idx,
-            out_valid => fft1_out_valid,
-            out_last  => fft1_out_last,
-            busy      => fft1_busy
+            rst       => reset,
+            in_valid  => r2_in_valid,
+            in_re     => r2_in_re,
+            in_im     => r2_in_im,
+            out_valid => r2_out_valid,
+            out_re    => r2_out_re,
+            out_im    => r2_out_im,
+            out_idx   => r2_out_idx
         );
 
     ---------------------------------------------------------------------------
-    -- Output mux
-    --
-    -- Combinational pick of whichever FFT is currently emitting. Their
-    -- OUTPUTTING phases never overlap (offset by inter-frame period > 64
-    -- cycles), so at most one out_valid is '1' at any time.
+    -- Priming: suppress channel_valid during the pipeline-fill frames so the
+    -- first frame the downstream sees is real (matching the old core's
+    -- contract, where the iterative FFT only emitted complete frames).
     ---------------------------------------------------------------------------
- 
-   --channel_re    <= fft0_out_re    when fft0_out_valid = '1' else fft1_out_re;
+    p_prime : process(clk)
+    begin
+        if rising_edge(clk) then
+            if reset = '1' then
+                out_frame_cnt <= 0;
+            elsif r2_out_valid = '1' and to_integer(r2_out_idx) = N_CHANNELS - 1 then
+                if out_frame_cnt < FILL_FRAMES then
+                    out_frame_cnt <= out_frame_cnt + 1;
+                end if;
+            end if;
+        end if;
+    end process p_prime;
 
-channel_re   <= fft0_out_re   when fft0_out_valid = '1'
-           else fft1_out_re   when fft1_out_valid = '1'
-           else (others => '0');
-channel_im   <= fft0_out_im   when fft0_out_valid = '1'
-           else fft1_out_im   when fft1_out_valid = '1'
-           else (others => '0');
-channel_idx  <= fft0_out_idx  when fft0_out_valid = '1'
-           else fft1_out_idx  when fft1_out_valid = '1'
-           else (others => '0');
-channel_last <= fft0_out_last when fft0_out_valid = '1'
-           else fft1_out_last when fft1_out_valid = '1'
-           else '0';
+    primed <= '1' when out_frame_cnt >= FILL_FRAMES else '0';
 
-    --channel_im    <= fft0_out_im    when fft0_out_valid = '1' else fft1_out_im;
-    --channel_idx   <= fft0_out_idx   when fft0_out_valid = '1' else fft1_out_idx;
-
-    channel_valid <= fft0_out_valid or fft1_out_valid;
-
-    --channel_last  <= fft0_out_last  when fft0_out_valid = '1' else fft1_out_last;
+    ---------------------------------------------------------------------------
+    -- Output mapping (40-bit, same scale as fft_n_pt)
+    ---------------------------------------------------------------------------
+    channel_re    <= std_logic_vector(r2_out_re);
+    channel_im    <= std_logic_vector(r2_out_im);
+    channel_idx   <= std_logic_vector(r2_out_idx);
+    channel_valid <= r2_out_valid and primed;
+    channel_last  <= '1' when (r2_out_valid = '1' and primed = '1'
+                               and to_integer(r2_out_idx) = N_CHANNELS - 1)
+                     else '0';
 
     ready         <= ready_r;
     frame_dropped <= frame_dropped_r;
