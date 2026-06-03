@@ -167,6 +167,31 @@ frames to dvb_fpga.
 `libgse` (OpenSAND, ETSI reference implementation) and by ORI publishing
 reference receiver software.
 
+### Pipelined FFT back end (drop-free by construction)
+
+**Decision:** The channelizer's DFT stage is a single **pipelined R2SDF FFT**
+(radix-2 single-path delay feedback), not the original iterative-block
+`fft_n_pt` running two-deep in a round-robin.
+
+**Why:** At the production `M_DECIMATION = 16`, frames arrive every 160 fabric
+cycles and each iterative FFT is busy 320, so the dual-FFT round-robin
+alternated frames with *zero* timing margin. On hardware, jitter (the ADC
+valid crossing into `clk_pl_0`, slow corners) pushed the occasional frame onto
+a both-FFTs-busy cycle and it was dropped — single-digit ppm, but a receiver
+cannot silently lose frames. A pipelined FFT ingests a frame in 64 cycles
+against the 160-cycle interval (~40% utilization) and has no arbitration and no
+drop path to fire: drop-free by *construction*, not by margin. R2SDF is the
+textbook streaming-FFT architecture (Wold & Despain 1984; He & Torkelson 1996)
+and the canonical back end for a polyphase channelizer (Harris) — this moves us
+*toward* the standard design, not away from it.
+
+**Fixed-point spec & verification:** transplanted verbatim from `fft_n_pt`
+(40-bit datapath, Q1.14 twiddles, truncating multiply, wrap, DIF) so the new
+core is bit-exact and a numerical drop-in — `OUTPUT_SHIFT`, the power
+detectors, EQ, and `m_axis` widths are unaffected. Design + recipe in
+`docs/pipelined_fft.md`; the bit-exact golden model the RTL is checked against
+is `model/r2sdf_fft_model.py`.
+
 ---
 
 ## 🏰 Phase 1: AXI Wrap the Channelizer
@@ -185,7 +210,7 @@ in any ZCU102 block design.
    - **AXI-Lite control plane:** Register map below, including `OUTPUT_SHIFT` field that defaults to extracting bits [31:16] of the 40-bit channelizer output.
    - **Reset:** Single domain — AXI `aresetn` (inverted) drives channelizer `reset`. Soft reset register also asserts internal reset.
 
-2. **(skipped — already done inside the channelizer).** The channelizer's existing `haifuraiya_channelizer_top` entity already exposes one-channel-per-clock outputs via `channel_re / channel_im / channel_idx / channel_valid / channel_last`. The internal dual-FFT arbitration takes care of serialization. The AXI wrapper just renames these to AXIS pins — no separate serializer block needed.
+2. **(skipped — already done inside the channelizer).** The channelizer's existing `haifuraiya_channelizer_top` entity already exposes one-channel-per-clock outputs via `channel_re / channel_im / channel_idx / channel_valid / channel_last`. The pipelined R2SDF FFT back end produces those one-channel-per-clock outputs directly — it replaced the original dual-FFT round-robin (see the *Pipelined FFT back end* decision and Trophy Case #9). The AXI wrapper just renames these to AXIS pins — no separate serializer block needed.
 
 3. **Per-channel power detector (existing component reused).** Two ORI submodules under `haifuraiya/third_party/`:
    - `power_detector` from https://github.com/OpenResearchInstitute/power_detector
@@ -205,7 +230,7 @@ in any ZCU102 block design.
    | 0x04 | CONTROL | RW | bit 0: soft reset (sticky); bit 1: enable |
    | 0x08 | STATUS | RO | bit 0: ready; bit 1: overflow sticky; bit 2: backpressure sticky |
    | 0x0C | FRAME_COUNT | RO | output frames since reset (32-bit) |
-   | 0x10 | DROPPED_FRAMES | RO | count of frames lost to FIFO overflow |
+   | 0x10 | DROPPED_FRAMES | RO | count of frames dropped at the FFT input. The pipelined-FFT back end removes the drop path → structurally 0; retained as a health monitor (see Trophy Case #9) |
    | 0x14 | OUTPUT_SHIFT | RW | right-shift applied to the 40-bit channelizer output before AXIS (default 16; valid 0..24) |
    | 0x18 | POWER_ALPHA1 | RW | first-stage EMA α (default: fast tracker, e.g. α=2^-6) |
    | 0x1C | POWER_ALPHA2 | RW | second-stage EMA α (default: slower smoother, e.g. α=2^-12) |
@@ -378,7 +403,7 @@ ipx::package_project -root_dir /path/to/ip \
 ---
 
 ## 🐲 Bug Hunt Trophy Case
-*Eight bosses slain over the bring-up + packaging + integration sessions.
+*Nine bosses slain over the bring-up + packaging + integration + live-bring-up sessions.
 Documented for future-you and for anyone else encountering the same patterns.*
 
 ### 1. Testbench `tvalid` sub-delta scheduling collision
@@ -508,6 +533,16 @@ on clocks too (pointing at the reset). Resets only declare `POLARITY`.
 Symmetry feels right but is wrong. This is a footgun for anyone packaging
 an IP with the natural-feeling "mirror what I did for the clock onto the
 reset" instinct.
+
+### 9. Dropped frames on hardware — zero-margin dual-FFT at M=16
+
+**Symptom:** Bouro showed a steady trickle of `DROPPED_FRAMES` on the live M=16 build — single-digit ppm (~5–9 per ~1.2M frames). They persisted with `dma_listen -c 100000` actively draining the stream, so it was *not* a downstream-consumer problem.
+
+**Root cause:** Read straight out of `haifuraiya_channelizer_top` — the output stage ran two iterative `fft_n_pt` cores round-robin and dropped a frame when *both* were busy (`frame_dropped_r <= '1'`). At M=16 a frame arrives every 160 fabric cycles and each FFT is busy 320, so the two had to alternate frames with *exactly zero* timing margin — the comment itself said "they alternate frames exactly." The "anticipate-IDLE-by-2" busy signal bought a sliver, so it mostly kept up; real-world jitter (the ADC valid crossing into `clk_pl_0`) occasionally landed a frame on a both-busy cycle → drop. The drop is at the FFT *input*, so a lost frame is invisible to both `m_axis` and the power detectors — it never gets transformed at all.
+
+**Fix:** Replace the iterative-block FFT + dual-FFT round-robin + drop path with a single **pipelined R2SDF FFT** (see the *Pipelined FFT back end* decision). Drop-free by construction — no arbitration, ~40% utilization, no drop path to fire. Fixed-point recipe transplanted from `fft_n_pt`, bit-exact, verified against `model/r2sdf_fft_model.py`. The old core lives in git history; it is not carried in the tree behind a generic.
+
+**Pattern to watch for elsewhere:** "Alternate frames *exactly*" is a zero-margin design and a red flag. Deterministic sim cannot see it — with no jitter the perfect hand-off holds, so every prior `DROPPED_FRAMES = 0` sim result was truthful — but hardware has CDC and corner jitter a zero-margin hand-off can't absorb. The hardware register read (Bouro) was the authority that surfaced it. Fix by sizing for throughput margin plus a FIFO, or by removing the contended resource entirely (a pipelined FFT removes the arbitration). Margin keeps it up on average; a FIFO absorbs the instantaneous.
 
 ### Cross-cutting lessons
 
