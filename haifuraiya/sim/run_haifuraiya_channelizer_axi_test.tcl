@@ -60,10 +60,12 @@ safe_add_files sources_1 {
     ../third_party/lowpass_ema/src/lowpass_ema.vhd
     ../third_party/power_detector/src/power_detector.vhd
     ../rtl/channelizer/fft_pkg.vhd
-    ../rtl/channelizer/fft_n_pt.vhd
     ../rtl/channelizer/haifuraiya_coeffs_pkg.vhd
     ../rtl/channelizer/fir_branch_parallel.vhd
     ../rtl/channelizer/polyphase_filterbank_parallel.vhd
+    ../rtl/channelizer/r2sdf_stage.vhd
+    ../rtl/channelizer/r2sdf_reorder.vhd
+    ../rtl/channelizer/r2sdf_fft.vhd
     ../rtl/channelizer/haifuraiya_channelizer_top.vhd
     ../rtl/axi/axi_lite_regs.vhd
     ../rtl/resampler/halfband_taps_pkg.vhd
