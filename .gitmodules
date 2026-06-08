@@ -12,3 +12,6 @@
 	path = haifuraiya/third_party/meta-adi
 	url = https://github.com/analogdevicesinc/meta-adi.git
 	branch = 2022_R2
+[submodule "haifuraiya/third_party/pluto_msk"]
+	path = haifuraiya/third_party/pluto_msk
+	url = https://github.com/OpenResearchInstitute/pluto_msk
