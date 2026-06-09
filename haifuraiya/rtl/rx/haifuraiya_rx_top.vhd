@@ -88,7 +88,7 @@ end entity haifuraiya_rx_top;
 
 architecture rtl of haifuraiya_rx_top is
 
-    constant SAMPLE_W : natural := 16;  -- keep the channelizer's full 16-bit I width
+    constant SAMPLE_W : natural := 12;  -- keeping channelizer's full 16-bit I width oops didn't work, set to 12
 
     signal reset_h : std_logic;         -- active-high reset for the modem blocks
 
@@ -232,7 +232,8 @@ begin
 
             rx_enable  => '1',
             rx_svalid  => rx_svalid,
-            rx_samples => chan_i_reg,
+            rx_samples => chan_i_reg(15 downto 4),  -- drop to 12
+            --rx_samples => chan_i_reg, -- full 16 beans
 
             rx_data      => rx_data,
             rx_data_soft => rx_data_soft,

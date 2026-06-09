@@ -73,6 +73,13 @@ safe_add_files sources_1 {
     ../rtl/resampler/channel_gain_pkg.vhd
     ../rtl/resampler/channel_eq.vhd
     ../rtl/axi/haifuraiya_channelizer_axi.vhd
+    ../third_party/pluto_msk/nco/src/sin_cos_lut.vhd
+    ../third_party/pluto_msk/nco/src/nco.vhd
+    ../third_party/pluto_msk/pi_controller/src/pi_controller.vhd
+    ../third_party/pluto_msk/msk_demodulator/src/costas_lock_detect.vhd
+    ../third_party/pluto_msk/msk_demodulator/src/costas_loop.vhd
+    ../third_party/pluto_msk/msk_demodulator/src/msk_demodulator.vhd
+    ../third_party/pluto_msk/src/frame_sync_detector_soft.vhd
 }
 
 # --- Testbench ---
@@ -89,24 +96,26 @@ foreach f [get_files -of_objects [get_filesets sim_1] -filter {FILE_TYPE == VHDL
     set_property file_type {VHDL 2008} $f
 }
 
-# Copy coefficient file to xsim working directory (same pattern as the
-# existing run_haifuraiya_channelizer_test.tcl)
-puts "\nCopying coefficient files to xsim working directory..."
-set coeff_src "../rtl/coeffs"
-set coeff_dst "$project_dir/$project_name.sim/sim_1/behav/xsim"
-file mkdir $coeff_dst
-foreach hex_file [glob -nocomplain [file join $coeff_src "*.hex"]] {
-    file copy -force $hex_file $coeff_dst
-    puts "  OK Copied: [file tail $hex_file] -> $coeff_dst"
+# Stage the OPV I/Q stimulus into the xsim working dir (read by p_stim's file
+# playback). Kept in sim/ so it survives the project delete/recreate above.
+set stim_file [file join [file dirname [info script]] "opv_chan_stim.txt"]
+if {[file exists $stim_file]} {
+    file mkdir $coeff_dst
+# ensure the dir exists, whatever the order
+    file copy -force $stim_file $coeff_dst
+    puts "  OK Copied: [file tail $stim_file] -> $coeff_dst"
+} else {
+    puts "  WARNING: $stim_file not found -- generate it with gen_opv_stimulus.py"
+    puts "           and drop it in sim/, or the OPV phase will fail on file open."
 }
+
 
 # Pick the testbench as top-level for simulation
 set_property top tb_haifuraiya_channelizer_axi [get_filesets sim_1]
 
 # Reasonable simulation runtime - the testbench's stim process drives
 # everything explicitly and calls finish, so this is just an upper bound.
-set_property -name {xsim.simulate.runtime} -value {6 ms} \
-    -objects [get_filesets sim_1]
+set_property -name {xsim.simulate.runtime} -value {0ns} -objects [get_filesets sim_1]
 
 puts "\nLaunching simulation..."
 launch_simulation
@@ -118,17 +127,21 @@ puts "  - 'ALL TESTS PASSED' note -> green"
 puts "  - 'TESTS FAILED' error    -> investigate"
 puts "========================================"
 
-#set pd0 {/tb_haifuraiya_channelizer_axi/u_dut/gen_pd[0].u_pd}
-#add_wave ${pd0}/data_ena
-#add_wave ${pd0}/dsum_e2
-#add_wave ${pd0}/dsum
-#add_wave ${pd0}/ema_1
-#add_wave ${pd0}/ema_1_ena
-#add_wave ${pd0}/ema_2
-#add_wave ${pd0}/u_ema_1/data_ena
-#add_wave ${pd0}/u_ema_1/sum
-#add_wave ${pd0}/u_ema_1/sum_shift
-#add_wave ${pd0}/u_ema_1/average
 
-restart
+# demod loop visibility (instance-internal -> not auto-added)
+add_wave {/tb_haifuraiya_channelizer_axi/u_demod/lpf_accum_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_demod/lpf_accum_f2}
+add_wave {/tb_haifuraiya_channelizer_axi/u_demod/f1_error}
+add_wave {/tb_haifuraiya_channelizer_axi/u_demod/f2_error}
+add_wave {/tb_haifuraiya_channelizer_axi/u_demod/dbg_acc_i_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_demod/dbg_acc_q_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_demod/tclk}
+add_wave {/tb_haifuraiya_channelizer_axi/u_fsync/frame_sync_locked}
+add_wave {/tb_haifuraiya_channelizer_axi/u_fsync/frames_received}
+add_wave {/tb_haifuraiya_channelizer_axi/u_demod/cst_lock_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_demod/cst_lock_f2}
+add_wave {/tb_haifuraiya_channelizer_axi/u_fsync/frame_sync_locked}
+add_wave {/tb_haifuraiya_channelizer_axi/n_target_samps}
+add_wave {/tb_haifuraiya_channelizer_axi/rx_data_soft}
+
 run all

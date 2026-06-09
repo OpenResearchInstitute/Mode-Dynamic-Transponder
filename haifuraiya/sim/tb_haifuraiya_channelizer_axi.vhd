@@ -32,7 +32,12 @@
 -- xsim via run_haifuraiya_channelizer_axi_test.tcl.
 -------------------------------------------------------------------------------
 
+
+library std;
+use std.textio.all;
+
 library ieee;
+use ieee.std_logic_textio.all;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use ieee.math_real.all;
@@ -138,6 +143,66 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     -- Simulation done flag (lets capture process stop)
     signal running : std_logic := '1';
 
+    -- frue = full regression, false = jump to OPV injection for tuning
+    constant RUN_CHANNELIZER_TESTS : boolean := false;
+
+    -- ===== Demod-path integration (added) =====
+    constant TARGET_CHANNEL : natural := 0;   -- channel to bring up first
+
+    -- Demod tuning. TODO: re-derive for the channel rate (~625 ksps, SPS ~11.53)
+    -- per CHANNELIZER_DEMOD_CONTRACT.md. These placeholders let it elaborate and
+    -- exercise the wiring; they will NOT produce lock until set correctly.
+
+    --constant FREQ_WORD_F1  : std_logic_vector(31 downto 0) := x"10000000";  -- TODO
+    --constant FREQ_WORD_F2  : std_logic_vector(31 downto 0) := x"30000000";  -- TODO
+    --rx_freq_word_f1 = 0x058CD20B   (lower tone, +13550 Hz)
+    --rx_freq_word_f2 = 0x10A67621   (upper tone, +40650 Hz)
+    --rx_freq_word_f1 = 0x13333333    (0.0750 = centroid − half the offset)
+    --rx_freq_word_f2 = 0x39999999    (0.2250 = centroid + half the offset)
+    constant FREQ_WORD_F1  : std_logic_vector(31 downto 0) := x"13333333";
+    constant FREQ_WORD_F2  : std_logic_vector(31 downto 0) := x"39999999";
+
+
+    --constant LPF_P_GAIN    : std_logic_vector(23 downto 0) := x"000100";    -- TODO
+    --constant LPF_I_GAIN    : std_logic_vector(23 downto 0) := x"000010";    -- TODO
+    --constant LPF_ALPHA     : std_logic_vector(23 downto 0) := x"000080";    -- TODO
+    --constant LPF_P_SHIFT   : std_logic_vector(7 downto 0)  := x"08";        -- TODO
+    --constant LPF_I_SHIFT   : std_logic_vector(7 downto 0)  := x"0C";        -- TODO
+    --constant SYM_LOCK_CNT  : std_logic_vector(9 downto 0)  := "0100000000"; -- TODO (256)
+    --constant SYM_LOCK_THR  : std_logic_vector(15 downto 0) := x"0400";      -- TODO
+
+
+    constant LPF_P_GAIN  : std_logic_vector(23 downto 0) := x"7FFFFF";   -- max
+    constant LPF_I_GAIN  : std_logic_vector(23 downto 0) := x"7FFFFF";   -- max
+    constant LPF_ALPHA   : std_logic_vector(23 downto 0) := x"000000";
+    constant LPF_P_SHIFT : std_logic_vector(7 downto 0)  := x"14";       -- 20
+    constant LPF_I_SHIFT : std_logic_vector(7 downto 0)  := x"1D";       -- 29
+    constant SYM_LOCK_CNT : std_logic_vector(9 downto 0)  := "0010000000"; -- 128 (RDL default)
+    constant SYM_LOCK_THR : std_logic_vector(15 downto 0) := x"2710";      -- 10000 (RDL default)
+
+
+    signal chan_i_reg  : std_logic_vector(15 downto 0) := (others => '0');
+    signal chan_q_reg  : std_logic_vector(15 downto 0) := (others => '0');
+    signal rx_svalid   : std_logic := '0';
+    signal rx_data     : std_logic;
+    signal rx_data_soft: signed(15 downto 0);
+    signal rx_dvalid   : std_logic;
+    signal lock_f1, lock_f2 : std_logic;
+    signal rx_bit_corr : std_logic;
+    signal demod_lock  : std_logic;
+
+    signal sb_tdata  : std_logic_vector(2 downto 0);
+    signal sb_tvalid : std_logic;
+    signal sb_tlast  : std_logic;
+
+    -- integration counters (visible at end-of-sim)
+    signal n_target_samps : integer := 0;  -- samples handed to the demod
+    signal n_soft_beats   : integer := 0;  -- soft bits emitted
+    signal n_soft_frames  : integer := 0;  -- frame_sync frames
+
+
+
+
 
 begin
 
@@ -202,6 +267,114 @@ begin
             s_axi_ctrl_rready   => s_axi_ctrl_rready
         );
 
+
+
+    -- TDEST demux: forward ONLY the target channel's I to the demod.
+    p_demux : process(aclk)
+    begin
+        if rising_edge(aclk) then
+            rx_svalid <= '0';
+            if aresetn = '0' then
+                rx_svalid <= '0';
+            elsif m_axis_chans_tvalid = '1' and m_axis_chans_tready = '1' then
+                if to_integer(unsigned(m_axis_chans_tdest(5 downto 0))) = TARGET_CHANNEL then
+                    chan_i_reg     <= m_axis_chans_tdata(15 downto 0);  -- I = TDATA[15:0]
+                    chan_q_reg     <= m_axis_chans_tdata(31 downto 16); -- Q = TDATA[31:16]
+                    rx_svalid      <= '1';
+                    n_target_samps <= n_target_samps + 1;
+                end if;
+            end if;
+        end if;
+    end process;
+
+    u_demod : entity work.msk_demodulator
+        generic map ( SAMPLE_W => 12 )
+        port map (
+            clk  => aclk,
+            init => not aresetn,
+            rx_freq_word_f1 => FREQ_WORD_F1,
+            rx_freq_word_f2 => FREQ_WORD_F2,
+            discard_rxnco   => (others => '0'),
+            lpf_p_gain  => LPF_P_GAIN,  lpf_i_gain  => LPF_I_GAIN,
+            lpf_p_shift => LPF_P_SHIFT, lpf_i_shift => LPF_I_SHIFT,
+            lpf_freeze  => '0',         lpf_zero    => '0',
+            lpf_alpha   => LPF_ALPHA,
+            lpf_accum_f1 => open, lpf_accum_f2 => open,
+            f1_nco_adjust => open, f2_nco_adjust => open,
+            f1_error => open, f2_error => open,
+            rx_dec_lbk_ena => '0', rx_dec_lbk_tclk => '0',
+            rx_dec_lbk_f1 => (others=>'0'), rx_dec_lbk_f2 => (others=>'0'),
+            rx_enable => '1', rx_svalid => rx_svalid, rx_samples => chan_i_reg(13 downto 2), -- change here
+            rx_data => rx_data, rx_data_soft => rx_data_soft, rx_dvalid => rx_dvalid,
+            symbol_lock_count => SYM_LOCK_CNT, symbol_lock_threshold => SYM_LOCK_THR,
+            cst_lock_f1 => lock_f1, cst_lock_f2 => lock_f2,
+            cst_lock_time_f1 => open, cst_lock_time_f2 => open,
+            cst_unlock_f1 => open, cst_unlock_f2 => open,
+            dbg_acc_i_f1 => open, dbg_acc_q_f1 => open, dbg_acc_iq_delta_f1 => open
+        );
+
+    rx_bit_corr <= rx_data;                 -- add an invert here if needed
+    demod_lock  <= lock_f1 and lock_f2;
+
+    u_fsync : entity work.frame_sync_detector_soft
+        port map (
+            clk => aclk, reset => not aresetn,
+            rx_bit => rx_bit_corr, rx_bit_valid => rx_dvalid, s_axis_soft_tdata => rx_data_soft,
+            m_axis_tdata => open, m_axis_tvalid => open, m_axis_tready => '1', m_axis_tlast => open,
+            m_axis_soft_bit_tdata => sb_tdata, m_axis_soft_bit_tvalid => sb_tvalid,
+            m_axis_soft_bit_tready => '1', m_axis_soft_bit_tlast => sb_tlast,
+            frame_sync_locked => open, frames_received => open,
+            frame_sync_errors => open, frame_buffer_overflow => open,
+            demod_sync_lock => demod_lock,
+            debug_state => open, debug_correlation => open, debug_corr_peak => open,
+            debug_bit_count => open, debug_missed_syncs => open, debug_consecutive_good => open,
+            debug_soft_current => open, debug_soft_quantized => open, debug_byte_v => open
+        );
+
+    --------------------------------------------------------------------------
+    -- Soft-bit capture process (writes a file for offline opv-decode -3)
+    --------------------------------------------------------------------------
+
+    p_soft_cap : process(aclk)
+        file g : text open write_mode is "seam_chan_out.txt";
+        variable l : line;
+    begin
+        if rising_edge(aclk) then
+            if sb_tvalid = '1' then            -- soft_bit_tready tied '1'
+                write(l, to_integer(unsigned(sb_tdata)));
+                writeline(g, l);
+                n_soft_beats <= n_soft_beats + 1;
+                if sb_tlast = '1' then
+                    n_soft_frames <= n_soft_frames + 1;
+                end if;
+            end if;
+        end if;
+    end process;
+
+
+
+    ---------------------------------------------------------------
+    -- Capture the channel-0 complex output
+    ---------------------------------------------------------------
+    p_chan_cap : process(aclk)
+        file fc      : text open write_mode is "chan0_iq.txt";
+        variable l   : line;
+        variable cnt : integer := 0;
+    begin
+        if rising_edge(aclk) then
+            if rx_svalid = '1' and cnt < 8000 then
+                write(l, to_integer(signed(chan_i_reg)));
+                write(l, string'(" "));
+                write(l, to_integer(signed(chan_q_reg)));
+                writeline(fc, l);
+                cnt := cnt + 1;
+            end if;
+        end if;
+    end process;
+
+
+
+
     ---------------------------------------------------------------------------
     -- Output AXIS capture
     -- For each accepted beat (TVALID and TREADY both high), latch the data
@@ -257,6 +430,10 @@ begin
             end if;
         end if;
     end process p_capture;
+
+
+
+
 
     ---------------------------------------------------------------------------
     -- Main stimulus + verification
@@ -414,6 +591,10 @@ begin
         variable n_mid         : integer;
         constant NOISE_AMP     : integer := 3000;   -- input peak; RMS ~1700, like the ADC
         constant NOISE_SAMPLES : integer := 15000;  -- enough frames for the ema_2 cascade to settle
+        file fin               : text open read_mode is "opv_chan_stim.txt";
+        variable l             : line;
+        variable iv, qv        : integer;
+        variable n_fed         : integer := 0;
 
     begin
 
@@ -424,6 +605,11 @@ begin
         wait for 20 * CLK_PERIOD;
         aresetn <= '1';
         wait for 20 * CLK_PERIOD;
+
+
+        -- Test Control
+        if RUN_CHANNELIZER_TESTS then
+
 
         report "================================================";
         report "Phase 1 AXI Wrapper Smoke Test";
@@ -723,7 +909,7 @@ wait for 1 us;    -- let the design come back up
                  integer'image(rdata));
         end if;
 
----------------------------------------------------------------------
+        ---------------------------------------------------------------------
         -- Test 11: BROADBAND NOISE  (the real-antenna regime)
         ---------------------------------------------------------------------
         report "--- Test 11: broadband noise, reproduce the hardware bimodal ---";
@@ -770,6 +956,30 @@ wait for 1 us;    -- let the design come back up
         end if;
 
 
+        -- Test control
+        end if;
+
+
+    -- ===== Phase 2: Opulent Voice burst through the channelizer into the demod =====
+    report "=== OPV stimulus phase: channel " & integer'image(TARGET_CHANNEL) & " ===" severity note;
+    s_axis_data_tvalid <= '0';
+    wait for 1 us;                           -- flush the tone-test tail out of the pipeline
+    while not endfile(fin) loop
+        readline(fin, l);
+        read(l, iv);
+        read(l, qv);
+        s_axis_data_tdata(15 downto 0)  <= std_logic_vector(to_signed(iv, 16));
+        s_axis_data_tdata(31 downto 16) <= std_logic_vector(to_signed(qv, 16));
+        s_axis_data_tvalid <= '1';
+        wait until rising_edge(aclk) and s_axis_data_tready = '1';
+        n_fed := n_fed + 1;
+    end loop;
+    s_axis_data_tvalid <= '0';
+    report "OPV phase fed " & integer'image(n_fed) & " samples" severity note;
+    wait for 50 us;                          -- let the demod lock + frame_sync drain soft frames
+    report "DEMOD PATH: target samples=" & integer'image(n_target_samps)
+         & "  soft beats=" & integer'image(n_soft_beats)
+         & "  soft frames=" & integer'image(n_soft_frames) severity note;
 
         ---------------------------------------------------------------------
         -- Summary
@@ -779,6 +989,10 @@ wait for 1 us;    -- let the design come back up
         report "  PASS: " & integer'image(tests_pass);
         report "  FAIL: " & integer'image(tests_fail);
         report "================================================";
+
+        report "DEMOD PATH: target samples=" & integer'image(n_target_samps)
+         & "  soft beats=" & integer'image(n_soft_beats)
+         & "  soft frames=" & integer'image(n_soft_frames) severity note;
 
         if tests_fail = 0 then
             report "ALL TESTS PASSED" severity note;

@@ -44,7 +44,26 @@ source ~/petalinux/2022.2/settings.sh
 
 ### Submodules
 
-Build pulls from `haifuraiya/third_party/`:
+It's complicated. 
+
+Don't clone with --recurse-submodules or run git submodule update --init --recursive at the top level.
+It descends into pluto_msk and pulls ADI's multi-GB hdl + linux grandchildren that the ZCU102 build never uses.
+
+# 1. Clone (no blanket --recurse-submodules)
+git clone https://github.com/OpenResearchInstitute/Mode-Dynamic-Transponder.git
+cd Mode-Dynamic-Transponder
+
+# 2. Direct ADI/ORI submodules -- recursive is safe for these
+git submodule update --init --recursive \
+    haifuraiya/third_party/hdl \
+    haifuraiya/third_party/meta-adi \
+    haifuraiya/third_party/power_detector \
+    haifuraiya/third_party/lowpass_ema
+
+# 3. pluto_msk: init the submodule, then ONLY the demod-chain leaves
+git submodule update --init haifuraiya/third_party/pluto_msk
+git -C haifuraiya/third_party/pluto_msk submodule update --init \
+    nco pi_controller msk_demodulator
 
 | Submodule | Source | Purpose |
 |---|---|---|
@@ -52,19 +71,7 @@ Build pulls from `haifuraiya/third_party/`:
 | `meta-adi` | analogdevicesinc/meta-adi @ `2022_R2` | ADI's Yocto layer (kernel drivers, device tree) |
 | `power_detector` | OpenResearchInstitute/power_detector | RF power detection used inside the channelizer |
 | `lowpass_ema` | OpenResearchInstitute/lowpass_ema | EMA filter primitive (used inside power_detector) |
-
-Clone with submodules:
-
-```bash
-git clone --recurse-submodules \
-    https://github.com/OpenResearchInstitute/Mode-Dynamic-Transponder.git
-```
-
-If you cloned without `--recurse-submodules`:
-
-```bash
-git submodule update --init --recursive
-```
+| `pluto_msk` | OpenResearchInstitute/pluto_msk | OPV MSK demodulator + frame-sync VHDL. Init only nco, pi_controlle>
 
 ### Lab setup
 

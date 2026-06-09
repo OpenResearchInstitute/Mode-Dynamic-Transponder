@@ -129,26 +129,33 @@ ZCU102 block design.**
 | Manifest PDU generator | C++ on PS | 1 session | 5 |
 | dvb_fpga ZCU102 port | Vivado board files | hours | 5 |
 
+
+| Status | Item | Notes |
+|:-:|---|---|
+| done | Seam-B validated (sim) | frame_sync_detector_soft -> opv-decode -3. Decoder equivalence proven numerically (opv-decode -3 == ov_frame_decoder_soft, all 2144 positions). Standalone-TB 11-symbol offset traced to TB demod-phase approximation, not RTL. Full msk_top + pinned submodules build clean under ghdl. Artifacts in docs/seam-sim/. |
+| next | Channelizer -> demod hookup | New wrapper above haifuraiya_channelizer_axi: m_axis_chans (complex I/Q, TDEST) -> demux one channel -> msk_demodulator -> frame_sync_detector_soft -> AXIS/DMA -> opv-decode -3. Submodule deps: msk_demodulator + nco + pi_controller. Retune NCO/Costas for channel rate (~625 ksps, SPS ~11.53). See CHANNELIZER_DEMOD_CONTRACT.md. |
+| watch | Fractional SPS at channel rate | SPS ~11.53 is non-integer; confirm demod symbol timing handles it (or pick a friendlier build rate). |
+
 **All Phase 1 work items are complete. Phase 2 is the next quest.**
 
 ---
 
 ## 🧭 Strategic Architecture (the decisions and the why)
 
-### Path B: PL channelize + PS demod (with PL fallback in pocket)
+### Path: PL channelize + PL demod + PL frame-sync; PS decode-only
 
-**Decision:** Channelization in PL fabric, OPV demodulation in software on
-the A53s, broadcast format generation in PS software, DVB-S2 encoding in PL
-fabric.
+Decision: channelization, MSK demodulation, and frame sync all in PL fabric; the A53 runs
+opv-decode in DECODE-ONLY mode (-3) on the 3-bit soft-bit stream. Broadcast format generation in
+PS software, DVB-S2 encoding in PL.
 
-**Why:**
-- DSPs aren't the constraint — channelizer uses 53% of ZCU102 DSPs, leaving plenty
-- LUTs are the binding constraint — 64× pluto_msk-style PL demods would need ~5× more LUTs than available
-- `opv-cxx-demod` already works as software demod; reusing it is faster than time-sharing PL demods
-- A53 throughput estimate: 64 streams at 625 kSps is well within four cores' capability
-- Software demod gives flexibility — modulation parameter changes, debugging, future protocol additions don't need re-synth
-
-**Fallback plan:** If the A53s saturate, 8 PL demod instances each time-sharing 8 channels (8:1 round-robin) fits comfortably (~80K LUT). The math is in this session's resource analysis.
+Why the change from "demod in software":
+- Moving demod + frame-sync into fabric means the A53 only does the Viterbi/derandomize decode,
+  not the full per-stream demod -- lighter PS load.
+- The fabric soft seam (frame_sync_detector_soft.m_axis_soft_bit, 3-bit, 2144/frame) is validated:
+  opv-decode -3 consumes it byte-for-byte identically to the PL decoder ov_frame_decoder_soft
+  (same quantizer, same 67x32 deinterleave + MSB-first correction over all 2144 positions, same
+  soft Viterbi metric). So opv-decode -3 is a proven drop-in for the PL decoder.
+- (Software full-demod remains the fallback if fabric demod resources/timing don't fit.)
 
 ### GSE not MPEG-TS for the downlink
 
