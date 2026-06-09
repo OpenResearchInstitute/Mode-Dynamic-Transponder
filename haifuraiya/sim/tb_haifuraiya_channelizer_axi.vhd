@@ -53,7 +53,7 @@ entity tb_haifuraiya_channelizer_axi is
         --   set_property -name {xsim.elaborate.xelab.more_options} \
         --       -value {-generic_top "SMP_PERIOD=5"} \
         --       -objects [get_filesets sim_1]
-        SMP_PERIOD : integer := 5
+        SMP_PERIOD : integer := 10
     );
 end entity tb_haifuraiya_channelizer_axi;
 
@@ -147,7 +147,7 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     constant RUN_CHANNELIZER_TESTS : boolean := false;
 
     -- ===== Demod-path integration (added) =====
-    constant TARGET_CHANNEL : natural := 0;   -- channel to bring up first
+    constant TARGET_CHANNEL : natural := 0;   -- channel to listen to first
 
     -- Demod tuning. TODO: re-derive for the channel rate (~625 ksps, SPS ~11.53)
     -- per CHANNELIZER_DEMOD_CONTRACT.md. These placeholders let it elaborate and
@@ -374,7 +374,6 @@ begin
 
 
 
-
     ---------------------------------------------------------------------------
     -- Output AXIS capture
     -- For each accepted beat (TVALID and TREADY both high), latch the data
@@ -591,7 +590,8 @@ begin
         variable n_mid         : integer;
         constant NOISE_AMP     : integer := 3000;   -- input peak; RMS ~1700, like the ADC
         constant NOISE_SAMPLES : integer := 15000;  -- enough frames for the ema_2 cascade to settle
-        file fin               : text open read_mode is "opv_chan_stim.txt";
+        --file fin               : text open read_mode is "opv_chan_stim.txt";
+        file fin               : text open read_mode is "cw_tone_27k_10msps.txt";
         variable l             : line;
         variable iv, qv        : integer;
         variable n_fed         : integer := 0;
@@ -964,17 +964,41 @@ wait for 1 us;    -- let the design come back up
     report "=== OPV stimulus phase: channel " & integer'image(TARGET_CHANNEL) & " ===" severity note;
     s_axis_data_tvalid <= '0';
     wait for 1 us;                           -- flush the tone-test tail out of the pipeline
-    while not endfile(fin) loop
-        readline(fin, l);
-        read(l, iv);
-        read(l, qv);
-        s_axis_data_tdata(15 downto 0)  <= std_logic_vector(to_signed(iv, 16));
-        s_axis_data_tdata(31 downto 16) <= std_logic_vector(to_signed(qv, 16));
-        s_axis_data_tvalid <= '1';
-        wait until rising_edge(aclk) and s_axis_data_tready = '1';
-        n_fed := n_fed + 1;
+
+while not endfile(fin) loop
+    readline(fin, l);
+    read(l, iv);
+    read(l, qv);
+    s_axis_data_tdata(15 downto 0)  <= std_logic_vector(to_signed(iv, 16));
+    s_axis_data_tdata(31 downto 16) <= std_logic_vector(to_signed(qv, 16));
+    s_axis_data_tvalid <= '1';
+    wait until rising_edge(aclk) and s_axis_data_tready = '1';   -- sample accepted
+    n_fed := n_fed + 1;
+    s_axis_data_tvalid <= '0';                                   -- de-assert between samples
+    for k in 1 to SMP_PERIOD-1 loop                              -- idle 9 clocks -> 10 MHz
+        wait until rising_edge(aclk);
     end loop;
-    s_axis_data_tvalid <= '0';
+end loop;
+s_axis_data_tvalid <= '0';
+
+
+
+--original code replaced with above
+--    while not endfile(fin) loop
+--        readline(fin, l);
+--        read(l, iv);
+--        read(l, qv);
+--        s_axis_data_tdata(15 downto 0)  <= std_logic_vector(to_signed(iv, 16));
+--        s_axis_data_tdata(31 downto 16) <= std_logic_vector(to_signed(qv, 16));
+--       s_axis_data_tvalid <= '1';
+--        wait until rising_edge(aclk) and s_axis_data_tready = '1';
+--        n_fed := n_fed + 1;
+--    end loop;
+--    s_axis_data_tvalid <= '0';
+
+
+
+
     report "OPV phase fed " & integer'image(n_fed) & " samples" severity note;
     wait for 50 us;                          -- let the demod lock + frame_sync drain soft frames
     report "DEMOD PATH: target samples=" & integer'image(n_target_samps)

@@ -98,7 +98,8 @@ foreach f [get_files -of_objects [get_filesets sim_1] -filter {FILE_TYPE == VHDL
 
 # Stage the OPV I/Q stimulus into the xsim working dir (read by p_stim's file
 # playback). Kept in sim/ so it survives the project delete/recreate above.
-set stim_file [file join [file dirname [info script]] "opv_chan_stim.txt"]
+#set stim_file [file join [file dirname [info script]] "opv_chan_stim.txt"]
+set stim_file [file join [file dirname [info script]] "cw_tone_27k_10msps.txt"]
 if {[file exists $stim_file]} {
     file mkdir $coeff_dst
 # ensure the dir exists, whatever the order
