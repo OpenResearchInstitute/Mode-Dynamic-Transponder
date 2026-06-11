@@ -60,3 +60,13 @@ blue-*.log
 
 # Build logs from current rebuild flow (underscore convention)
 *_build.log
+
+# === build artifacts & tool scratch ===
+**/__pycache__/
+*.debug
+haifuraiya/syn/**/*.rpt
+
+# === generated stimulus (regenerate via docs/opv_chan_stim_gen.py --fc 0) ===
+haifuraiya/sim/opv_chan_stim.txt
+haifuraiya/sim/opv_chan_stim_dc.txt
+haifuraiya/sim/cw_tone_27k_10msps.txt
