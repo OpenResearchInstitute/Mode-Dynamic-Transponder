@@ -80,6 +80,7 @@ safe_add_files sources_1 {
     ../third_party/pluto_msk/msk_demodulator/src/costas_loop.vhd
     ../third_party/pluto_msk/msk_demodulator/src/msk_demodulator.vhd
     ../third_party/pluto_msk/src/frame_sync_detector_soft.vhd
+    ../rtl/rx/haifuraiya_rx_top.vhd
 }
 
 # --- Testbench ---
@@ -98,17 +99,9 @@ foreach f [get_files -of_objects [get_filesets sim_1] -filter {FILE_TYPE == VHDL
 
 # Stage the OPV I/Q stimulus into the xsim working dir (read by p_stim's file
 # playback). Kept in sim/ so it survives the project delete/recreate above.
+set stim_file [file join [file dirname [info script]] "opv_chan_stim_dc.txt"]
 #set stim_file [file join [file dirname [info script]] "opv_chan_stim.txt"]
-set stim_file [file join [file dirname [info script]] "cw_tone_27k_10msps.txt"]
-if {[file exists $stim_file]} {
-    file mkdir $coeff_dst
-# ensure the dir exists, whatever the order
-    file copy -force $stim_file $coeff_dst
-    puts "  OK Copied: [file tail $stim_file] -> $coeff_dst"
-} else {
-    puts "  WARNING: $stim_file not found -- generate it with gen_opv_stimulus.py"
-    puts "           and drop it in sim/, or the OPV phase will fail on file open."
-}
+#set stim_file [file join [file dirname [info script]] "cw_tone_27k_10msps.txt"]
 
 
 # Pick the testbench as top-level for simulation
@@ -118,8 +111,15 @@ set_property top tb_haifuraiya_channelizer_axi [get_filesets sim_1]
 # everything explicitly and calls finish, so this is just an upper bound.
 set_property -name {xsim.simulate.runtime} -value {0ns} -objects [get_filesets sim_1]
 
+# Stage the stimulus into the xsim run dir (the tb opens it by relative name)
+set xsim_dir [file join $project_dir ${project_name}.sim sim_1 behav xsim]
+file mkdir $xsim_dir
+file copy -force $stim_file $xsim_dir
+puts "  OK staged [file tail $stim_file] -> $xsim_dir"
+
 puts "\nLaunching simulation..."
 launch_simulation
+
 
 puts "\n========================================"
 puts "Simulation launched. Check the xsim console output for test"
@@ -130,19 +130,34 @@ puts "========================================"
 
 
 # demod loop visibility (instance-internal -> not auto-added)
-add_wave {/tb_haifuraiya_channelizer_axi/u_demod/lpf_accum_f1}
-add_wave {/tb_haifuraiya_channelizer_axi/u_demod/lpf_accum_f2}
-add_wave {/tb_haifuraiya_channelizer_axi/u_demod/f1_error}
-add_wave {/tb_haifuraiya_channelizer_axi/u_demod/f2_error}
-add_wave {/tb_haifuraiya_channelizer_axi/u_demod/dbg_acc_i_f1}
-add_wave {/tb_haifuraiya_channelizer_axi/u_demod/dbg_acc_q_f1}
-add_wave {/tb_haifuraiya_channelizer_axi/u_demod/tclk}
-add_wave {/tb_haifuraiya_channelizer_axi/u_fsync/frame_sync_locked}
-add_wave {/tb_haifuraiya_channelizer_axi/u_fsync/frames_received}
-add_wave {/tb_haifuraiya_channelizer_axi/u_demod/cst_lock_f1}
-add_wave {/tb_haifuraiya_channelizer_axi/u_demod/cst_lock_f2}
-add_wave {/tb_haifuraiya_channelizer_axi/u_fsync/frame_sync_locked}
-add_wave {/tb_haifuraiya_channelizer_axi/n_target_samps}
-add_wave {/tb_haifuraiya_channelizer_axi/rx_data_soft}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/lpf_accum_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/lpf_accum_f2}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/f1_error}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/f2_error}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/dbg_acc_i_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/dbg_acc_q_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/tclk}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/frame_sync_locked}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/frames_received}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/cst_lock_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/cst_lock_f2}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/rx_data_soft}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/rx_svalid}
+add_wave_divider "Frame Sync Management"
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/debug_corr_peak}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/debug_correlation}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/debug_state}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/debug_consecutive_good} 
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/debug_missed_syncs}
+# real hard/soft bit decisions (live, inside the demod)
+add_wave_divider "Bit Decisions"
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/rx_data}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/rx_data_soft}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/rx_dvalid}
+# the corrected bit + valid + combined lock as frame sync sees them
+add_wave_divider "Frame Sync: Corrected Bit + Valid + Combined Symbol Lock"
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/rx_bit}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/rx_bit_valid}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/demod_sync_lock}
 
 run all

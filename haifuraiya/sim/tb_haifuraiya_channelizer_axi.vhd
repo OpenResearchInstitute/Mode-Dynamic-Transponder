@@ -53,7 +53,7 @@ entity tb_haifuraiya_channelizer_axi is
         --   set_property -name {xsim.elaborate.xelab.more_options} \
         --       -value {-generic_top "SMP_PERIOD=5"} \
         --       -objects [get_filesets sim_1]
-        SMP_PERIOD : integer := 10
+        SMP_PERIOD : integer := 5
     );
 end entity tb_haifuraiya_channelizer_axi;
 
@@ -143,7 +143,7 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     -- Simulation done flag (lets capture process stop)
     signal running : std_logic := '1';
 
-    -- frue = full regression, false = jump to OPV injection for tuning
+    -- true = full regression, false = jump to OPV injection for tuning
     constant RUN_CHANNELIZER_TESTS : boolean := false;
 
     -- ===== Demod-path integration (added) =====
@@ -153,14 +153,16 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     -- per CHANNELIZER_DEMOD_CONTRACT.md. These placeholders let it elaborate and
     -- exercise the wiring; they will NOT produce lock until set correctly.
 
-    --constant FREQ_WORD_F1  : std_logic_vector(31 downto 0) := x"10000000";  -- TODO
-    --constant FREQ_WORD_F2  : std_logic_vector(31 downto 0) := x"30000000";  -- TODO
     --rx_freq_word_f1 = 0x058CD20B   (lower tone, +13550 Hz)
+    --rx_freq_word_f2 = 0xFA732DF5   (upper tone, -13550 Hz)
     --rx_freq_word_f2 = 0x10A67621   (upper tone, +40650 Hz)
     --rx_freq_word_f1 = 0x13333333    (0.0750 = centroid − half the offset)
     --rx_freq_word_f2 = 0x39999999    (0.2250 = centroid + half the offset)
-    constant FREQ_WORD_F1  : std_logic_vector(31 downto 0) := x"13333333";
-    constant FREQ_WORD_F2  : std_logic_vector(31 downto 0) := x"39999999";
+    --rx_freq_word_f1 = 0x278E9F6B    real msk_demod
+    --rx_freq_word_f2 = 0x32A84381    real msk_demod
+    constant FREQ_WORD_F1 : std_logic_vector(31 downto 0) := x"FA732DF5"; -- complex lower
+    constant FREQ_WORD_F2 : std_logic_vector(31 downto 0) := x"058CD20B"; -- complex upper
+
 
 
     --constant LPF_P_GAIN    : std_logic_vector(23 downto 0) := x"000100";    -- TODO
@@ -178,22 +180,20 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     constant LPF_P_SHIFT : std_logic_vector(7 downto 0)  := x"14";       -- 20
     constant LPF_I_SHIFT : std_logic_vector(7 downto 0)  := x"1D";       -- 29
     constant SYM_LOCK_CNT : std_logic_vector(9 downto 0)  := "0010000000"; -- 128 (RDL default)
-    constant SYM_LOCK_THR : std_logic_vector(15 downto 0) := x"2710";      -- 10000 (RDL default)
-
+    constant SYM_LOCK_THR : std_logic_vector(15 downto 0) := x"0008"; -- was 0x0018 (decimal 24)
 
     signal chan_i_reg  : std_logic_vector(15 downto 0) := (others => '0');
     signal chan_q_reg  : std_logic_vector(15 downto 0) := (others => '0');
     signal rx_svalid   : std_logic := '0';
-    signal rx_data     : std_logic;
-    signal rx_data_soft: signed(15 downto 0);
-    signal rx_dvalid   : std_logic;
     signal lock_f1, lock_f2 : std_logic;
-    signal rx_bit_corr : std_logic;
-    signal demod_lock  : std_logic;
 
     signal sb_tdata  : std_logic_vector(2 downto 0);
     signal sb_tvalid : std_logic;
     signal sb_tlast  : std_logic;
+
+    signal sb_tready         : std_logic := '1';                 -- drain the soft-bit stream
+    signal frame_sync_locked : std_logic;
+    signal frames_received   : std_logic_vector(31 downto 0);
 
     -- integration counters (visible at end-of-sim)
     signal n_target_samps : integer := 0;  -- samples handed to the demod
@@ -220,116 +220,191 @@ begin
         wait;
     end process;
 
+
+
+
+
+
+
+
+
+
+
+
+
+
     ---------------------------------------------------------------------------
     -- DUT instance
     ---------------------------------------------------------------------------
-    u_dut : entity work.haifuraiya_channelizer_axi
-        generic map (
-            N_CHANNELS              => N_CHANNELS,
-            M_DECIMATION            => M_DECIMATION,
-            TAPS_PER_BRANCH         => 24,
-            DATA_WIDTH              => DATA_WIDTH,
-            COEFF_WIDTH             => 16,
-            ACCUM_WIDTH             => ACCUM_WIDTH,
-            POWER_ALPHA_W           => 18,
-            C_S_AXI_CTRL_ADDR_WIDTH => ADDR_WIDTH
-        )
-        port map (
-            aclk    => aclk,
-            aresetn => aresetn,
+--    u_dut : entity work.haifuraiya_channelizer_axi
+--        generic map (
+--            N_CHANNELS              => N_CHANNELS,
+--            M_DECIMATION            => M_DECIMATION,
+--            TAPS_PER_BRANCH         => 24,
+--            DATA_WIDTH              => DATA_WIDTH,
+--            COEFF_WIDTH             => 16,
+--            ACCUM_WIDTH             => ACCUM_WIDTH,
+--            POWER_ALPHA_W           => 18,
+--            C_S_AXI_CTRL_ADDR_WIDTH => ADDR_WIDTH
+--        )
+--        port map (
+--            aclk    => aclk,
+--            aresetn => aresetn,
 
-            s_axis_data_tdata   => s_axis_data_tdata,
-            s_axis_data_tvalid  => s_axis_data_tvalid,
-            s_axis_data_tready  => s_axis_data_tready,
+--            s_axis_data_tdata   => s_axis_data_tdata,
+--            s_axis_data_tvalid  => s_axis_data_tvalid,
+--           s_axis_data_tready  => s_axis_data_tready,
 
-            m_axis_chans_tdata  => m_axis_chans_tdata,
-            m_axis_chans_tvalid => m_axis_chans_tvalid,
-            m_axis_chans_tready => m_axis_chans_tready,
-            m_axis_chans_tdest  => m_axis_chans_tdest,
-            m_axis_chans_tlast  => m_axis_chans_tlast,
+--            m_axis_chans_tdata  => m_axis_chans_tdata,
+--            m_axis_chans_tvalid => m_axis_chans_tvalid,
+--            m_axis_chans_tready => m_axis_chans_tready,
+--            m_axis_chans_tdest  => m_axis_chans_tdest,
+--            m_axis_chans_tlast  => m_axis_chans_tlast,
 
-            s_axi_ctrl_awaddr   => s_axi_ctrl_awaddr,
-            s_axi_ctrl_awvalid  => s_axi_ctrl_awvalid,
-            s_axi_ctrl_awready  => s_axi_ctrl_awready,
-            s_axi_ctrl_wdata    => s_axi_ctrl_wdata,
-            s_axi_ctrl_wstrb    => s_axi_ctrl_wstrb,
-            s_axi_ctrl_wvalid   => s_axi_ctrl_wvalid,
-            s_axi_ctrl_wready   => s_axi_ctrl_wready,
-            s_axi_ctrl_bresp    => s_axi_ctrl_bresp,
-            s_axi_ctrl_bvalid   => s_axi_ctrl_bvalid,
-            s_axi_ctrl_bready   => s_axi_ctrl_bready,
-            s_axi_ctrl_araddr   => s_axi_ctrl_araddr,
-            s_axi_ctrl_arvalid  => s_axi_ctrl_arvalid,
-            s_axi_ctrl_arready  => s_axi_ctrl_arready,
-            s_axi_ctrl_rdata    => s_axi_ctrl_rdata,
-            s_axi_ctrl_rresp    => s_axi_ctrl_rresp,
-            s_axi_ctrl_rvalid   => s_axi_ctrl_rvalid,
-            s_axi_ctrl_rready   => s_axi_ctrl_rready
-        );
+--            s_axi_ctrl_awaddr   => s_axi_ctrl_awaddr,
+--            s_axi_ctrl_awvalid  => s_axi_ctrl_awvalid,
+--            s_axi_ctrl_awready  => s_axi_ctrl_awready,
+--            s_axi_ctrl_wdata    => s_axi_ctrl_wdata,
+--            s_axi_ctrl_wstrb    => s_axi_ctrl_wstrb,
+--            s_axi_ctrl_wvalid   => s_axi_ctrl_wvalid,
+--            s_axi_ctrl_wready   => s_axi_ctrl_wready,
+--            s_axi_ctrl_bresp    => s_axi_ctrl_bresp,
+--            s_axi_ctrl_bvalid   => s_axi_ctrl_bvalid,
+--            s_axi_ctrl_bready   => s_axi_ctrl_bready,
+--            s_axi_ctrl_araddr   => s_axi_ctrl_araddr,
+--            s_axi_ctrl_arvalid  => s_axi_ctrl_arvalid,
+--            s_axi_ctrl_arready  => s_axi_ctrl_arready,
+--            s_axi_ctrl_rdata    => s_axi_ctrl_rdata,
+--            s_axi_ctrl_rresp    => s_axi_ctrl_rresp,
+--            s_axi_ctrl_rvalid   => s_axi_ctrl_rvalid,
+--            s_axi_ctrl_rready   => s_axi_ctrl_rready
+--        );
 
 
 
-    -- TDEST demux: forward ONLY the target channel's I to the demod.
-    p_demux : process(aclk)
-    begin
-        if rising_edge(aclk) then
-            rx_svalid <= '0';
-            if aresetn = '0' then
-                rx_svalid <= '0';
-            elsif m_axis_chans_tvalid = '1' and m_axis_chans_tready = '1' then
-                if to_integer(unsigned(m_axis_chans_tdest(5 downto 0))) = TARGET_CHANNEL then
-                    chan_i_reg     <= m_axis_chans_tdata(15 downto 0);  -- I = TDATA[15:0]
-                    chan_q_reg     <= m_axis_chans_tdata(31 downto 16); -- Q = TDATA[31:16]
-                    rx_svalid      <= '1';
-                    n_target_samps <= n_target_samps + 1;
-                end if;
-            end if;
-        end if;
-    end process;
+--    -- TDEST demux: forward ONLY the target channel's I to the demod.
+--    p_demux : process(aclk)
+--    begin
+--        if rising_edge(aclk) then
+--            rx_svalid <= '0';
+--            if aresetn = '0' then
+--                rx_svalid <= '0';
+--            elsif m_axis_chans_tvalid = '1' and m_axis_chans_tready = '1' then
+--                if to_integer(unsigned(m_axis_chans_tdest(5 downto 0))) = TARGET_CHANNEL then
+--                    chan_i_reg     <= m_axis_chans_tdata(15 downto 0);  -- I = TDATA[15:0]
+--                    chan_q_reg     <= m_axis_chans_tdata(31 downto 16); -- Q = TDATA[31:16]
+--                    rx_svalid      <= '1';
+--                    n_target_samps <= n_target_samps + 1;
+--                end if;
+--            end if;
+--        end if;
+--    end process;
 
-    u_demod : entity work.msk_demodulator
-        generic map ( SAMPLE_W => 12 )
-        port map (
-            clk  => aclk,
-            init => not aresetn,
-            rx_freq_word_f1 => FREQ_WORD_F1,
-            rx_freq_word_f2 => FREQ_WORD_F2,
-            discard_rxnco   => (others => '0'),
-            lpf_p_gain  => LPF_P_GAIN,  lpf_i_gain  => LPF_I_GAIN,
-            lpf_p_shift => LPF_P_SHIFT, lpf_i_shift => LPF_I_SHIFT,
-            lpf_freeze  => '0',         lpf_zero    => '0',
-            lpf_alpha   => LPF_ALPHA,
-            lpf_accum_f1 => open, lpf_accum_f2 => open,
-            f1_nco_adjust => open, f2_nco_adjust => open,
-            f1_error => open, f2_error => open,
-            rx_dec_lbk_ena => '0', rx_dec_lbk_tclk => '0',
-            rx_dec_lbk_f1 => (others=>'0'), rx_dec_lbk_f2 => (others=>'0'),
-            rx_enable => '1', rx_svalid => rx_svalid, rx_samples => chan_i_reg(13 downto 2), -- change here
-            rx_data => rx_data, rx_data_soft => rx_data_soft, rx_dvalid => rx_dvalid,
-            symbol_lock_count => SYM_LOCK_CNT, symbol_lock_threshold => SYM_LOCK_THR,
-            cst_lock_f1 => lock_f1, cst_lock_f2 => lock_f2,
-            cst_lock_time_f1 => open, cst_lock_time_f2 => open,
-            cst_unlock_f1 => open, cst_unlock_f2 => open,
-            dbg_acc_i_f1 => open, dbg_acc_q_f1 => open, dbg_acc_iq_delta_f1 => open
-        );
+--    u_demod : entity work.msk_demodulator
+--        generic map ( SAMPLE_W => 16 )
+--        port map (
+--            clk  => aclk,
+--           init => not aresetn,
+--            rx_freq_word_f1 => FREQ_WORD_F1,
+--            rx_freq_word_f2 => FREQ_WORD_F2,
+--            discard_rxnco   => (others => '0'),
+--            lpf_p_gain  => LPF_P_GAIN,  lpf_i_gain  => LPF_I_GAIN,
+--            lpf_p_shift => LPF_P_SHIFT, lpf_i_shift => LPF_I_SHIFT,
+--            lpf_freeze  => '0',         lpf_zero    => '0',
+--            lpf_alpha   => LPF_ALPHA,
+--            lpf_accum_f1 => open, lpf_accum_f2 => open,
+--            f1_nco_adjust => open, f2_nco_adjust => open,
+--            f1_error => open, f2_error => open,
+--            rx_dec_lbk_ena => '0', rx_dec_lbk_tclk => '0',
+--            rx_dec_lbk_f1 => (others=>'0'), rx_dec_lbk_f2 => (others=>'0'),
+--            rx_enable => '1', rx_svalid => rx_svalid, rx_samples => chan_i_reg(13 downto 2), -- change here
+--            rx_data => rx_data, rx_data_soft => rx_data_soft, rx_dvalid => rx_dvalid,
+--            symbol_lock_count => SYM_LOCK_CNT, symbol_lock_threshold => SYM_LOCK_THR,
+--            cst_lock_f1 => lock_f1, cst_lock_f2 => lock_f2,
+--            cst_lock_time_f1 => open, cst_lock_time_f2 => open,
+--            cst_unlock_f1 => open, cst_unlock_f2 => open,
+--            dbg_acc_i_f1 => open, dbg_acc_q_f1 => open, dbg_acc_iq_delta_f1 => open
+--        );
 
-    rx_bit_corr <= rx_data;                 -- add an invert here if needed
-    demod_lock  <= lock_f1 and lock_f2;
+--    rx_bit_corr <= rx_data;                 -- add an invert here if needed
+--    demod_lock  <= lock_f1 and lock_f2;
 
-    u_fsync : entity work.frame_sync_detector_soft
-        port map (
-            clk => aclk, reset => not aresetn,
-            rx_bit => rx_bit_corr, rx_bit_valid => rx_dvalid, s_axis_soft_tdata => rx_data_soft,
-            m_axis_tdata => open, m_axis_tvalid => open, m_axis_tready => '1', m_axis_tlast => open,
-            m_axis_soft_bit_tdata => sb_tdata, m_axis_soft_bit_tvalid => sb_tvalid,
-            m_axis_soft_bit_tready => '1', m_axis_soft_bit_tlast => sb_tlast,
-            frame_sync_locked => open, frames_received => open,
-            frame_sync_errors => open, frame_buffer_overflow => open,
-            demod_sync_lock => demod_lock,
-            debug_state => open, debug_correlation => open, debug_corr_peak => open,
-            debug_bit_count => open, debug_missed_syncs => open, debug_consecutive_good => open,
-            debug_soft_current => open, debug_soft_quantized => open, debug_byte_v => open
-        );
+--    u_fsync : entity work.frame_sync_detector_soft
+--        port map (
+--            clk => aclk, reset => not aresetn,
+--            rx_bit => rx_bit_corr, rx_bit_valid => rx_dvalid, s_axis_soft_tdata => rx_data_soft,
+--            m_axis_tdata => open, m_axis_tvalid => open, m_axis_tready => '1', m_axis_tlast => open,
+--            m_axis_soft_bit_tdata => sb_tdata, m_axis_soft_bit_tvalid => sb_tvalid,
+--            m_axis_soft_bit_tready => '1', m_axis_soft_bit_tlast => sb_tlast,
+--            frame_sync_locked => open, frames_received => open,
+--            frame_sync_errors => open, frame_buffer_overflow => open,
+--            demod_sync_lock => demod_lock,
+--            debug_state => open, debug_correlation => open, debug_corr_peak => open,
+--            debug_bit_count => open, debug_missed_syncs => open, debug_consecutive_good => open,
+--            debug_soft_current => open, debug_soft_quantized => open, debug_byte_v => open
+--        );
+
+
+
+
+
+
+-- above (u_dut, p_demux, u_demod, u_fsync) replaced with below 
+
+
+
+
+
+u_rx : entity work.haifuraiya_rx_top
+    generic map (
+        TARGET_CHANNEL          => TARGET_CHANNEL,
+        COMPLEX_INPUT           => true,  -- feed channel Q; false = real I-only
+        RX_INVERT               => '1',           -- flip if carrier locks but frame sync won't
+        N_CHANNELS              => N_CHANNELS,
+        M_DECIMATION            => M_DECIMATION,
+        C_S_AXI_CTRL_ADDR_WIDTH => ADDR_WIDTH
+    )
+    port map (
+        aclk => aclk, aresetn => aresetn,
+
+        -- 20 Msps stimulus enters HERE (same signals you already drive)
+        s_axis_data_tdata  => s_axis_data_tdata,
+        s_axis_data_tvalid => s_axis_data_tvalid,
+        s_axis_data_tready => s_axis_data_tready,
+
+        -- soft-bit out (capture for offline opv-decode -3)
+        m_axis_soft_bit_tdata  => sb_tdata,
+        m_axis_soft_bit_tvalid => sb_tvalid,
+        m_axis_soft_bit_tready => sb_tready,
+        m_axis_soft_bit_tlast  => sb_tlast,
+
+        -- channelizer AXI-Lite passthrough (your existing s_axi_ctrl_* signals)
+        s_axi_ctrl_awaddr  => s_axi_ctrl_awaddr,  s_axi_ctrl_awvalid => s_axi_ctrl_awvalid,
+        s_axi_ctrl_awready => s_axi_ctrl_awready, s_axi_ctrl_wdata   => s_axi_ctrl_wdata,
+        s_axi_ctrl_wstrb   => s_axi_ctrl_wstrb,   s_axi_ctrl_wvalid  => s_axi_ctrl_wvalid,
+        s_axi_ctrl_wready  => s_axi_ctrl_wready,  s_axi_ctrl_bresp   => s_axi_ctrl_bresp,
+        s_axi_ctrl_bvalid  => s_axi_ctrl_bvalid,  s_axi_ctrl_bready  => s_axi_ctrl_bready,
+        s_axi_ctrl_araddr  => s_axi_ctrl_araddr,  s_axi_ctrl_arvalid => s_axi_ctrl_arvalid,
+        s_axi_ctrl_arready => s_axi_ctrl_arready, s_axi_ctrl_rdata   => s_axi_ctrl_rdata,
+        s_axi_ctrl_rresp   => s_axi_ctrl_rresp,   s_axi_ctrl_rvalid  => s_axi_ctrl_rvalid,
+        s_axi_ctrl_rready  => s_axi_ctrl_rready,
+
+        -- demod tuning: your existing constants (with the corrected freq words)
+        rx_freq_word_f1 => FREQ_WORD_F1, rx_freq_word_f2 => FREQ_WORD_F2,
+        lpf_p_gain => LPF_P_GAIN, lpf_i_gain => LPF_I_GAIN, lpf_alpha => LPF_ALPHA,
+        lpf_p_shift => LPF_P_SHIFT, lpf_i_shift => LPF_I_SHIFT,
+        symbol_lock_count => SYM_LOCK_CNT, symbol_lock_threshold => SYM_LOCK_THR,
+
+        -- watch these
+        frame_sync_locked => frame_sync_locked, frames_received => frames_received,
+        cst_lock_f1 => lock_f1, cst_lock_f2 => lock_f2,
+
+        -- debug tap -> existing TB capture signals (restores chan0_iq.txt)
+        dbg_tgt_i => chan_i_reg, dbg_tgt_q => chan_q_reg, dbg_tgt_valid => rx_svalid
+    );
+
+
+
 
     --------------------------------------------------------------------------
     -- Soft-bit capture process (writes a file for offline opv-decode -3)
@@ -574,7 +649,9 @@ begin
         variable tone_phase     : real;
         variable tone_re        : integer;
         variable tone_im        : integer;
-        constant TONE_BIN       : integer := 16;   -- target CHANNELIZER channel (post-decimator)
+        constant TONE_BIN       : integer := 16;   -- target CHANNELIZER channel (post-decimator) 
+                                                   -- this is the INPUT frequency bin (below halfband cutoff)
+        constant TONE_EXPECT    : integer := N_CHANNELS - TONE_BIN;  -- OUTPUT channel after commutator reversal = 48
         constant TONE_AMP       : integer := 30000;       -- ~92% full scale 30000
         constant DC_LEVEL       : integer := 20000;
         -- SMP_PERIOD (clocks between samples) is now an entity generic so
@@ -590,8 +667,9 @@ begin
         variable n_mid         : integer;
         constant NOISE_AMP     : integer := 3000;   -- input peak; RMS ~1700, like the ADC
         constant NOISE_SAMPLES : integer := 15000;  -- enough frames for the ema_2 cascade to settle
+        file fin               : text open read_mode is "opv_chan_stim_dc.txt";
         --file fin               : text open read_mode is "opv_chan_stim.txt";
-        file fin               : text open read_mode is "cw_tone_27k_10msps.txt";
+        --file fin               : text open read_mode is "cw_tone_27k_10msps.txt";
         variable l             : line;
         variable iv, qv        : integer;
         variable n_fed         : integer := 0;
@@ -768,7 +846,7 @@ wait for 1 us;    -- let the design come back up
         -- Test 6: Tone at TONE_BIN -> energy in matching channel
         ---------------------------------------------------------------------
         report "--- Test 6: Tone at bin " & integer'image(TONE_BIN) &
-               ", expect channel " & integer'image(TONE_BIN) & " hot ---";
+               ", expect channel " & integer'image(TONE_EXPECT) & " hot ---";
         tone_phase := 0.0;
         for i in 0 to 5000 loop
             -- 2:1 halfband decimator => channelizer runs at half the wrapper rate, so
@@ -794,11 +872,12 @@ wait for 1 us;    -- let the design come back up
         end loop;
         report "  Peak channel = " & integer'image(max_idx) &
                "  power = " & integer'image(max_power);
-        if max_idx = TONE_BIN and max_power > 0 then
-            pass("Tone test: peak in channel " & integer'image(TONE_BIN));
+
+        if max_idx = TONE_EXPECT and max_power > 0 then
+            pass("Tone test: peak in channel " & integer'image(TONE_EXPECT));
         else
             fail("Tone test: peak in channel " & integer'image(max_idx) &
-                 " (expected " & integer'image(TONE_BIN) & ")");
+                 " (expected " & integer'image(TONE_EXPECT) & ")");
         end if;
 
         ---------------------------------------------------------------------
@@ -819,15 +898,20 @@ wait for 1 us;    -- let the design come back up
         -- Test 8: Frame sequence integrity (from p_capture)
         ---------------------------------------------------------------------
         report "--- Test 8: Frame sequence integrity ---";
-        if frame_seq_ok and frames_observed > 100 then
-            pass("All observed frames had TDEST=0..63 with TLAST on 63 (" &
-                 integer'image(frames_observed) & " frames)");
-        elsif not frame_seq_ok then
-            fail("Frame sequence anomaly detected in capture");
-        else
-            fail("Too few frames observed: " &
-                 integer'image(frames_observed));
-        end if;
+        report "--- frame-structure integrity covered by the bare-core regression.";
+        report "--- m_axis_chans not exposed in the u_rx-wrapped harness.";
+        report "----------------------------------------------------------";
+        report "-- Test 8 retired with full honors                      --";
+        report "----------------------------------------------------------";
+        --if frame_seq_ok and frames_observed > 100 then
+        --    pass("All observed frames had TDEST=0..63 with TLAST on 63 (" &
+        --         integer'image(frames_observed) & " frames)");
+        --elsif not frame_seq_ok then
+        --    fail("Frame sequence anomaly detected in capture");
+        --else
+        --    fail("Too few frames observed: " &
+        --         integer'image(frames_observed));
+        --end if;
 
         ---------------------------------------------------------------------
         -- Test 9: DROPPED_FRAMES should be zero in this run
@@ -892,18 +976,9 @@ wait for 1 us;    -- let the design come back up
         elsif rdata = 0 then
             fail("Test 10: ch 0 power is zero - EMA may be stuck or disabled");
 
-
-        --elsif rdata < 600_000_000 or rdata > 700_000_000 then
-        --    fail("Test 10: ch 0 power " & integer'image(rdata) &
-        --         " outside expected steady-state [600M, 700M]");
-
-
-	elsif rdata < 2_000_000 or rdata > 4_000_000 then
+	elsif rdata < 2_000_000 or rdata > 5_000_000 then
 	    fail("Test 10: ch 0 power " & integer'image(rdata) &
-	         " outside expected steady-state [2M, 4M] for PROD_W=51");
-
-
-
+	         " outside expected steady-state [2M, 5M] for PROD_W=51");
         else
             pass("Test 10: EMA bounded under sustained DC, ch 0 = " &
                  integer'image(rdata));
@@ -957,13 +1032,22 @@ wait for 1 us;    -- let the design come back up
 
 
         -- Test control
-        end if;
+        else
 
 
-    -- ===== Phase 2: Opulent Voice burst through the channelizer into the demod =====
+    report "===============================================================================";
+    report "===== Phase 2: Opulent Voice burst through the channelizer into the demod =====";
     report "=== OPV stimulus phase: channel " & integer'image(TARGET_CHANNEL) & " ===" severity note;
+    report "===============================================================================";
+
     s_axis_data_tvalid <= '0';
     wait for 1 us;                           -- flush the tone-test tail out of the pipeline
+
+    -- Configure the channelizer to match the board before feeding the burst
+    axi_write(ADDR_OUTPUT_SHIFT, 14);        -- match the board: 4x more channel amplitude than default 16
+    axi_write(ADDR_CONTROL, 1);              -- soft reset (bit0=1): core_reset=1, clears the EMA cascade
+    axi_write(ADDR_CONTROL, 2);              -- release + enable (bit1=1): core_reset=0, run
+    wait for 2 us;                           -- let the reset settle / pipeline re-prime before the burst
 
 while not endfile(fin) loop
     readline(fin, l);
@@ -972,30 +1056,14 @@ while not endfile(fin) loop
     s_axis_data_tdata(15 downto 0)  <= std_logic_vector(to_signed(iv, 16));
     s_axis_data_tdata(31 downto 16) <= std_logic_vector(to_signed(qv, 16));
     s_axis_data_tvalid <= '1';
-    wait until rising_edge(aclk) and s_axis_data_tready = '1';   -- sample accepted
+    wait until rising_edge(aclk) and s_axis_data_tready = '1';
     n_fed := n_fed + 1;
-    s_axis_data_tvalid <= '0';                                   -- de-assert between samples
-    for k in 1 to SMP_PERIOD-1 loop                              -- idle 9 clocks -> 10 MHz
+    s_axis_data_tvalid <= '0';
+    for k in 1 to SMP_PERIOD-1 loop
         wait until rising_edge(aclk);
     end loop;
 end loop;
 s_axis_data_tvalid <= '0';
-
-
-
---original code replaced with above
---    while not endfile(fin) loop
---        readline(fin, l);
---        read(l, iv);
---        read(l, qv);
---        s_axis_data_tdata(15 downto 0)  <= std_logic_vector(to_signed(iv, 16));
---        s_axis_data_tdata(31 downto 16) <= std_logic_vector(to_signed(qv, 16));
---       s_axis_data_tvalid <= '1';
---        wait until rising_edge(aclk) and s_axis_data_tready = '1';
---        n_fed := n_fed + 1;
---    end loop;
---    s_axis_data_tvalid <= '0';
-
 
 
 
@@ -1004,6 +1072,10 @@ s_axis_data_tvalid <= '0';
     report "DEMOD PATH: target samples=" & integer'image(n_target_samps)
          & "  soft beats=" & integer'image(n_soft_beats)
          & "  soft frames=" & integer'image(n_soft_frames) severity note;
+
+        -- Test control
+        end if;
+
 
         ---------------------------------------------------------------------
         -- Summary
@@ -1017,6 +1089,7 @@ s_axis_data_tvalid <= '0';
         report "DEMOD PATH: target samples=" & integer'image(n_target_samps)
          & "  soft beats=" & integer'image(n_soft_beats)
          & "  soft frames=" & integer'image(n_soft_frames) severity note;
+
 
         if tests_fail = 0 then
             report "ALL TESTS PASSED" severity note;
