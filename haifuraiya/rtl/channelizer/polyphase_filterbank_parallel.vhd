@@ -7,70 +7,77 @@
 -- Target:  Xilinx Zynq UltraScale+ MPSoC (ZCU102, xczu9eg-ffvb1156-2-e)
 --
 -------------------------------------------------------------------------------
--- OVERVIEW
+-- WHAT CHANGED AND WHY  ("Cast REVERSE GRAVITY on the commutator wheel")
 -------------------------------------------------------------------------------
--- This is the streaming-friendly counterpart of polyphase_filterbank.vhd
--- using fir_branch_parallel branches that hold their coefficients in
--- elaboration-time constants. Compared to the iCE40 serial-MAC version
--- this entity drops:
+-- The previous architecture gave each branch its own delay line and a
+-- forward commutator (branch_select counted UP: sample s -> branch s mod N).
+-- That feeds branch k the data of polyphase phase k.  A *decimating*
+-- polyphase channelizer needs the commutator to run the other way: branch k
+-- must be married to phase (N-k), i.e. the samples x[mN - k].  Only then does
+-- FFT bin 0 equal the prototype low-pass of the input, which is the
+-- definition of the DC channel.
 --
---   * The LOAD_COEFFS state machine (no run-time coefficient loading)
---   * The coeff_addr / coeff_data / coeff_load ports
---   * The COMPUTING / OUTPUT_READY 2-state output dance
---   * All branch-coefficient packed registers
+-- The forward direction makes bin 0's effective response droop ~11 dB across
+-- the passband (the FM-to-AM that rippled constant-envelope inputs) AND leak
+-- adjacent channels in at ~-4 dB instead of rejecting them by >60 dB.  It is
+-- survivable for a single signal (the demod keys on frequency, not envelope)
+-- but it breaks channel isolation, so it would sink real 64-channel
+-- operation.  This was present at EVERY M, including the M=N critically
+-- sampled default.
 --
--- Each branch finishes its MAC 4 clocks after its sample arrives (a
--- 4-stage pipeline: taps -> four 6-tap quarter-MACs -> combine quarters
--- into two halves -> final add).  The filterbank pulses outputs_valid 4
--- clocks after the Nth sample of a frame (one for the d0 wrap-detect,
--- three more to let the last branch's MAC pipeline drain into mac_reg).
+-- Two coupled defects, one fix:
+--   1. Direction.  Each branch now reads its taps at the MIRROR phase from a
+--      shared buffer:  branch k, tap i  <-  xbuf(k + N*i).  With xbuf(0) the
+--      newest sample, that is x[G - k - N*i] -- the backward commutator.
+--   2. Staleness (M<N only).  The old per-branch lines advanced only when the
+--      commutator landed on them (every N samples), but outputs fire every M.
+--      For M<N that left N-M branches holding stale, time-misaligned MACs.
+--      A single shared sliding buffer (advances every sample) means every
+--      branch reads CURRENT data every frame.  No staleness at any M.
 --
--- The output interface (branch_outputs packed bus + outputs_valid
--- pulse) is identical to polyphase_filterbank.vhd, so the downstream
--- parallel-to-sequential adapter and FFT need no changes -- the one
--- extra branch-pipeline clock simply shifts the outputs_valid pulse one
--- cycle later, and the consumers key off that pulse rather than a fixed
--- cycle count.
---
--------------------------------------------------------------------------------
--- TIMING
--------------------------------------------------------------------------------
---   Latency from first sample to first outputs_valid: N + 4 clocks
---     (N samples to fill the commutator, 4 for the pipelined MAC
---      stages: quarter-MACs, combine to halves, then mac_reg)
---
---   With Haifuraiya at 100 MHz / 10 Msps (10 clk/sample):
---     - Sample period:        100 ns
---     - Commutator round:     N * 100 ns = 6.4 us (per output frame)
---     - Branch MAC:           10 ns (1 clock) per sample, fully overlapped
---     - First output frame:   ~6.4 us after first sample (ignoring
---                             1536-sample delay-line fill for steady
---                             state; that is a filter-theory concern,
---                             not a pipeline concern)
+-- Model-verified (docs Model C): for the Haifuraiya coeffs this takes channel
+-- 0 from 23%/35% envelope ripple back to the ~7% band-edge floor, bit-for-bit
+-- identical to a textbook prototype-low-pass-then-decimate-by-M.
 --
 -------------------------------------------------------------------------------
--- BLOCK DIAGRAM
+-- SCOPE / FOLLOW-ON (read before trusting non-zero channels)
 -------------------------------------------------------------------------------
+--   * FFT bin 0 (the DC channel -- where the OPV test signal lives) is fully
+--     correct with this change alone: bin 0 is the sum of all branches and a
+--     sum is independent of branch order, so no output twiddle is needed.
+--   * For channels k != 0, two things still live in the parent (top) and are
+--     deliberately NOT in this file:
+--        - the oversampled output phase rotation (twiddle e^{-j2*pi*k*M*m/N});
+--        - a possible bin-order mirror (this backward-commutator convention
+--          pairs with ifft, or read bins in mirrored order, vs the top's fft).
+--     Until those land, the built-in channelizer CW self-tests that probe
+--     specific non-zero bins will shift and must be re-baselined -- expected,
+--     not a regression of this fix.
+--   * The reference notebook docs/polyphase_channelizer.ipynb carries the same
+--     forward-commutator convention at its source and should be corrected to
+--     match (its process_sample counts input_phase UP).
 --
---                       +---------------------------------------------+
---                       |       polyphase_filterbank_parallel         |
---                       |                                             |
---                       |   +---------------------+                   |
---    sample_in -------->|-->|                     |                   |
---    sample_valid ----->|-->|   commutator FSM    |                   |
---                       |   |   (branch_select)   |                   |
---                       |   +----------+----------+                   |
---                       |              | branch_sample_valid(i)       |
---                       |              v                              |
---                       |   +---------------------+                   |
---                       |   |  N branches, each   |-- result(i) ------|--> branch_outputs (packed)
---                       |   |  fir_branch_parallel|                   |
---                       |   |  with own COEFFS    |                   |
---                       |   +---------------------+                   |
---                       |                                             |
---                       |   wrap-detect -> d0 -> d1 -> d2 -> d3 ------|--> outputs_valid
---                       |                                             |
---                       +---------------------------------------------+
+-------------------------------------------------------------------------------
+-- INTERFACE / RESOURCES
+-------------------------------------------------------------------------------
+--   * Entity, generics, ports, and outputs_valid timing are UNCHANGED -- drop
+--     in for the existing parallel-to-sequential adapter and FFT.  Latency
+--     from the M-th sample of a frame to outputs_valid is still 4 clocks.
+--   * Storage is unchanged: one N*TAPS_PER_BRANCH sample buffer is exactly the
+--     same depth as the old N branches x TAPS_PER_BRANCH delay lines.
+--   * DSP cost unchanged: N*TAPS_PER_BRANCH (1,536) multipliers, still split
+--     into four 6-tap quarter-MACs per branch so each combinational cascade is
+--     6 DSPs deep and stays inside one DSP column (the prior "Cast HASTE"
+--     timing fix is preserved verbatim, just fed from the shared buffer).
+--
+-------------------------------------------------------------------------------
+-- TIMING (per branch, identical pipeline depth to the prior fir_branch_parallel)
+-------------------------------------------------------------------------------
+--   M-th sample edge
+--     -> fc_d0 : xbuf now holds the M-th sample; quarter-MACs read strided taps
+--     -> fc_d1 : four 6-tap quarter results registered; combine to two halves
+--     -> fc_d2 : two half results registered; final add
+--     -> fc_d3 : final MAC registered into branch_results; outputs_valid = 1
 --
 -------------------------------------------------------------------------------
 
@@ -78,11 +85,13 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.haifuraiya_coeffs_pkg.all;
+
 entity polyphase_filterbank_parallel is
     generic (
         N_CHANNELS       : positive := 64;
         -- Decimation factor M (samples consumed per output frame).
-        --   M = N_CHANNELS: critically sampled (original behavior).
+        --   M = N_CHANNELS: critically sampled.
         --   M < N_CHANNELS: oversampled / guard-band mode.
         -- For cleanest channel response, M should divide N_CHANNELS.
         M_DECIMATION     : positive := 64;
@@ -117,138 +126,177 @@ end entity polyphase_filterbank_parallel;
 
 architecture rtl of polyphase_filterbank_parallel is
 
-    constant BRANCH_IDX_WIDTH : positive := clog2(N_CHANNELS);
-    constant M_IDX_WIDTH      : positive := clog2(M_DECIMATION);
+    constant M_IDX_WIDTH : positive := clog2(M_DECIMATION);
+    constant BUF_DEPTH   : positive := N_CHANNELS * TAPS_PER_BRANCH;
+    constant Q_TAPS      : positive := TAPS_PER_BRANCH / 4;
 
+    subtype sample_t is signed(DATA_WIDTH  - 1 downto 0);
+    subtype coeff_t  is signed(COEFF_WIDTH - 1 downto 0);
+    subtype accum_t  is signed(ACCUM_WIDTH - 1 downto 0);
+
+    type buf_t          is array (0 to BUF_DEPTH - 1) of sample_t;
+    type coeff_array_t  is array (0 to TAPS_PER_BRANCH - 1) of coeff_t;
+    type quarter_t      is array (0 to 3) of accum_t;
     type result_array_t is array (0 to N_CHANNELS - 1) of
         std_logic_vector(ACCUM_WIDTH - 1 downto 0);
 
-    -- Per-branch result wires (driven by individual branch instances)
-    signal branch_results       : result_array_t;
-    -- One-hot sample_valid distribution (commutator output)
-    signal branch_sample_valid  : std_logic_vector(N_CHANNELS - 1 downto 0);
-    -- Commutator counter: free-runs 0..N-1, wraps independently of M.
-    -- Drives which branch receives each input sample.
-    signal branch_select        : unsigned(BRANCH_IDX_WIDTH - 1 downto 0)
-                                  := (others => '0');
-    -- Frame counter: counts 0..M-1, wraps and fires frame_complete.
-    -- Independent of branch_select; drives output frame timing.
-    signal samples_since_fc     : unsigned(M_IDX_WIDTH - 1 downto 0)
-                                  := (others => '0');
-    -- Frame-complete pipeline.  Four stages (d0..d3) so outputs_valid
-    -- fires exactly when the last branch's mac_reg latches, matching the
-    -- now-4-cycle MAC pipeline inside fir_branch_parallel (quarter-MAC).
-    signal frame_complete_d0    : std_logic := '0';
-    signal frame_complete_d1    : std_logic := '0';
-    signal frame_complete_d2    : std_logic := '0';
-    signal frame_complete_d3    : std_logic := '0';
+    ---------------------------------------------------------------------------
+    -- Shared sliding input buffer.  xbuf(0) = newest sample, xbuf(p) = the
+    -- sample p inputs ago.  Advances one position on every sample_valid, so at
+    -- any frame boundary every branch reads current data (no staleness at M<N).
+    -- Same total storage as the old N per-branch delay lines.
+    ---------------------------------------------------------------------------
+    signal xbuf : buf_t := (others => (others => '0'));
+
+    -- Frame counter (0..M-1) and the 4-stage valid pipeline.  fc_d0 fires the
+    -- cycle after the M-th sample (when xbuf already holds it); fc_d1..d3 track
+    -- the three remaining quarter-MAC pipeline stages.  For M=N these wrap once
+    -- per commutator round, same cadence as before.
+    signal samples_since_fc : unsigned(M_IDX_WIDTH - 1 downto 0) := (others => '0');
+    signal fc_d0 : std_logic := '0';
+    signal fc_d1 : std_logic := '0';
+    signal fc_d2 : std_logic := '0';
+    signal fc_d3 : std_logic := '0';
+
+    signal branch_results : result_array_t;
+
+    ---------------------------------------------------------------------------
+    -- Slice a branch's coefficients out of ALL_COEFFS (branch-major layout:
+    -- branch k owns indices k*TAPS_PER_BRANCH .. (k+1)*TAPS_PER_BRANCH - 1).
+    -- Branch k, tap i carries prototype coefficient h[k + N*i] -- the same
+    -- pairing the per-branch fir_branch_parallel used; only the DATA phase the
+    -- tap is multiplied against has been mirrored (k+N*i, the backward phase).
+    ---------------------------------------------------------------------------
+    function get_branch_coeffs(idx : natural) return coeff_array_t is
+        constant FIRST : natural := idx * TAPS_PER_BRANCH;
+        variable r     : coeff_array_t;
+    begin
+        for i in 0 to TAPS_PER_BRANCH - 1 loop
+            r(i) := signed(ALL_COEFFS(FIRST + i));
+        end loop;
+        return r;
+    end function;
 
 begin
 
     ---------------------------------------------------------------------------
-    -- Commutator: route sample_valid to the currently-selected branch
-    -- (combinational one-hot decoder)
+    -- Shared buffer shift (one process owns xbuf).
     ---------------------------------------------------------------------------
-    p_commutator : process(branch_select, sample_valid)
-    begin
-        branch_sample_valid <= (others => '0');
-        if sample_valid = '1' then
-            branch_sample_valid(to_integer(branch_select)) <= '1';
-        end if;
-    end process p_commutator;
-
-    ---------------------------------------------------------------------------
-    -- Branch instances (each reads its own coefficient slice at elaboration)
-    ---------------------------------------------------------------------------
-    gen_branches : for i in 0 to N_CHANNELS - 1 generate
-        u_branch : entity work.fir_branch_parallel
-            generic map (
-                TAPS_PER_BRANCH => TAPS_PER_BRANCH,
-                DATA_WIDTH      => DATA_WIDTH,
-                COEFF_WIDTH     => COEFF_WIDTH,
-                ACCUM_WIDTH     => ACCUM_WIDTH,
-                BRANCH_INDEX    => i
-            )
-            port map (
-                clk          => clk,
-                reset        => reset,
-                sample_in    => sample_in,
-                sample_valid => branch_sample_valid(i),
-                result       => branch_results(i),
-                result_valid => open  -- not used at filterbank level
-            );
-    end generate gen_branches;
-
-    ---------------------------------------------------------------------------
-    -- Counters and frame-complete pipeline
-    --
-    --   branch_select   : free-runs 0..N-1, wrapping naturally.  Decoupled
-    --                     from frame_complete because for M<N the commutator
-    --                     does not align with frame boundaries.
-    --
-    --   samples_since_fc: counts 0..M-1.  When it wraps (was M-1 and a new
-    --                     sample arrives) we fire frame_complete_d0.
-    --
-    --   frame_complete_d1..d3: three-clock pipeline of d0 so outputs_valid
-    --                     fires exactly when the last branch's mac_reg
-    --                     latches the final MAC sum.  With
-    --                     fir_branch_parallel's 4-stage quarter-MAC
-    --                     pipeline the last branch's MAC settles 4 clocks
-    --                     after its sample arrives, so outputs_valid lives
-    --                     4 clocks downstream of the d0 wrap pulse.
-    --
-    -- For M = N_CHANNELS the two counters wrap on the same cycle, giving
-    -- behaviour identical to the original M=N implementation.
-    ---------------------------------------------------------------------------
-    p_select : process(clk)
+    p_buffer : process(clk)
     begin
         if rising_edge(clk) then
             if reset = '1' then
-                branch_select     <= (others => '0');
-                samples_since_fc  <= (others => '0');
-                frame_complete_d0 <= '0';
-                frame_complete_d1 <= '0';
-                frame_complete_d2 <= '0';
-                frame_complete_d3 <= '0';
+                xbuf <= (others => (others => '0'));
+            elsif sample_valid = '1' then
+                xbuf(0) <= signed(sample_in);
+                for p in 1 to BUF_DEPTH - 1 loop
+                    xbuf(p) <= xbuf(p - 1);
+                end loop;
+            end if;
+        end if;
+    end process p_buffer;
+
+    ---------------------------------------------------------------------------
+    -- Frame counter + valid pipeline (one process owns the fc_* chain).
+    ---------------------------------------------------------------------------
+    p_frame : process(clk)
+    begin
+        if rising_edge(clk) then
+            if reset = '1' then
+                samples_since_fc <= (others => '0');
+                fc_d0 <= '0';
+                fc_d1 <= '0';
+                fc_d2 <= '0';
+                fc_d3 <= '0';
             else
-                -- Default deassertion (gets overridden on wrap)
-                frame_complete_d0 <= '0';
-
+                fc_d0 <= '0';  -- default; pulsed on frame wrap
                 if sample_valid = '1' then
-                    -- Commutator wheel: wraps at N
-                    if branch_select = N_CHANNELS - 1 then
-                        branch_select <= (others => '0');
-                    else
-                        branch_select <= branch_select + 1;
-                    end if;
-
-                    -- Frame counter: wraps at M, asserts frame_complete
                     if samples_since_fc = M_DECIMATION - 1 then
-                        samples_since_fc  <= (others => '0');
-                        frame_complete_d0 <= '1';
+                        samples_since_fc <= (others => '0');
+                        fc_d0 <= '1';
                     else
                         samples_since_fc <= samples_since_fc + 1;
                     end if;
                 end if;
-
-                -- Three-stage pulse pipeline so outputs_valid fires 4
-                -- clocks after the M-th sample (last branch's pipelined
-                -- quarter-MAC has settled by then).
-                frame_complete_d1 <= frame_complete_d0;
-                frame_complete_d2 <= frame_complete_d1;
-                frame_complete_d3 <= frame_complete_d2;
+                fc_d1 <= fc_d0;
+                fc_d2 <= fc_d1;
+                fc_d3 <= fc_d2;
             end if;
         end if;
-    end process p_select;
+    end process p_frame;
 
     ---------------------------------------------------------------------------
-    -- Pack branch outputs into a single bus (LSB = branch 0)
+    -- Per-branch parallel quarter-MAC, fed strided taps from the shared buffer.
+    -- Each stage latches only on its frame-pulse phase so the frame's result
+    -- propagates intact (and holds between frames).  Pipeline depth and the
+    -- 6-tap quarter split match the prior fir_branch_parallel exactly.
     ---------------------------------------------------------------------------
-    gen_pack : for i in 0 to N_CHANNELS - 1 generate
-        branch_outputs((i + 1) * ACCUM_WIDTH - 1 downto i * ACCUM_WIDTH)
-            <= branch_results(i);
+    gen_branches : for k in 0 to N_CHANNELS - 1 generate
+        constant CK : coeff_array_t := get_branch_coeffs(k);
+        signal q       : quarter_t := (others => (others => '0'));
+        signal half_a  : accum_t   := (others => '0');
+        signal half_b  : accum_t   := (others => '0');
+        signal mac_reg : accum_t   := (others => '0');
+    begin
+        -- Stage 1: four 6-tap quarter-MACs over the mirror-phase taps
+        --          xbuf(k + N*i).  Read on fc_d0 (xbuf holds the M-th sample).
+        p_quarters : process(clk)
+            variable acc : accum_t;
+        begin
+            if rising_edge(clk) then
+                if reset = '1' then
+                    q <= (others => (others => '0'));
+                elsif fc_d0 = '1' then
+                    for qi in 0 to 3 loop
+                        acc := (others => '0');
+                        for i in qi * Q_TAPS to (qi + 1) * Q_TAPS - 1 loop
+                            acc := acc + resize(
+                                xbuf(k + N_CHANNELS * i) * CK(i), ACCUM_WIDTH);
+                        end loop;
+                        q(qi) <= acc;
+                    end loop;
+                end if;
+            end if;
+        end process p_quarters;
+
+        -- Stage 2: combine quarters into two halves (on fc_d1)
+        p_halves : process(clk)
+        begin
+            if rising_edge(clk) then
+                if reset = '1' then
+                    half_a <= (others => '0');
+                    half_b <= (others => '0');
+                elsif fc_d1 = '1' then
+                    half_a <= q(0) + q(1);
+                    half_b <= q(2) + q(3);
+                end if;
+            end if;
+        end process p_halves;
+
+        -- Stage 3: final add (on fc_d2) -> branch result
+        p_final : process(clk)
+        begin
+            if rising_edge(clk) then
+                if reset = '1' then
+                    mac_reg <= (others => '0');
+                elsif fc_d2 = '1' then
+                    mac_reg <= half_a + half_b;
+                end if;
+            end if;
+        end process p_final;
+
+        branch_results(k) <= std_logic_vector(mac_reg);
+    end generate gen_branches;
+
+    ---------------------------------------------------------------------------
+    -- Pack branch outputs into a single bus (LSB = branch 0).  Branch->slot
+    -- mapping is unchanged; only each branch's input data phase moved.
+    ---------------------------------------------------------------------------
+    gen_pack : for k in 0 to N_CHANNELS - 1 generate
+        branch_outputs((k + 1) * ACCUM_WIDTH - 1 downto k * ACCUM_WIDTH)
+            <= branch_results(k);
     end generate gen_pack;
 
-    outputs_valid <= frame_complete_d3;
+    outputs_valid <= fc_d3;
 
 end architecture rtl;
