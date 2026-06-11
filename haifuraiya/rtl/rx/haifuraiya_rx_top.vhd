@@ -3,7 +3,7 @@
 --
 -- Chain:  haifuraiya_channelizer_axi  (m_axis_chans, complex I/Q per channel, TDEST)
 --           -> TDEST demux (pick ONE channel = TARGET_CHANNEL, forward its I)
---           -> msk_demodulator  (real-input, I-only; forms its own I/Q internally)
+--           -> msk_demodulator  (complex)
 --           -> frame_sync_detector_soft
 --           -> m_axis_soft_bit  (3-bit soft, 2144/frame, sync stripped)  -> DMA -> opv-decode -3
 --
@@ -16,9 +16,7 @@
 --   * the demod tuning ports (freq words / gains / shifts / lock thresholds):
 --       re-derive for the channel rate (~625 ksps, SPS ~11.53) -- see
 --       CHANNELIZER_DEMOD_CONTRACT.md. This is the knob most likely to bite.
---   * KEY TO LOCK: the demod is real-input. It only locks if the OPV signal sits
---     at a real IF *within* the channel (not at channel center). Place the carrier
---     ~+baud/2 off center and set rx_freq_word_f1/f2 to that IF, or it will not lock.
+--   * KEY TO LOCK: the demod is now complex input.
 --------------------------------------------------------------------------------
 library ieee;
 use ieee.std_logic_1164.all;
@@ -27,7 +25,9 @@ use ieee.numeric_std.all;
 entity haifuraiya_rx_top is
     generic (
         TARGET_CHANNEL : natural := 0;     -- 0..63: channel to bring up first
+        COMPLEX_INPUT  : boolean := false; -- false = real I-only (today); true = feed channel Q
         RX_INVERT      : std_logic := '0'; -- bit polarity (matches msk_top rx_invert)
+
         -- channelizer dims (pass through)
         N_CHANNELS     : positive := 64;
         M_DECIMATION   : positive := 16;
@@ -82,13 +82,27 @@ entity haifuraiya_rx_top is
         frame_sync_locked : out std_logic;
         frames_received   : out std_logic_vector(31 downto 0);
         cst_lock_f1       : out std_logic;
-        cst_lock_f2       : out std_logic
+        cst_lock_f2       : out std_logic;
+
+        -- debug tap: target-channel complex sample + strobe, for the TB's
+        -- chan0_iq.txt capture (FFT / centroid spectrum check). Tie to open in
+        -- the block design; synthesis trims it.
+        dbg_tgt_i         : out std_logic_vector(15 downto 0);
+        dbg_tgt_q         : out std_logic_vector(15 downto 0);
+        dbg_tgt_valid     : out std_logic
     );
 end entity haifuraiya_rx_top;
 
 architecture rtl of haifuraiya_rx_top is
 
-    constant SAMPLE_W : natural := 12;  -- keeping channelizer's full 16-bit I width oops didn't work, set to 12
+    -- Two distinct widths -- conflating them was the SAMPLE_W bug.
+    constant CHAN_I_W       : natural := 16;  -- channelizer I capture width (full m_axis_chans I)
+    constant DEMOD_SAMPLE_W : natural := 12;  -- demod sample width (PROVEN tuning; do NOT set to 16)
+    -- Top bit of the 12-bit slice handed to the demod = the Kd / input-level knob.
+    --   15 -> chan_i_reg(15 downto 4) : top 12 bits, no clipping (safe default)
+    --   13 -> chan_i_reg(13 downto 2) : +12 dB into the loop, clips above 2^13
+    -- Confirm by measuring the channel-0 I amplitude with the real 20 Msps stimulus.
+    constant RX_SLICE_HI    : natural := 13; -- was 15, now 13 to fix alignment issue
 
     signal reset_h : std_logic;         -- active-high reset for the modem blocks
 
@@ -100,12 +114,18 @@ architecture rtl of haifuraiya_rx_top is
     signal chans_tlast  : std_logic;
 
     -- demux'd target channel
-    signal chan_i_reg : std_logic_vector(SAMPLE_W-1 downto 0) := (others => '0');
+    signal chan_i_reg : std_logic_vector(CHAN_I_W-1 downto 0) := (others => '0');
+    signal chan_q_reg : std_logic_vector(15 downto 0)         := (others => '0'); -- debug tap (Q) only
     signal rx_svalid  : std_logic := '0';
+
+    -- intermediate signals for complex modulation
+    signal rx_i_to_demod : std_logic_vector(DEMOD_SAMPLE_W-1 downto 0);
+    signal rx_q_to_demod : std_logic_vector(DEMOD_SAMPLE_W-1 downto 0);
 
     -- demod outputs
     signal rx_data      : std_logic;
     signal rx_data_soft : signed(15 downto 0);
+    signal rx_data_soft_corr : signed(15 downto 0);
     signal rx_dvalid    : std_logic;
     signal lock_f1, lock_f2 : std_logic;
     signal rx_bit_corr  : std_logic;
@@ -117,6 +137,8 @@ begin
 
     -- accept every channel beat; act only on the target
     chans_tready <= '1';
+
+    rx_data_soft_corr <= rx_data_soft when RX_INVERT = '0' else -rx_data_soft;
 
     ----------------------------------------------------------------------------
     -- Channelizer IP (sealed; do not modify). Debug ports left open.
@@ -178,7 +200,6 @@ begin
 
     ----------------------------------------------------------------------------
     -- TDEST demux: forward ONLY TARGET_CHANNEL's I to the demod.
-    -- Q is ignored here (channelizer does per-channel power detection itself).
     ----------------------------------------------------------------------------
     demux : process(aclk)
     begin
@@ -189,18 +210,29 @@ begin
             elsif chans_tvalid = '1' and chans_tready = '1' then
                 if to_integer(unsigned(chans_tdest(5 downto 0))) = TARGET_CHANNEL then
                     chan_i_reg <= chans_tdata(15 downto 0);   -- I = TDATA[15:0]
+                    chan_q_reg <= chans_tdata(31 downto 16);  -- Q = TDATA[31:16] (debug tap only)
                     rx_svalid  <= '1';
                 end if;
             end if;
         end if;
     end process;
 
+    -- conditional signal drivers
+    rx_i_to_demod <= chan_i_reg(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1);
+    rx_q_to_demod <= chan_q_reg(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1)
+                     when COMPLEX_INPUT else (others => '0');
+
     ----------------------------------------------------------------------------
-    -- MSK demodulator (real-input, I-only). Loopback/decoder-lbk tied off.
+    -- MSK demodulator (complex). Loopback/decoder-lbk tied off.
     ----------------------------------------------------------------------------
     u_demod : entity work.msk_demodulator
         generic map (
-            SAMPLE_W => SAMPLE_W
+            SAMPLE_W => DEMOD_SAMPLE_W,
+            -- clk here is the 100 MHz fabric clock, NOT the sample rate; channel samples
+            -- arrive on rx_svalid (~625 ksps). Gate the carrier NCO per sample so it does
+            -- not free-run at the fabric rate. (Pluto/LibreSDR run clk == fs and leave this
+            -- at its default False.)
+            SAMPLE_GATED_NCO => true
         )
         port map (
             clk  => aclk,
@@ -232,8 +264,9 @@ begin
 
             rx_enable  => '1',
             rx_svalid  => rx_svalid,
-            rx_samples => chan_i_reg(15 downto 4),  -- drop to 12
-            --rx_samples => chan_i_reg, -- full 16 beans
+            --rx_samples => chan_i_reg(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1),
+            rx_i_samples => rx_i_to_demod,
+            rx_q_samples => rx_q_to_demod,
 
             rx_data      => rx_data,
             rx_data_soft => rx_data_soft,
@@ -259,17 +292,27 @@ begin
     cst_lock_f1 <= lock_f1;
     cst_lock_f2 <= lock_f2;
 
+    -- debug tap out (aligned: chan_i_reg/chan_q_reg and rx_svalid update on the same edge)
+    dbg_tgt_i     <= chan_i_reg;
+    dbg_tgt_q     <= chan_q_reg;
+    dbg_tgt_valid <= rx_svalid;
+
     ----------------------------------------------------------------------------
     -- Frame sync detector: soft-bit stream out to DMA. Byte path unused.
     ----------------------------------------------------------------------------
     u_fsync : entity work.frame_sync_detector_soft
+        generic map (
+            HUNTING_THRESHOLD => 38000,   -- was 60000 in libreSDR
+            LOCKED_THRESHOLD  => 24000    -- was 36000 in libreSDR
+        )
         port map (
             clk   => aclk,
             reset => reset_h,
 
             rx_bit            => rx_bit_corr,
             rx_bit_valid      => rx_dvalid,
-            s_axis_soft_tdata => rx_data_soft,
+            --s_axis_soft_tdata => rx_data_soft,
+            s_axis_soft_tdata => rx_data_soft_corr,   -- was rx_data_soft
 
             m_axis_tdata  => open,
             m_axis_tvalid => open,
