@@ -106,6 +106,11 @@ cd /docs
 python3 opv_chan_stim_gen.py --fc 0 --frames 5 --out ../haifuraiya/sim/opv_chan_stim_dc.txt
 # Vivado batch synth and impl
 make haifuraiya-xsa-integrated
+# Set up the paths
+make haifuraiya-configure
+
+# Vivado batch synth and impl, LVDS mode
+make haifuraiya-xsa-integrated CMOS_LVDS_N=0
 
 # Imports XSA, auto-runs check-xsa (catches wrong-XSA)
 make haifuraiya-import-xsa-integrated
