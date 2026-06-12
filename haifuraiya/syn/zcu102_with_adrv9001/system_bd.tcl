@@ -101,7 +101,7 @@ update_ip_catalog
 # -----------------------------------------------------------------------------
 
 ad_ip_parameter axi_adrv9001_rx1_dma CONFIG.DMA_TYPE_SRC        1
-ad_ip_parameter axi_adrv9001_rx1_dma CONFIG.DMA_DATA_WIDTH_SRC  8
+ad_ip_parameter axi_adrv9001_rx1_dma CONFIG.DMA_DATA_WIDTH_SRC  16
 
 
 # -----------------------------------------------------------------------------
