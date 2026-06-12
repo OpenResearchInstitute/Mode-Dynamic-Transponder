@@ -298,8 +298,8 @@ ad_connect $sys_cpu_clk axi_adrv9001_rx1_dma/s_axis_aclk
 #      We use 0x44A70000 → 0x84A70000, the next clean 64K slot.
 # -----------------------------------------------------------------------------
 
-ad_cpu_interconnect 0x44A70000 channelizer_rx1/s_axi_ctrl
-ad_cpu_interconnect 0x44A80000 channelizer_rx1/s_axi_demod
+ad_cpu_interconnect 0x44A70000 channelizer_rx1 s_axi_ctrl
+ad_cpu_interconnect 0x44A80000 channelizer_rx1 s_axi_demod
 puts "INFO: haifuraiya - demod control AXI-Lite at 0x84A80000 (TCL arg 0x44A80000)"
 
 puts "INFO: haifuraiya — RX1 channelizer integration complete"
