@@ -80,7 +80,9 @@ safe_add_files sources_1 {
     ../third_party/pluto_msk/msk_demodulator/src/costas_loop.vhd
     ../third_party/pluto_msk/msk_demodulator/src/msk_demodulator.vhd
     ../third_party/pluto_msk/src/frame_sync_detector_soft.vhd
+    ../rtl/rx/haifuraiya_demod_regs.vhd
     ../rtl/rx/haifuraiya_rx_top.vhd
+    ../rtl/rx/haifuraiya_rx_axi.vhd
 }
 
 # --- Testbench ---
@@ -130,34 +132,34 @@ puts "========================================"
 
 
 # demod loop visibility (instance-internal -> not auto-added)
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/lpf_accum_f1}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/lpf_accum_f2}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/f1_error}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/f2_error}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/dbg_acc_i_f1}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/dbg_acc_q_f1}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/tclk}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/frame_sync_locked}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/frames_received}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/cst_lock_f1}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/cst_lock_f2}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/rx_data_soft}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/rx_svalid}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/lpf_accum_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/lpf_accum_f2}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f1_error}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f2_error}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbg_acc_i_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbg_acc_q_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/tclk}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/frame_sync_locked}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/frames_received}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/cst_lock_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/cst_lock_f2}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/rx_data_soft}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/rx_svalid}
 add_wave_divider "Frame Sync Management"
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/debug_corr_peak}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/debug_correlation}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/debug_state}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/debug_consecutive_good} 
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/debug_missed_syncs}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_corr_peak}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_correlation}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_state}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_consecutive_good}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_missed_syncs}
 # real hard/soft bit decisions (live, inside the demod)
 add_wave_divider "Bit Decisions"
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/rx_data}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/rx_data_soft}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_demod/rx_dvalid}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_data}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_data_soft}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_dvalid}
 # the corrected bit + valid + combined lock as frame sync sees them
 add_wave_divider "Frame Sync: Corrected Bit + Valid + Combined Symbol Lock"
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/rx_bit}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/rx_bit_valid}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_fsync/demod_sync_lock}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/rx_bit}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/rx_bit_valid}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/demod_sync_lock}
 
 run all

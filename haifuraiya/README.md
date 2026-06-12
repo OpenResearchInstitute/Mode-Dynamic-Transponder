@@ -104,6 +104,11 @@ source ~/petalinux/2022.2/settings.sh
 # Construct stimulus file for simulation (if desired)
 cd /docs
 python3 opv_chan_stim_gen.py --fc 0 --frames 5 --out ../haifuraiya/sim/opv_chan_stim_dc.txt
+# Vivado batch synth and impl
+make haifuraiya-xsa-integrated
+
+# Imports XSA, auto-runs check-xsa (catches wrong-XSA)
+make haifuraiya-import-xsa-integrated
 
 # Build PetaLinux (auto-runs haifuraiya-check-env and haifuraiya-configure)
 make haifuraiya-build
@@ -120,6 +125,15 @@ In a second terminal, watch the serial console:
 ```bash
 ssh keroppi 'screen /dev/zcu102_uart1 115200'
 ```
+
+---
+
+# Deploy cross-compiled binaries to the target, including profiles
+/dogu$ make clean
+/dogu$ make cross
+/dogu$ make deploy
+
+---
 
 Once Linux boots, the board is on the lab network and you can SSH to
 it. (See [Current limitations](#current-limitations) for the one-time
@@ -203,45 +217,6 @@ Pulled from origin            ─►  haifuraiya-update         (handles
 
 Active development items — documented so you know what to expect.
 
-### Missing SSH on first boot (meta-ori orphan layer)
-
-`haifuraiya/yocto/meta-ori/` contains recipes to add `openssh` and a
-static IP configuration to the rootfs. The layer is not currently
-registered as `CONFIG_USER_LAYER_2`, so the recipes are not parsed
-during the PetaLinux build. The rootfs ships with `dropbear` (root
-password login disabled by default) and DHCP networking.
-
-**Current workaround**, from the JTAG serial console on first boot:
-
-```bash
-sed -i 's/-w//' /etc/default/dropbear
-passwd root         # set a password
-systemctl start dropbear
-```
-
-After this, SSH from the build host works:
-
-```bash
-ssh root@<board-IP>
-```
-
-**Real fix in progress:** register `meta-ori` as `CONFIG_USER_LAYER_2`
-via `petalinux-config`, enable `debug-tweaks` in the rootfs config,
-and update `setup-petalinux.sh` and `haifuraiya-revert-paths` to
-handle the new layer slot symmetrically.
-
-### ADRV9002 RX/TX not yet configured for sample capture
-
-The ADRV9002 probes cleanly on boot and exposes IIO devices for RX1,
-RX2, TX1, and TX2. Capturing samples requires a profile configuration
-(JSON from ADI's Transceiver Evaluation Software), running initial
-calibrations, and arming the buffer — none of which are currently
-automated. `iio_readdev` will block waiting for samples that never
-arrive until this sequence is run.
-
-The workflow is standard ADI; see
-[the ADRV9002 user guide](https://wiki.analog.com/resources/eval/user-guides/adrv9002).
-Automating the sequence for haifuraiya is on the project roadmap.
 
 ---
 

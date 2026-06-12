@@ -101,7 +101,7 @@ update_ip_catalog
 # -----------------------------------------------------------------------------
 
 ad_ip_parameter axi_adrv9001_rx1_dma CONFIG.DMA_TYPE_SRC        1
-ad_ip_parameter axi_adrv9001_rx1_dma CONFIG.DMA_DATA_WIDTH_SRC  32
+ad_ip_parameter axi_adrv9001_rx1_dma CONFIG.DMA_DATA_WIDTH_SRC  8
 
 
 # -----------------------------------------------------------------------------
@@ -166,7 +166,7 @@ create_bd_cell -type module -reference axis_iq_wrapper axis_iq_wrapper_rx1
 # -----------------------------------------------------------------------------
 
 create_bd_cell -type ip \
-    -vlnv openresearch.institute:ip:haifuraiya_channelizer_axi:0.2 \
+    -vlnv openresearch.institute:ip:haifuraiya_rx_axi:0.3 \
     channelizer_rx1
 
 
@@ -207,7 +207,7 @@ ad_connect axi_adrv9001/adc_1_rst adc_1_rst_inv/Op1
 #     Why split adc_1_clk from channelizer aclk:
 #       - The channelizer IP has a single aclk port; aresetn's
 #         ASSOCIATED_RESET association means ALL its bus interfaces
-#         (s_axis_data, m_axis_chans, s_axi_ctrl) share that clock.
+#         (s_axis_data, m_axis_soft_bit, s_axi_ctrl) share that clock.
 #       - If we ran aclk at adc_1_clk, s_axi_ctrl would be on a different
 #         clock domain from the PS interconnect — failing validate_bd_design
 #         with ERROR [BD 41-237] CLK_DOMAIN mismatch. Resolving that needs
@@ -262,7 +262,18 @@ ad_connect axi_adrv9001/adc_1_valid_i0 axis_iq_wrapper_rx1/in_valid
 
 ad_connect axis_iq_wrapper_rx1/m_axis    data_cdc_fifo_rx1/S_AXIS
 ad_connect data_cdc_fifo_rx1/M_AXIS      channelizer_rx1/s_axis_data
-ad_connect channelizer_rx1/m_axis_chans  axi_adrv9001_rx1_dma/s_axis
+# Soft-bit width adapter (3-bit -> byte). rx_axi emits m_axis_soft_bit as a
+# 3-bit soft value (0..7); the S2MM DMA source is now byte-wide, so zero-extend
+# each value into a byte -> the DMA writes one byte per soft bit, the layout
+# opv-decode -3 reads. (axis_dma_adapter.vhd is the transmit-side NARROWER and
+# is deliberately NOT used here -- this widens in the receive direction.)
+add_files -norecurse [file join $script_dir "axis_softbit_widen.vhd"]
+update_compile_order -fileset sources_1
+create_bd_cell -type module -reference axis_softbit_widen soft_widen_rx1
+ad_connect $sys_cpu_clk    soft_widen_rx1/aclk
+ad_connect $sys_cpu_resetn soft_widen_rx1/aresetn
+ad_connect channelizer_rx1/m_axis_soft_bit soft_widen_rx1/s_axis
+ad_connect soft_widen_rx1/m_axis           axi_adrv9001_rx1_dma/s_axis
 
 # DMA AXIS-side clock = PS clock (matches channelizer output domain).
 ad_connect $sys_cpu_clk axi_adrv9001_rx1_dma/s_axis_aclk
@@ -287,7 +298,9 @@ ad_connect $sys_cpu_clk axi_adrv9001_rx1_dma/s_axis_aclk
 #      We use 0x44A70000 → 0x84A70000, the next clean 64K slot.
 # -----------------------------------------------------------------------------
 
-ad_cpu_interconnect 0x44A70000 channelizer_rx1
+ad_cpu_interconnect 0x44A70000 channelizer_rx1/s_axi_ctrl
+ad_cpu_interconnect 0x44A80000 channelizer_rx1/s_axi_demod
+puts "INFO: haifuraiya - demod control AXI-Lite at 0x84A80000 (TCL arg 0x44A80000)"
 
 puts "INFO: haifuraiya — RX1 channelizer integration complete"
 puts "INFO: haifuraiya — channelizer control AXI-Lite at 0x84A70000 (TCL arg 0x44A70000)"
@@ -297,85 +310,36 @@ puts "INFO: haifuraiya — channelizer + DMA run at PS clock; wrapper at adc_1_c
 
 
 ##############################################################################
-# ILA Debug Core - Channelizer / Power-Detector Path
+# ILA Debug Core - RX demod bring-up
 ##############################################################################
-# Diagnoses the hardware-only bimodal failure: simulation shows a clean
-# per-channel skirt (ch0=2.6M peak, ch1/63=1059 sidelobes, ch30-33=0
-# stopband, bit-exact mirror symmetry), but hardware reads either 0
-# or 0x7FFFFFFF on every channel with no intermediate values. The HDL
-# is provably correct in sim against the same source that built the
-# bitstream, so the bug is hardware-specific (timing, build, or real-
-# RF edge case the synthetic DC/tone testbench doesn't exercise).
-#
-# Probes (all in aclk = PS clock domain, 100 MHz):
-#   probe0: chan_re_q[15:0]       I sample on shared bus
-#   probe1: chan_im_q[15:0]       Q sample on shared bus
-#   probe2: chan_valid_r          registered valid (used by pd_data_ena)
-#   probe3: chan_idx_int_r[5:0]   registered idx (used by pd_data_ena)
-#   probe4: chan_valid            raw valid (one cycle ahead of _r)
-#   probe5: chan_idx_int[5:0]     raw idx
-#   probe6: pd_data_ena[63:0]     per-channel enables
-#   probe7: core_reset            reset signal
-#   probe8: core_dropped          drop pulse
-#   probe9: chan_last             frame boundary
-#   probe10: dsum
-#   probe11: dsum_e2
-#   probe12: ema_1
-#   probe13: ema_1_ena
-#   probe14: ema_2
-#
-# Total: 113 + 95 new bits/sample. Depth 4096 -> ~100 (was 57) KB BRAM. Plenty on ZU9EG.
-#
-# Suggested triggers once connected via hw_manager:
-#   1. pd_data_ena[0] rising edge - capture every time ch 0's PD fires;
-#      verify chan_re_q at that instant is real ADC data
-#   2. chan_valid_r=1 AND chan_idx_int_r=32 - capture mid-band channel
-#   3. chan_idx_int_r vs chan_idx_int delta - alignment sanity
+# Confirms on real silicon: (a) the target channel carries signal (dbg_tgt_i/q),
+# (b) Costas locks (cst_lock_f1/f2), (c) frame sync asserts and frames_received
+# climbs. All in the PS clock domain (100 MHz).
+#   probe0 dbg_tgt_i[15:0]   probe1 dbg_tgt_q[15:0]   probe2 dbg_tgt_valid
+#   probe3 frame_sync_locked probe4 cst_lock_f1       probe5 cst_lock_f2
+#   probe6 frames_received[31:0]
 ##############################################################################
-create_bd_cell -type ip -vlnv xilinx.com:ip:ila:6.2 ila_channelizer_pd
+create_bd_cell -type ip -vlnv xilinx.com:ip:ila:6.2 ila_rx_demod
 set_property -dict [list \
     CONFIG.C_PROBE0_WIDTH {16} \
     CONFIG.C_PROBE1_WIDTH {16} \
     CONFIG.C_PROBE2_WIDTH {1} \
-    CONFIG.C_PROBE3_WIDTH {6} \
+    CONFIG.C_PROBE3_WIDTH {1} \
     CONFIG.C_PROBE4_WIDTH {1} \
-    CONFIG.C_PROBE5_WIDTH {6} \
-    CONFIG.C_PROBE6_WIDTH {64} \
-    CONFIG.C_PROBE7_WIDTH {1} \
-    CONFIG.C_PROBE8_WIDTH {1} \
-    CONFIG.C_PROBE9_WIDTH {1} \
-    CONFIG.C_PROBE10_WIDTH {31} \
-    CONFIG.C_PROBE11_WIDTH {1} \
-    CONFIG.C_PROBE12_WIDTH {31} \
-    CONFIG.C_PROBE13_WIDTH {1} \
-    CONFIG.C_PROBE14_WIDTH {31} \
-    CONFIG.C_NUM_OF_PROBES {15} \
+    CONFIG.C_PROBE5_WIDTH {1} \
+    CONFIG.C_PROBE6_WIDTH {32} \
+    CONFIG.C_NUM_OF_PROBES {7} \
     CONFIG.C_DATA_DEPTH {4096} \
     CONFIG.C_TRIGIN_EN {false} \
-    CONFIG.C_EN_STRG_QUAL {1} \
-    CONFIG.ALL_PROBE_SAME_MU_CNT {2} \
-] [get_bd_cells ila_channelizer_pd]
+] [get_bd_cells ila_rx_demod]
 
-# Clock the ILA with the channelizer's aclk (PS clock domain)
-ad_connect $sys_cpu_clk ila_channelizer_pd/clk
+ad_connect $sys_cpu_clk ila_rx_demod/clk
+ad_connect channelizer_rx1/dbg_tgt_i         ila_rx_demod/probe0
+ad_connect channelizer_rx1/dbg_tgt_q         ila_rx_demod/probe1
+ad_connect channelizer_rx1/dbg_tgt_valid     ila_rx_demod/probe2
+ad_connect channelizer_rx1/frame_sync_locked ila_rx_demod/probe3
+ad_connect channelizer_rx1/cst_lock_f1       ila_rx_demod/probe4
+ad_connect channelizer_rx1/cst_lock_f2       ila_rx_demod/probe5
+ad_connect channelizer_rx1/frames_received   ila_rx_demod/probe6
 
-# Wire each debug port to its probe
-ad_connect channelizer_rx1/dbg_chan_re_q      ila_channelizer_pd/probe0
-ad_connect channelizer_rx1/dbg_chan_im_q      ila_channelizer_pd/probe1
-ad_connect channelizer_rx1/dbg_chan_valid_r   ila_channelizer_pd/probe2
-ad_connect channelizer_rx1/dbg_chan_idx_int_r ila_channelizer_pd/probe3
-ad_connect channelizer_rx1/dbg_chan_valid     ila_channelizer_pd/probe4
-ad_connect channelizer_rx1/dbg_chan_idx_int   ila_channelizer_pd/probe5
-ad_connect channelizer_rx1/dbg_pd_data_ena    ila_channelizer_pd/probe6
-ad_connect channelizer_rx1/dbg_core_reset     ila_channelizer_pd/probe7
-ad_connect channelizer_rx1/dbg_core_dropped   ila_channelizer_pd/probe8
-ad_connect channelizer_rx1/dbg_chan_last      ila_channelizer_pd/probe9
-ad_connect channelizer_rx1/dbg_pd0_dsum       ila_channelizer_pd/probe10
-ad_connect channelizer_rx1/dbg_pd0_dsum_e2    ila_channelizer_pd/probe11
-ad_connect channelizer_rx1/dbg_pd0_ema_1      ila_channelizer_pd/probe12
-ad_connect channelizer_rx1/dbg_pd0_ema_1_ena  ila_channelizer_pd/probe13
-ad_connect channelizer_rx1/dbg_pd0_ema_2      ila_channelizer_pd/probe14
-
-puts "INFO: haifuraiya — ILA core ila_channelizer_pd inserted"
-puts "INFO: haifuraiya —   10 probes, 113 bits/sample, depth 4096 (~57 KB BRAM)"
-puts "INFO: haifuraiya —   open hw_manager + debug_nets.ltx to trigger and capture"
+puts "INFO: haifuraiya - RX demod ILA inserted (7 probes, depth 4096)"

@@ -26,7 +26,7 @@ entity haifuraiya_rx_top is
     generic (
         TARGET_CHANNEL : natural := 0;     -- 0..63: channel to bring up first
         COMPLEX_INPUT  : boolean := false; -- false = real I-only (today); true = feed channel Q
-        RX_INVERT      : std_logic := '0'; -- bit polarity (matches msk_top rx_invert)
+        --RX_INVERT      : std_logic := '0'; -- bit polarity (matches msk_top rx_invert)
 
         -- channelizer dims (pass through)
         N_CHANNELS     : positive := 64;
@@ -77,6 +77,7 @@ entity haifuraiya_rx_top is
         lpf_i_shift           : in  std_logic_vector(7 downto 0);
         symbol_lock_count     : in  std_logic_vector(9 downto 0);
         symbol_lock_threshold : in  std_logic_vector(15 downto 0);
+        rx_invert             : in std_logic;
 
         -- status / telemetry
         frame_sync_locked : out std_logic;
@@ -138,7 +139,8 @@ begin
     -- accept every channel beat; act only on the target
     chans_tready <= '1';
 
-    rx_data_soft_corr <= rx_data_soft when RX_INVERT = '0' else -rx_data_soft;
+    --rx_data_soft_corr <= rx_data_soft when RX_INVERT = '0' else -rx_data_soft;
+    rx_data_soft_corr <= rx_data_soft when rx_invert = '0' else -rx_data_soft;
 
     ----------------------------------------------------------------------------
     -- Channelizer IP (sealed; do not modify). Debug ports left open.

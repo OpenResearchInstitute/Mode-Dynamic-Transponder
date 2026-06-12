@@ -109,22 +109,24 @@ if {$CMOS_LVDS_N == 0} {
 }
 
 # -----------------------------------------------------------------------------
-# Note on channelizer VHDL standard:
+# Note on VHDL standard for the receiver IP:
 #
-# The Haifuraiya channelizer's VHDL sources use VHDL-2008 idioms (notably
-# reading from 'out' ports in AXI handshake state machines). The VHDL
-# standard is declared in haifuraiya/component.xml using
-# <spirit:fileType>vhdlSource-2008</spirit:fileType> on each .vhd file.
+# The receiver IP's VHDL standard is declared per-file in
+# haifuraiya/component.xml via <spirit:fileType> on each .vhd entry, not
+# here. That is the correct place: Vivado synthesizes each BD-instantiated
+# IP in its OWN sub-project (under .gen/.../ipshared/), whose file
+# properties derive from the IP's component.xml. A top-level
+# set_property FILE_TYPE override in this script would NOT propagate down
+# into the IP sub-synth.
 #
-# Declaring it in component.xml is the correct place: Vivado synthesizes
-# each BD-instantiated IP in its OWN sub-project (under .gen/.../ipshared/)
-# whose file properties derive from the IP's component.xml. A top-level
-# set_property FILE_TYPE override here would NOT propagate down and would
-# leave the sub-synth using VHDL-93, producing:
+# The AXI-Lite slaves (axi_lite_regs, haifuraiya_demod_regs) are written
+# VHDL-93-clean: they use internal mirror signals for the AXI handshake
+# 'ready' outputs rather than reading from 'out' ports, so they carry
+# <spirit:fileType>vhdlSource</spirit:fileType>. Tag a specific file
+# vhdlSource-2008 only if it genuinely requires 2008 idioms; reading from
+# an 'out' port under VHDL-93 would otherwise produce:
 #   ERROR: [Synth 8-10557] cannot read from 'out' object 's_axi_awready';
 #                                   use 'buffer' or 'inout' instead
-# -----------------------------------------------------------------------------
-
 # -----------------------------------------------------------------------------
 # Build the project. adi_project_run triggers Vivado to source system_bd.tcl
 # from the current directory (i.e., OUR system_bd.tcl in this folder), which

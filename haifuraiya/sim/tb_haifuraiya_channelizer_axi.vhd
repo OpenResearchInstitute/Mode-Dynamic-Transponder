@@ -224,161 +224,30 @@ begin
 
 
 
-
-
-
-
-
-
-
-
-
-    ---------------------------------------------------------------------------
-    -- DUT instance
-    ---------------------------------------------------------------------------
---    u_dut : entity work.haifuraiya_channelizer_axi
---        generic map (
---            N_CHANNELS              => N_CHANNELS,
---            M_DECIMATION            => M_DECIMATION,
---            TAPS_PER_BRANCH         => 24,
---            DATA_WIDTH              => DATA_WIDTH,
---            COEFF_WIDTH             => 16,
---            ACCUM_WIDTH             => ACCUM_WIDTH,
---            POWER_ALPHA_W           => 18,
---            C_S_AXI_CTRL_ADDR_WIDTH => ADDR_WIDTH
---        )
---        port map (
---            aclk    => aclk,
---            aresetn => aresetn,
-
---            s_axis_data_tdata   => s_axis_data_tdata,
---            s_axis_data_tvalid  => s_axis_data_tvalid,
---           s_axis_data_tready  => s_axis_data_tready,
-
---            m_axis_chans_tdata  => m_axis_chans_tdata,
---            m_axis_chans_tvalid => m_axis_chans_tvalid,
---            m_axis_chans_tready => m_axis_chans_tready,
---            m_axis_chans_tdest  => m_axis_chans_tdest,
---            m_axis_chans_tlast  => m_axis_chans_tlast,
-
---            s_axi_ctrl_awaddr   => s_axi_ctrl_awaddr,
---            s_axi_ctrl_awvalid  => s_axi_ctrl_awvalid,
---            s_axi_ctrl_awready  => s_axi_ctrl_awready,
---            s_axi_ctrl_wdata    => s_axi_ctrl_wdata,
---            s_axi_ctrl_wstrb    => s_axi_ctrl_wstrb,
---            s_axi_ctrl_wvalid   => s_axi_ctrl_wvalid,
---            s_axi_ctrl_wready   => s_axi_ctrl_wready,
---            s_axi_ctrl_bresp    => s_axi_ctrl_bresp,
---            s_axi_ctrl_bvalid   => s_axi_ctrl_bvalid,
---            s_axi_ctrl_bready   => s_axi_ctrl_bready,
---            s_axi_ctrl_araddr   => s_axi_ctrl_araddr,
---            s_axi_ctrl_arvalid  => s_axi_ctrl_arvalid,
---            s_axi_ctrl_arready  => s_axi_ctrl_arready,
---            s_axi_ctrl_rdata    => s_axi_ctrl_rdata,
---            s_axi_ctrl_rresp    => s_axi_ctrl_rresp,
---            s_axi_ctrl_rvalid   => s_axi_ctrl_rvalid,
---            s_axi_ctrl_rready   => s_axi_ctrl_rready
---        );
-
-
-
---    -- TDEST demux: forward ONLY the target channel's I to the demod.
---    p_demux : process(aclk)
---    begin
---        if rising_edge(aclk) then
---            rx_svalid <= '0';
---            if aresetn = '0' then
---                rx_svalid <= '0';
---            elsif m_axis_chans_tvalid = '1' and m_axis_chans_tready = '1' then
---                if to_integer(unsigned(m_axis_chans_tdest(5 downto 0))) = TARGET_CHANNEL then
---                    chan_i_reg     <= m_axis_chans_tdata(15 downto 0);  -- I = TDATA[15:0]
---                    chan_q_reg     <= m_axis_chans_tdata(31 downto 16); -- Q = TDATA[31:16]
---                    rx_svalid      <= '1';
---                    n_target_samps <= n_target_samps + 1;
---                end if;
---            end if;
---        end if;
---    end process;
-
---    u_demod : entity work.msk_demodulator
---        generic map ( SAMPLE_W => 16 )
---        port map (
---            clk  => aclk,
---           init => not aresetn,
---            rx_freq_word_f1 => FREQ_WORD_F1,
---            rx_freq_word_f2 => FREQ_WORD_F2,
---            discard_rxnco   => (others => '0'),
---            lpf_p_gain  => LPF_P_GAIN,  lpf_i_gain  => LPF_I_GAIN,
---            lpf_p_shift => LPF_P_SHIFT, lpf_i_shift => LPF_I_SHIFT,
---            lpf_freeze  => '0',         lpf_zero    => '0',
---            lpf_alpha   => LPF_ALPHA,
---            lpf_accum_f1 => open, lpf_accum_f2 => open,
---            f1_nco_adjust => open, f2_nco_adjust => open,
---            f1_error => open, f2_error => open,
---            rx_dec_lbk_ena => '0', rx_dec_lbk_tclk => '0',
---            rx_dec_lbk_f1 => (others=>'0'), rx_dec_lbk_f2 => (others=>'0'),
---            rx_enable => '1', rx_svalid => rx_svalid, rx_samples => chan_i_reg(13 downto 2), -- change here
---            rx_data => rx_data, rx_data_soft => rx_data_soft, rx_dvalid => rx_dvalid,
---            symbol_lock_count => SYM_LOCK_CNT, symbol_lock_threshold => SYM_LOCK_THR,
---            cst_lock_f1 => lock_f1, cst_lock_f2 => lock_f2,
---            cst_lock_time_f1 => open, cst_lock_time_f2 => open,
---            cst_unlock_f1 => open, cst_unlock_f2 => open,
---            dbg_acc_i_f1 => open, dbg_acc_q_f1 => open, dbg_acc_iq_delta_f1 => open
---        );
-
---    rx_bit_corr <= rx_data;                 -- add an invert here if needed
---    demod_lock  <= lock_f1 and lock_f2;
-
---    u_fsync : entity work.frame_sync_detector_soft
---        port map (
---            clk => aclk, reset => not aresetn,
---            rx_bit => rx_bit_corr, rx_bit_valid => rx_dvalid, s_axis_soft_tdata => rx_data_soft,
---            m_axis_tdata => open, m_axis_tvalid => open, m_axis_tready => '1', m_axis_tlast => open,
---            m_axis_soft_bit_tdata => sb_tdata, m_axis_soft_bit_tvalid => sb_tvalid,
---            m_axis_soft_bit_tready => '1', m_axis_soft_bit_tlast => sb_tlast,
---            frame_sync_locked => open, frames_received => open,
---            frame_sync_errors => open, frame_buffer_overflow => open,
---            demod_sync_lock => demod_lock,
---            debug_state => open, debug_correlation => open, debug_corr_peak => open,
---            debug_bit_count => open, debug_missed_syncs => open, debug_consecutive_good => open,
---            debug_soft_current => open, debug_soft_quantized => open, debug_byte_v => open
---        );
-
-
-
-
-
-
--- above (u_dut, p_demux, u_demod, u_fsync) replaced with below 
-
-
-
-
-
-u_rx : entity work.haifuraiya_rx_top
+u_rx : entity work.haifuraiya_rx_axi
     generic map (
-        TARGET_CHANNEL          => TARGET_CHANNEL,
-        COMPLEX_INPUT           => true,  -- feed channel Q; false = real I-only
-        RX_INVERT               => '1',           -- flip if carrier locks but frame sync won't
-        N_CHANNELS              => N_CHANNELS,
-        M_DECIMATION            => M_DECIMATION,
-        C_S_AXI_CTRL_ADDR_WIDTH => ADDR_WIDTH
+        TARGET_CHANNEL           => TARGET_CHANNEL,
+        COMPLEX_INPUT            => true,
+        N_CHANNELS               => N_CHANNELS,
+        M_DECIMATION             => M_DECIMATION,
+        C_S_AXI_CTRL_ADDR_WIDTH  => ADDR_WIDTH,
+        C_S_AXI_DEMOD_ADDR_WIDTH => ADDR_WIDTH
     )
     port map (
         aclk => aclk, aresetn => aresetn,
 
-        -- 20 Msps stimulus enters HERE (same signals you already drive)
+        -- 20 Msps stimulus
         s_axis_data_tdata  => s_axis_data_tdata,
         s_axis_data_tvalid => s_axis_data_tvalid,
         s_axis_data_tready => s_axis_data_tready,
 
-        -- soft-bit out (capture for offline opv-decode -3)
+        -- soft-bit out
         m_axis_soft_bit_tdata  => sb_tdata,
         m_axis_soft_bit_tvalid => sb_tvalid,
         m_axis_soft_bit_tready => sb_tready,
         m_axis_soft_bit_tlast  => sb_tlast,
 
-        -- channelizer AXI-Lite passthrough (your existing s_axi_ctrl_* signals)
+        -- channelizer AXI-Lite passthrough (unchanged)
         s_axi_ctrl_awaddr  => s_axi_ctrl_awaddr,  s_axi_ctrl_awvalid => s_axi_ctrl_awvalid,
         s_axi_ctrl_awready => s_axi_ctrl_awready, s_axi_ctrl_wdata   => s_axi_ctrl_wdata,
         s_axi_ctrl_wstrb   => s_axi_ctrl_wstrb,   s_axi_ctrl_wvalid  => s_axi_ctrl_wvalid,
@@ -389,19 +258,44 @@ u_rx : entity work.haifuraiya_rx_top
         s_axi_ctrl_rresp   => s_axi_ctrl_rresp,   s_axi_ctrl_rvalid  => s_axi_ctrl_rvalid,
         s_axi_ctrl_rready  => s_axi_ctrl_rready,
 
-        -- demod tuning: your existing constants (with the corrected freq words)
-        rx_freq_word_f1 => FREQ_WORD_F1, rx_freq_word_f2 => FREQ_WORD_F2,
-        lpf_p_gain => LPF_P_GAIN, lpf_i_gain => LPF_I_GAIN, lpf_alpha => LPF_ALPHA,
-        lpf_p_shift => LPF_P_SHIFT, lpf_i_shift => LPF_I_SHIFT,
-        symbol_lock_count => SYM_LOCK_CNT, symbol_lock_threshold => SYM_LOCK_THR,
+        -- demod AXI-Lite: held idle -> tuning comes from register resets
+        s_axi_demod_awaddr  => (others => '0'), s_axi_demod_awvalid => '0',
+        s_axi_demod_awready => open,
+        s_axi_demod_wdata   => (others => '0'), s_axi_demod_wstrb   => (others => '0'),
+        s_axi_demod_wvalid  => '0',             s_axi_demod_wready  => open,
+        s_axi_demod_bresp   => open,            s_axi_demod_bvalid  => open,
+        s_axi_demod_bready  => '0',
+        s_axi_demod_araddr  => (others => '0'), s_axi_demod_arvalid => '0',
+        s_axi_demod_arready => open,
+        s_axi_demod_rdata   => open,            s_axi_demod_rresp   => open,
+        s_axi_demod_rvalid  => open,            s_axi_demod_rready  => '0',
 
         -- watch these
         frame_sync_locked => frame_sync_locked, frames_received => frames_received,
         cst_lock_f1 => lock_f1, cst_lock_f2 => lock_f2,
 
-        -- debug tap -> existing TB capture signals (restores chan0_iq.txt)
+        -- debug tap -> TB capture signals
         dbg_tgt_i => chan_i_reg, dbg_tgt_q => chan_q_reg, dbg_tgt_valid => rx_svalid
     );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
