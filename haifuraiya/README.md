@@ -95,8 +95,15 @@ repo, so a fresh clone goes straight to a PetaLinux build:
 ```bash
 cd Mode-Dynamic-Transponder
 
+# Source Vivado env (in every fresh shell)
+source /tools/Xilinx/Vivado/2022.2/settings64.sh
+
 # Source PetaLinux env (in every fresh shell)
 source ~/petalinux/2022.2/settings.sh
+
+# Construct stimulus file for simulation (if desired)
+cd /docs
+python3 opv_chan_stim_gen.py --fc 0 --frames 5 --out ../haifuraiya/sim/opv_chan_stim_dc.txt
 
 # Build PetaLinux (auto-runs haifuraiya-check-env and haifuraiya-configure)
 make haifuraiya-build
