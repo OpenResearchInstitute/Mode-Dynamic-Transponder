@@ -299,7 +299,12 @@ ad_connect $sys_cpu_clk axi_adrv9001_rx1_dma/s_axis_aclk
 # -----------------------------------------------------------------------------
 
 ad_cpu_interconnect 0x44A70000 channelizer_rx1 s_axi_ctrl
+# ad_cpu_interconnect names the master segment after the CELL
+# (SEG_data_channelizer_rx1); a 2nd slave on the same cell collides.
+# Rename the first segment before mapping the second.
+set_property name SEG_data_channelizer_rx1_ctrl [get_bd_addr_segs sys_ps8/Data/SEG_data_channelizer_rx1]
 ad_cpu_interconnect 0x44A80000 channelizer_rx1 s_axi_demod
+set_property name SEG_data_channelizer_rx1_demod [get_bd_addr_segs sys_ps8/Data/SEG_data_channelizer_rx1]
 puts "INFO: haifuraiya - demod control AXI-Lite at 0x84A80000 (TCL arg 0x44A80000)"
 
 puts "INFO: haifuraiya — RX1 channelizer integration complete"
