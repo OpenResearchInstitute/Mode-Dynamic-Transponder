@@ -218,6 +218,12 @@ Pulled from origin            ─►  haifuraiya-update         (handles
 
 ---
 
+# Check timing
+
+grep -B2 -A25 'Slack.*VIOLATED' haifuraiya/syn/zcu102_with_adrv9001/*.runs/impl_1/*timing_summary_routed.rpt | head -70
+
+---
+
 ## Current limitations
 
 Active development items — documented so you know what to expect.
