@@ -39,10 +39,13 @@ PUB_VERSION="0.1"
 N_CHANNELS=64
 CHANNEL_BASE_OFFSET=0x100        # CHANNEL_POWER_N at 0x100 + 4*N
 
+DEMOD_BASE=0x84A80000            # Demod / frame-sync AXI-Lite base (rx_axi demod_regs)
+
 # State across cycles (wrap-aware delta computation for monotonic counters).
 # Empty on first cycle → first delta published as 0.
 PREV_FRAME_COUNT=""
 PREV_DROPPED_FRAMES=""
+PREV_FRAMES_RX=""
 
 # =====================================================================
 # Helpers
@@ -54,6 +57,13 @@ PREV_DROPPED_FRAMES=""
 read_reg_hex() {
     OFFSET=$1
     ADDR=$((ADDR_BASE + OFFSET))
+    devmem $ADDR 32 2>/dev/null
+}
+
+# Same, but against the demod / frame-sync register block (DEMOD_BASE).
+read_demod_hex() {
+    OFFSET=$1
+    ADDR=$((DEMOD_BASE + OFFSET))
     devmem $ADDR 32 2>/dev/null
 }
 
@@ -217,6 +227,72 @@ publish_channel_powers() {
 }
 
 # =====================================================================
+# Demod / frame-sync publishing  (register block at DEMOD_BASE)
+# =====================================================================
+#
+# Same shape as the channelizer scalars, but against the demod regs.
+# DEMOD_STATUS bit layout (haifuraiya_demod_regs.vhd):
+#   bit 0 frame_sync_locked, bit 1 cst_lock_f1, bit 2 cst_lock_f2.
+# FRAMES_RECEIVED is a monotonic 32-bit counter (frames decoded since reset);
+# its per-cycle delta is the live "are we locking?" signal.
+#
+# Non-fatal: if the demod block isn't present (reads empty) the whole
+# section quietly skips, so the channelizer dashboard still works.
+
+publish_demod() {
+    # ---- DEMOD_STATUS (0x040)
+    VAL_HEX=$(read_demod_hex 0x40)
+    if [ -n "$VAL_HEX" ]; then
+        pub_register "demod_status" "$VAL_HEX"
+        VAL_DEC=$(hex_to_dec "$VAL_HEX")
+        pub_derived "demod/frame_sync_locked" "$((VAL_DEC & 1))"
+        pub_derived "demod/cst_lock_f1"       "$(((VAL_DEC >> 1) & 1))"
+        pub_derived "demod/cst_lock_f2"       "$(((VAL_DEC >> 2) & 1))"
+    fi
+
+    # ---- FRAMES_RECEIVED (0x044) — monotonic 32-bit
+    VAL_HEX=$(read_demod_hex 0x44)
+    if [ -n "$VAL_HEX" ]; then
+        pub_register "demod_frames" "$VAL_HEX"
+        VAL_DEC=$(hex_to_dec "$VAL_HEX")
+        DELTA=$(compute_delta_32 "$PREV_FRAMES_RX" "$VAL_DEC")
+        pub_derived "demod/frames_received" "$VAL_DEC"
+        pub_derived "demod/frames_delta"    "$DELTA"
+        PREV_FRAMES_RX=$VAL_DEC
+    fi
+
+    # ---- DEMOD_CONTROL (0x004) — bit 0 rx_invert (soft-bit polarity)
+    VAL_HEX=$(read_demod_hex 0x04)
+    if [ -n "$VAL_HEX" ]; then
+        pub_register "demod_control" "$VAL_HEX"
+        pub_derived "demod/rx_invert" "$(( $(hex_to_dec "$VAL_HEX") & 1 ))"
+    fi
+
+    # ---- FREQ_WORD_F1 / F2 (0x008 / 0x00C) — raw hex tone phase increments
+    VAL_HEX=$(read_demod_hex 0x08)
+    [ -n "$VAL_HEX" ] && pub_derived "demod/freq_word_f1" "$VAL_HEX"
+    VAL_HEX=$(read_demod_hex 0x0c)
+    [ -n "$VAL_HEX" ] && pub_derived "demod/freq_word_f2" "$VAL_HEX"
+
+    # ---- SYM_LOCK_THRESHOLD (0x028)
+    VAL_HEX=$(read_demod_hex 0x28)
+    [ -n "$VAL_HEX" ] && pub_derived "demod/sym_lock_threshold" "$(hex_to_dec "$VAL_HEX")"
+
+    # ---- Full raw demod register snapshot for the forensics pane.
+    # Raw hex only; the parsed values above drive the live panel.
+    # (status / frames / control are already raw-published above.)
+    for pair in version:0x00 freq_word_f1:0x08 freq_word_f2:0x0c \
+                lpf_p_gain:0x10 lpf_i_gain:0x14 lpf_alpha:0x18 \
+                lpf_p_shift:0x1c lpf_i_shift:0x20 \
+                sym_lock_count:0x24 sym_lock_threshold:0x28; do
+        NAME=${pair%%:*}
+        OFF=${pair##*:}
+        VAL_HEX=$(read_demod_hex $OFF)
+        [ -n "$VAL_HEX" ] && pub_register "demod_$NAME" "$VAL_HEX"
+    done
+}
+
+# =====================================================================
 # Startup
 # =====================================================================
 
@@ -245,6 +321,7 @@ while :; do
 
     publish_scalars
     publish_channel_powers
+    publish_demod
 
     mosquitto_pub -t "haifuraiya/status/heartbeat" -m "$TS"
 
