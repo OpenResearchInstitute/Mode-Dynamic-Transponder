@@ -101,6 +101,12 @@ entity haifuraiya_demod_regs is
         lpf_i_shift           : out std_logic_vector(7 downto 0);
         symbol_lock_count     : out std_logic_vector(9 downto 0);
         symbol_lock_threshold : out std_logic_vector(15 downto 0);
+        gain_manual           : out std_logic_vector(15 downto 0);
+        fs_hunt_thresh        : out std_logic_vector(31 downto 0);
+        fs_verify_thresh      : out std_logic_vector(31 downto 0);
+        quant_thr_1           : out std_logic_vector(15 downto 0);
+        quant_thr_2           : out std_logic_vector(15 downto 0);
+        quant_thr_3           : out std_logic_vector(15 downto 0);
 
         ---------------------------------------------------------------------
         -- Inputs from rx_top (status / telemetry)
@@ -108,7 +114,8 @@ entity haifuraiya_demod_regs is
         frame_sync_locked : in  std_logic;
         frames_received   : in  std_logic_vector(31 downto 0);
         cst_lock_f1       : in  std_logic;
-        cst_lock_f2       : in  std_logic
+        cst_lock_f2       : in  std_logic;
+        gain_current      : in std_logic_vector(15 downto 0)
     );
 end entity haifuraiya_demod_regs;
 
@@ -126,32 +133,45 @@ architecture rtl of haifuraiya_demod_regs is
     -- Register storage -- reset values are the proven sim config
     ---------------------------------------------------------------------------
     signal reg_rx_invert          : std_logic                     := '1';
-    signal reg_freq_word_f1       : std_logic_vector(31 downto 0)  := x"FA732DF5"; -- complex lower
-    signal reg_freq_word_f2       : std_logic_vector(31 downto 0)  := x"058CD20B"; -- complex upper
+    signal reg_freq_word_f1       : std_logic_vector(31 downto 0)  := x"FA732DF5";  -- complex lower
+    signal reg_freq_word_f2       : std_logic_vector(31 downto 0)  := x"058CD20B";  -- complex upper
     signal reg_lpf_p_gain         : std_logic_vector(23 downto 0)  := x"7FFFFF";
     signal reg_lpf_i_gain         : std_logic_vector(23 downto 0)  := x"7FFFFF";
     signal reg_lpf_alpha          : std_logic_vector(23 downto 0)  := x"000000";
-    signal reg_lpf_p_shift        : std_logic_vector(7 downto 0)   := x"14";       -- 20
-    signal reg_lpf_i_shift        : std_logic_vector(7 downto 0)   := x"1D";       -- 29
+    signal reg_lpf_p_shift        : std_logic_vector(7 downto 0)   := x"14";        -- 20
+    signal reg_lpf_i_shift        : std_logic_vector(7 downto 0)   := x"1D";        -- 29
     signal reg_sym_lock_count     : std_logic_vector(9 downto 0)   := "0010000000"; -- 128
-    signal reg_sym_lock_threshold : std_logic_vector(15 downto 0)  := x"0008";     -- 8
+    signal reg_sym_lock_threshold : std_logic_vector(15 downto 0)  := x"0008";      -- 8
+    signal reg_gain_manual        : std_logic_vector(15 downto 0)  := x"0400";      -- 1024
+    signal reg_fs_hunt_thresh     : std_logic_vector(31 downto 0) := x"00009470";   -- 38000
+    signal reg_fs_verify_thresh   : std_logic_vector(31 downto 0) := x"00005DC0";   -- 24000
+    signal reg_quant_thr_1        : std_logic_vector(15 downto 0) := x"01F4";       -- 500
+    signal reg_quant_thr_2        : std_logic_vector(15 downto 0) := x"0578";       -- 1400
+    signal reg_quant_thr_3        : std_logic_vector(15 downto 0) := x"0AF8";       -- 2800
 
     ---------------------------------------------------------------------------
     -- Address constants
     ---------------------------------------------------------------------------
-    constant ADDR_VERSION     : std_logic_vector(11 downto 0) := x"000";
-    constant ADDR_CONTROL     : std_logic_vector(11 downto 0) := x"004";
-    constant ADDR_FREQ_F1     : std_logic_vector(11 downto 0) := x"008";
-    constant ADDR_FREQ_F2     : std_logic_vector(11 downto 0) := x"00C";
-    constant ADDR_LPF_P_GAIN  : std_logic_vector(11 downto 0) := x"010";
-    constant ADDR_LPF_I_GAIN  : std_logic_vector(11 downto 0) := x"014";
-    constant ADDR_LPF_ALPHA   : std_logic_vector(11 downto 0) := x"018";
-    constant ADDR_LPF_P_SHIFT : std_logic_vector(11 downto 0) := x"01C";
-    constant ADDR_LPF_I_SHIFT : std_logic_vector(11 downto 0) := x"020";
-    constant ADDR_SYM_CNT     : std_logic_vector(11 downto 0) := x"024";
-    constant ADDR_SYM_THR     : std_logic_vector(11 downto 0) := x"028";
-    constant ADDR_STATUS      : std_logic_vector(11 downto 0) := x"040";
-    constant ADDR_FRAMES_RX   : std_logic_vector(11 downto 0) := x"044";
+    constant ADDR_VERSION          : std_logic_vector(11 downto 0) := x"000";
+    constant ADDR_CONTROL          : std_logic_vector(11 downto 0) := x"004";
+    constant ADDR_FREQ_F1          : std_logic_vector(11 downto 0) := x"008";
+    constant ADDR_FREQ_F2          : std_logic_vector(11 downto 0) := x"00C";
+    constant ADDR_LPF_P_GAIN       : std_logic_vector(11 downto 0) := x"010";
+    constant ADDR_LPF_I_GAIN       : std_logic_vector(11 downto 0) := x"014";
+    constant ADDR_LPF_ALPHA        : std_logic_vector(11 downto 0) := x"018";
+    constant ADDR_LPF_P_SHIFT      : std_logic_vector(11 downto 0) := x"01C";
+    constant ADDR_LPF_I_SHIFT      : std_logic_vector(11 downto 0) := x"020";
+    constant ADDR_SYM_CNT          : std_logic_vector(11 downto 0) := x"024";
+    constant ADDR_SYM_THR          : std_logic_vector(11 downto 0) := x"028";
+    constant ADDR_GAIN_MANUAL      : std_logic_vector(11 downto 0) := x"030";
+    constant ADDR_GAIN_CURRENT     : std_logic_vector(11 downto 0) := x"038";
+    constant ADDR_STATUS           : std_logic_vector(11 downto 0) := x"040";
+    constant ADDR_FRAMES_RX        : std_logic_vector(11 downto 0) := x"044";
+    constant ADDR_FS_HUNT_THRESH   : std_logic_vector(11 downto 0) := x"048";
+    constant ADDR_FS_VERIFY_THRESH : std_logic_vector(11 downto 0) := x"04C";
+    constant ADDR_QUANT_THR_1      : std_logic_vector(11 downto 0) := x"050";
+    constant ADDR_QUANT_THR_2      : std_logic_vector(11 downto 0) := x"054";
+    constant ADDR_QUANT_THR_3      : std_logic_vector(11 downto 0) := x"058";
 
     -- VERSION fixed value: {major, minor, patch, 0x00}
     constant VERSION_WORD : std_logic_vector(31 downto 0) :=
@@ -192,6 +212,12 @@ begin
     lpf_i_shift           <= reg_lpf_i_shift;
     symbol_lock_count     <= reg_sym_lock_count;
     symbol_lock_threshold <= reg_sym_lock_threshold;
+    gain_manual           <= reg_gain_manual;
+    fs_hunt_thresh        <= reg_fs_hunt_thresh;
+    fs_verify_thresh      <= reg_fs_verify_thresh;
+    quant_thr_1           <= reg_quant_thr_1;
+    quant_thr_2           <= reg_quant_thr_2;
+    quant_thr_3           <= reg_quant_thr_3;
 
     ---------------------------------------------------------------------------
     -- WRITE PATH
@@ -223,6 +249,14 @@ begin
                 reg_lpf_i_shift        <= x"1D";
                 reg_sym_lock_count     <= "0010000000";
                 reg_sym_lock_threshold <= x"0008";
+                reg_gain_manual        <= x"0C00";
+                reg_fs_hunt_thresh     <= x"00009470";
+                reg_fs_verify_thresh   <= x"00005DC0";   -- 24000
+                reg_quant_thr_1        <= x"01F4";       -- 500
+                reg_quant_thr_2        <= x"0578";       -- 1400
+                reg_quant_thr_3        <= x"0AF8";       -- 2800
+
+
             else
                 case w_state is
                 when W_IDLE =>
@@ -259,6 +293,18 @@ begin
                                 reg_sym_lock_count <= s_axi_wdata(9 downto 0);
                             when ADDR_SYM_THR =>
                                 reg_sym_lock_threshold <= s_axi_wdata(15 downto 0);
+                            when ADDR_GAIN_MANUAL => 
+                                reg_gain_manual <= s_axi_wdata(15 downto 0);
+                            when ADDR_FS_HUNT_THRESH =>
+                                reg_fs_hunt_thresh <= s_axi_wdata(31 downto 0);
+                            when ADDR_FS_VERIFY_THRESH =>
+                                reg_fs_verify_thresh <= s_axi_wdata(31 downto 0);
+                            when ADDR_QUANT_THR_1 =>
+                                reg_quant_thr_1 <= s_axi_wdata(15 downto 0);
+                            when ADDR_QUANT_THR_2 =>
+                                reg_quant_thr_2 <= s_axi_wdata(15 downto 0);
+                            when ADDR_QUANT_THR_3 =>
+                                reg_quant_thr_3 <= s_axi_wdata(15 downto 0);
                             when others =>
                                 null;  -- writes to RO addresses ignored
                         end case;
@@ -344,6 +390,20 @@ begin
                                 r_data_int(2) <= cst_lock_f2;
                             when ADDR_FRAMES_RX =>
                                 r_data_int <= frames_received;
+                            when ADDR_GAIN_MANUAL => 
+                                r_data_int <= x"0000" & reg_gain_manual;
+                            when ADDR_GAIN_CURRENT => 
+                                r_data_int <= x"0000" & gain_current;
+                            when ADDR_FS_HUNT_THRESH =>
+                                r_data_int <= reg_fs_hunt_thresh;
+                            when ADDR_FS_VERIFY_THRESH =>
+                                r_data_int <= reg_fs_verify_thresh;
+                            when ADDR_QUANT_THR_1 =>
+                                r_data_int <= x"0000" & reg_quant_thr_1;
+                            when ADDR_QUANT_THR_2 =>
+                                r_data_int <= x"0000" & reg_quant_thr_2;
+                            when ADDR_QUANT_THR_3 =>
+                                r_data_int <= x"0000" & reg_quant_thr_3;
                             when others =>
                                 r_data_int <= (others => '0');
                         end case;

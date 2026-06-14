@@ -90,7 +90,36 @@ entity haifuraiya_rx_top is
         -- the block design; synthesis trims it.
         dbg_tgt_i         : out std_logic_vector(15 downto 0);
         dbg_tgt_q         : out std_logic_vector(15 downto 0);
-        dbg_tgt_valid     : out std_logic
+        dbg_tgt_valid     : out std_logic;
+
+        -- gain node
+        gain_manual       : in  std_logic_vector(15 downto 0);  -- Q6.10, unity 0x0400
+        gain_current      : out std_logic_vector(15 downto 0);
+
+        -- frame sync thresholds
+        fs_hunt_thresh    : in std_logic_vector(31 downto 0);
+        fs_verify_thresh  : in std_logic_vector(31 downto 0);
+
+        -- frame-sync taps
+        dbg_fs_state      : out std_logic_vector(2 downto 0);
+        dbg_fs_corr       : out std_logic_vector(31 downto 0);
+        dbg_fs_corr_peak  : out std_logic_vector(31 downto 0);
+        dbg_fs_soft_q     : out std_logic_vector(2 downto 0);
+        dbg_soft_corr     : out std_logic_vector(15 downto 0);
+        dbg_sym_valid     : out std_logic;
+
+        -- costas taps
+        dbg_cst_iq_delta  : out std_logic_vector(31 downto 0);
+        dbg_cst_acc_i     : out std_logic_vector(31 downto 0);
+        dbg_cst_acc_q     : out std_logic_vector(31 downto 0);
+        dbg_f1_err        : out std_logic_vector(31 downto 0);
+        dbg_f2_err        : out std_logic_vector(31 downto 0);
+        dbg_lpf_acc_f1    : out std_logic_vector(31 downto 0);
+        dbg_lpf_acc_f2    : out std_logic_vector(31 downto 0);
+        dbg_cst_locktime_f1 : out std_logic_vector(15 downto 0);
+        dbg_cst_locktime_f2 : out std_logic_vector(15 downto 0);
+        dbg_cst_unlock_f1 : out std_logic;
+        dbg_cst_unlock_f2 : out std_logic
     );
 end entity haifuraiya_rx_top;
 
@@ -131,6 +160,24 @@ architecture rtl of haifuraiya_rx_top is
     signal lock_f1, lock_f2 : std_logic;
     signal rx_bit_corr  : std_logic;
     signal demod_lock   : std_logic;
+    
+    -- intermediate signal for the signed ports
+    signal sig_fs_corr, sig_fs_corr_peak : signed(31 downto 0);
+
+    -- saturating signed resize to 16 bits
+    function sat16(x : signed) return signed is
+        constant HI : integer := 32767;
+        constant LO : integer := -32768;
+    begin
+        if    x >  HI then return to_signed(HI,16);
+        elsif x <  LO then return to_signed(LO,16);
+        else  return resize(x,16); end if;
+    end function;
+
+    signal gain_u   : unsigned(15 downto 0);
+    signal prod_i_g : signed(32 downto 0);
+    signal prod_q_g : signed(32 downto 0);
+    signal gi, gq   : signed(15 downto 0);
 
 begin
 
@@ -141,6 +188,14 @@ begin
 
     --rx_data_soft_corr <= rx_data_soft when RX_INVERT = '0' else -rx_data_soft;
     rx_data_soft_corr <= rx_data_soft when rx_invert = '0' else -rx_data_soft;
+
+
+    gain_u   <= unsigned(gain_manual);
+    prod_i_g <= signed(chan_i_reg) * signed('0' & std_logic_vector(gain_u)); -- 16x17
+    prod_q_g <= signed(chan_q_reg) * signed('0' & std_logic_vector(gain_u));
+    gi <= sat16( shift_right(prod_i_g, 10) );   -- Q6.10 -> drop 10 frac bits
+    gq <= sat16( shift_right(prod_q_g, 10) );
+    gain_current <= gain_manual;                -- readback seam (auto fills this later)
 
     ----------------------------------------------------------------------------
     -- Channelizer IP (sealed; do not modify). Debug ports left open.
@@ -220,8 +275,13 @@ begin
     end process;
 
     -- conditional signal drivers
-    rx_i_to_demod <= chan_i_reg(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1);
-    rx_q_to_demod <= chan_q_reg(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1)
+    --rx_i_to_demod <= chan_i_reg(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1);
+    --rx_q_to_demod <= chan_q_reg(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1)
+    --                 when COMPLEX_INPUT else (others => '0');
+
+    -- conditional signal drivers slice gi/gq instead of chan_i_reg/chan_q_reg here:
+    rx_i_to_demod <= std_logic_vector(gi(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1));
+    rx_q_to_demod <= std_logic_vector(gq(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1))
                      when COMPLEX_INPUT else (others => '0');
 
     ----------------------------------------------------------------------------
@@ -252,12 +312,12 @@ begin
             lpf_zero    => '0',
             lpf_alpha   => lpf_alpha,
 
-            lpf_accum_f1 => open,
-            lpf_accum_f2 => open,
+            --lpf_accum_f1 => open,
+            --lpf_accum_f2 => open,
             f1_nco_adjust => open,
             f2_nco_adjust => open,
-            f1_error => open,
-            f2_error => open,
+            --f1_error => open,
+            --f2_error => open,
 
             rx_dec_lbk_ena  => '0',
             rx_dec_lbk_tclk => '0',
@@ -279,14 +339,26 @@ begin
 
             cst_lock_f1 => lock_f1,
             cst_lock_f2 => lock_f2,
-            cst_lock_time_f1 => open,
-            cst_lock_time_f2 => open,
-            cst_unlock_f1 => open,
-            cst_unlock_f2 => open,
+            --cst_lock_time_f1 => open,
+            --cst_lock_time_f2 => open,
+            --cst_unlock_f1 => open,
+            --cst_unlock_f2 => open,
 
-            dbg_acc_i_f1       => open,
-            dbg_acc_q_f1       => open,
-            dbg_acc_iq_delta_f1 => open
+            --dbg_acc_i_f1       => open,
+            --dbg_acc_q_f1       => open,
+            --dbg_acc_iq_delta_f1 => open,
+
+            dbg_acc_iq_delta_f1 => dbg_cst_iq_delta, --remapped
+            dbg_acc_i_f1        => dbg_cst_acc_i, --remapped
+            dbg_acc_q_f1        => dbg_cst_acc_q, --remapped
+            f1_error            => dbg_f1_err, --remapped
+            f2_error            => dbg_f2_err, --remapped
+            lpf_accum_f1        => dbg_lpf_acc_f1, --remapped
+            lpf_accum_f2        => dbg_lpf_acc_f2, --remapped
+            cst_lock_time_f1    => dbg_cst_locktime_f1, --remapped
+            cst_lock_time_f2    => dbg_cst_locktime_f2, --remapped
+            cst_unlock_f1       => dbg_cst_unlock_f1, --remapped
+            cst_unlock_f2       => dbg_cst_unlock_f2 --remapped
         );
 
     rx_bit_corr <= rx_data when RX_INVERT = '0' else not rx_data;
@@ -298,6 +370,12 @@ begin
     dbg_tgt_i     <= chan_i_reg;
     dbg_tgt_q     <= chan_q_reg;
     dbg_tgt_valid <= rx_svalid;
+
+    -- concurrent assignments? do they go here?
+    dbg_fs_corr      <= std_logic_vector(sig_fs_corr);
+    dbg_fs_corr_peak <= std_logic_vector(sig_fs_corr_peak);
+    dbg_soft_corr    <= std_logic_vector(rx_data_soft_corr);
+    dbg_sym_valid    <= rx_dvalid;
 
     ----------------------------------------------------------------------------
     -- Frame sync detector: soft-bit stream out to DMA. Byte path unused.
@@ -326,22 +404,30 @@ begin
             m_axis_soft_bit_tready => m_axis_soft_bit_tready,
             m_axis_soft_bit_tlast  => m_axis_soft_bit_tlast,
 
-            frame_sync_locked     => frame_sync_locked,
-            frames_received       => frames_received,
-            frame_sync_errors     => open,
-            frame_buffer_overflow => open,
+            hunting_threshold_i    => fs_hunt_thresh,
+            locked_threshold_i     => fs_verify_thresh,
+
+            frame_sync_locked      => frame_sync_locked,
+            frames_received        => frames_received,
+            frame_sync_errors      => open,
+            frame_buffer_overflow  => open,
 
             demod_sync_lock => demod_lock,
 
-            debug_state            => open,
-            debug_correlation      => open,
-            debug_corr_peak        => open,
+            --debug_state          => open, --remapped
+            --debug_correlation    => open, --remapped
+            --debug_corr_peak      => open, --remapped
             debug_bit_count        => open,
             debug_missed_syncs     => open,
             debug_consecutive_good => open,
             debug_soft_current     => open,
-            debug_soft_quantized   => open,
-            debug_byte_v           => open
+            --debug_soft_quantized   => open, --remapped
+            debug_byte_v           => open,
+
+            debug_state          => dbg_fs_state,
+            debug_correlation    => sig_fs_corr,
+            debug_corr_peak      => sig_fs_corr_peak,
+            debug_soft_quantized => dbg_fs_soft_q
         );
 
 end architecture rtl;

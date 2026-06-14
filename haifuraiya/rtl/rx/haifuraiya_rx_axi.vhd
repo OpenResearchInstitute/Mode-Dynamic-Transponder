@@ -11,7 +11,7 @@
 -------------------------------------------------------------------------------
 -- OVERVIEW
 -------------------------------------------------------------------------------
--- The PS-facing skin packaged as the Haifuraiya receiver IP (v0.3). Pure
+-- The PS-facing skin packaged as the Haifuraiya receiver IP (v0.4). Pure
 -- structural stitching -- no logic, no registers, no FSMs of its own:
 --
 --   haifuraiya_rx_axi            <- this file: the IP boundary
@@ -114,7 +114,30 @@ entity haifuraiya_rx_axi is
         -----------------------------------------------------------------------
         dbg_tgt_i     : out std_logic_vector(15 downto 0);
         dbg_tgt_q     : out std_logic_vector(15 downto 0);
-        dbg_tgt_valid : out std_logic
+        dbg_tgt_valid : out std_logic;
+
+        -- frame-sync taps for ILA
+        dbg_fs_state      : out std_logic_vector(2 downto 0);
+        dbg_fs_corr       : out std_logic_vector(31 downto 0);
+        dbg_fs_corr_peak  : out std_logic_vector(31 downto 0);
+        dbg_fs_soft_q     : out std_logic_vector(2 downto 0);
+        dbg_soft_corr     : out std_logic_vector(15 downto 0);
+        dbg_sym_valid     : out std_logic;
+
+        -- costas taps for ILA
+        dbg_cst_iq_delta  : out std_logic_vector(31 downto 0);
+        dbg_cst_acc_i     : out std_logic_vector(31 downto 0);
+        dbg_cst_acc_q     : out std_logic_vector(31 downto 0);
+        dbg_f1_err        : out std_logic_vector(31 downto 0);
+        dbg_f2_err        : out std_logic_vector(31 downto 0);
+        dbg_lpf_acc_f1    : out std_logic_vector(31 downto 0);
+        dbg_lpf_acc_f2    : out std_logic_vector(31 downto 0);
+        dbg_cst_locktime_f1 : out std_logic_vector(15 downto 0);
+        dbg_cst_locktime_f2 : out std_logic_vector(15 downto 0);
+        dbg_cst_unlock_f1 : out std_logic;
+        dbg_cst_unlock_f2 : out std_logic
+
+
     );
 end entity haifuraiya_rx_axi;
 
@@ -138,7 +161,15 @@ architecture rtl of haifuraiya_rx_axi is
     signal sts_cst_lock_f1        : std_logic;
     signal sts_cst_lock_f2        : std_logic;
 
+    -- frame sync thresholds
+    signal cfg_fs_hunt_thresh     : std_logic_vector(31 downto 0);
+    signal cfg_fs_verify_thresh   : std_logic_vector(31 downto 0);
+
+    signal cfg_gain_manual        : std_logic_vector(15 downto 0);
+    signal sts_gain_current       : std_logic_vector(15 downto 0);
+
 begin
+
 
 
     -- Status to boundary (for ILA / TB); same signals also feed demod_regs
@@ -154,7 +185,7 @@ begin
         generic map (
             ADDR_WIDTH    => C_S_AXI_DEMOD_ADDR_WIDTH,
             VERSION_MAJOR => 0,
-            VERSION_MINOR => 3,
+            VERSION_MINOR => 4,
             VERSION_PATCH => 0
         )
         port map (
@@ -190,10 +221,18 @@ begin
             symbol_lock_count     => cfg_sym_lock_count,
             symbol_lock_threshold => cfg_sym_lock_threshold,
 
-            frame_sync_locked => sts_frame_sync_locked,
-            frames_received   => sts_frames_received,
-            cst_lock_f1       => sts_cst_lock_f1,
-            cst_lock_f2       => sts_cst_lock_f2
+            frame_sync_locked     => sts_frame_sync_locked,
+            frames_received       => sts_frames_received,
+            cst_lock_f1           => sts_cst_lock_f1,
+            cst_lock_f2           => sts_cst_lock_f2,
+            fs_hunt_thresh        => cfg_fs_hunt_thresh,
+            fs_verify_thresh      => cfg_fs_verify_thresh,
+            quant_thr_1           => open,
+            quant_thr_2           => open,
+            quant_thr_3           => open,
+
+            gain_manual           => cfg_gain_manual,
+            gain_current          => sts_gain_current
         );
 
     ---------------------------------------------------------------------------
@@ -253,10 +292,34 @@ begin
             frames_received   => sts_frames_received,
             cst_lock_f1       => sts_cst_lock_f1,
             cst_lock_f2       => sts_cst_lock_f2,
+            fs_hunt_thresh    => cfg_fs_hunt_thresh,
+            fs_verify_thresh  => cfg_fs_verify_thresh,
 
             dbg_tgt_i     => dbg_tgt_i,
             dbg_tgt_q     => dbg_tgt_q,
-            dbg_tgt_valid => dbg_tgt_valid
+            dbg_tgt_valid => dbg_tgt_valid,
+
+            dbg_fs_state      => dbg_fs_state,
+            dbg_fs_corr       => dbg_fs_corr,
+            dbg_fs_corr_peak  => dbg_fs_corr_peak,
+            dbg_fs_soft_q     => dbg_fs_soft_q,
+            dbg_soft_corr     => dbg_soft_corr,
+            dbg_sym_valid     => dbg_sym_valid,
+
+            dbg_cst_iq_delta    => dbg_cst_iq_delta,
+            dbg_cst_acc_i       => dbg_cst_acc_i,
+            dbg_cst_acc_q       => dbg_cst_acc_q,
+            dbg_f1_err          => dbg_f1_err,
+            dbg_f2_err          => dbg_f2_err,
+            dbg_lpf_acc_f1      => dbg_lpf_acc_f1,
+            dbg_lpf_acc_f2      => dbg_lpf_acc_f2,
+            dbg_cst_locktime_f1 => dbg_cst_locktime_f1,
+            dbg_cst_locktime_f2 => dbg_cst_locktime_f2,
+            dbg_cst_unlock_f1   => dbg_cst_unlock_f1,
+            dbg_cst_unlock_f2   => dbg_cst_unlock_f2,
+
+            gain_manual         => cfg_gain_manual,
+            gain_current        => sts_gain_current
         );
 
 end architecture rtl;

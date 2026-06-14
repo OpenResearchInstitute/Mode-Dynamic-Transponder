@@ -978,6 +978,101 @@ Live Bouro dashboard showing channelizer + demod state.
 
 ---
 
+## Phase 5 Pre-Requisite: Scaling Worksheet for going from 1 to 64 channels
+
+## RX scaling: 1 → 64 channels is DSP-bound — Option B (TDM) selected
+
+**Status:** Decided 2026-06-12 on measured placed-design utilization. The
+*device-fit* conclusion (Option A doesn't fit, Option B does) is **MEASURED** —
+it follows directly from the channelizer's DSP count and the device's DSP
+budget. The *per-channel state size* for Option B is still an **ESTIMATE**
+pending an RTL audit (see Open Items).
+
+### Provenance (measurement authority)
+
+- Report: `system_top_utilization_placed.rpt` (`report_utilization`, design state *Fully Placed*)
+- Tool / device: Vivado 2022.2, `xczu9eg-ffvb1156-2-e` (ZCU102), speed `-2`
+- Build under test: 1-channel RX, `TARGET_CHANNEL=0`, `CMOS_LVDS_N=0`, `ila_rx_demod` present
+- Per-block split read from the Vivado *hierarchical* utilization view of the same placed design
+
+Device resources available: **274,080** LUT · **548,160** Reg · **2,520** DSP · **912** BRAM tiles.
+
+### MEASURED — current 1-channel build
+
+Top-level (`system_top`):
+
+| Resource | Used | Avail | Util% |
+|---|---|---|---|
+| CLB LUTs | 138,022 | 274,080 | 50.4 |
+| CLB Registers | 148,571 | 548,160 | 27.1 |
+| DSPs | **1,592** | 2,520 | **63.2** |
+| BRAM tiles | 34 | 912 | 3.7 |
+
+Per-block (the blocks that drive the scaling math):
+
+| Block | LUT | Reg | DSP | BRAM | Note |
+|---|---|---|---|---|---|
+| `u_chan` (channelizer + R2SDF FFT) | 96,654 | 107,376 | **1,556** | 0 | **shared** — produces all 64 channels regardless of demod count |
+| `u_demod` (one MSK demod) | 2,307 | 1,211 | 24 | 0 | `U_f1` / `U_f2` = 10 DSP each + 4 |
+| `u_fsync` (frame-sync detector) | 632 | 515 | 0 | 0.5 | |
+| **per-channel unit (demod + fsync)** | **2,939** | **1,726** | **24** | **0.5** | the replicable cost |
+| `ila_rx_demod` (debug) | 2,762 | 4,088 | 0 | 29.5 | reclaimable for flight |
+| `axi_adrv9001` (infra) | 17,128 | 23,658 | 12 | 0 | |
+
+DSP accounting checks out: 1,556 (`u_chan`) + 24 (`u_demod`) = 1,580 (`channelizer_rx1`); + 12 (`axi_adrv9001`) ≈ 1,592 (top).
+
+### DERIVED — 64-channel projection (from the measured per-channel unit)
+
+The whole decision turns on one **measured** number: the channelizer costs
+**1,556 DSPs (62% of the device)**, paid once. That leaves **964 DSPs** for demods.
+
+**Option A — 64 parallel demods**
+
+| Resource | Projection | vs device |
+|---|---|---|
+| DSP | 1,556 + 64×24 + ~16 infra ≈ **3,104** | 2,520 → **123%, over by ~580** |
+| LUT | 96,654 + 64×2,939 + ~23k infra ≈ **~308k** | 274,080 → ~113%, over |
+
+- **Max channels before the DSP wall = ⌊964 / 24⌋ = 39.** (MEASURED-derived hard ceiling.)
+- **Verdict: INFEASIBLE for 64.** Not a placement/tuning problem — the silicon
+  cannot hold 64 parallel demods. Caps at ~39 channels, and LUTs bust too.
+
+**Option B — TDM: one demod, 64 channel-indexed state contexts**
+
+| Resource | Projection | vs device |
+|---|---|---|
+| DSP | ~1,592 (arithmetic time-shared, unchanged from today) | 2,520 → ~63%, **fits** |
+| State (64 contexts) | ESTIMATE — upper bound 64×1,726 ≈ 110k Reg if kept in flops, or a few BRAM tiles | 548k Reg / 912 BRAM → fits with margin |
+| LUT | base + modest context addressing/mux growth | fits |
+
+- **Verdict: FITS, and is the only route to full 64-channel coverage.** Cost is
+  *redesign complexity* (save/restore demod context per channel as the stream
+  cycles), not silicon. Natural fit: the channelizer already emits the 64
+  channels time-multiplexed by TDEST.
+
+### Decision
+
+**Adopt Option B (TDM demod with channel-indexed state).** Forced by the
+measured 1,556-DSP channelizer: time-sharing the DSP-heavy arithmetic is
+mandatory, parallel replication is impossible. Single-channel
+(`TARGET_CHANNEL=0`) remains the correct first milestone; 64-channel is the
+demod redesign that follows, not a wiring change.
+
+### Open items (ESTIMATES to confirm — do not treat as measured)
+
+1. **Cycle budget for TDM.** Aggregate channelized rate ≈ 64 × 625 ksps =
+   40 Msps against the fabric clock; need ⌈cycles-per-channel-sample⌉ to confirm
+   one demod can service all 64 in time. Headroom *looks* large but is unmeasured.
+2. **Actual per-channel state size.** 1,726 Reg is the *whole demod's* register
+   count — an upper bound, not the state to replicate. The real context is only
+   the stateful subset (NCO phase accumulator, loop-filter integrators, symbol
+   timing, lock-detect counters, frame-sync correlator window); pipeline/staging
+   registers do not replicate. Size it by RTL audit before committing the Reg/BRAM
+   estimate.
+3. **Flight vs dev footprint.** Removing `ila_rx_demod` reclaims 2,762 LUT + 29.5 BRAM.
+
+---
+
 ## 🌌 Phase 5: Kabura-ya MUX + DVB-S2 Downlink
 
 ### Goal

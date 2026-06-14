@@ -166,7 +166,7 @@ create_bd_cell -type module -reference axis_iq_wrapper axis_iq_wrapper_rx1
 # -----------------------------------------------------------------------------
 
 create_bd_cell -type ip \
-    -vlnv openresearch.institute:ip:haifuraiya_rx_axi:0.3 \
+    -vlnv openresearch.institute:ip:haifuraiya_rx_axi:0.4 \
     channelizer_rx1
 
 
@@ -324,27 +324,90 @@ puts "INFO: haifuraiya — channelizer + DMA run at PS clock; wrapper at adc_1_c
 #   probe3 frame_sync_locked probe4 cst_lock_f1       probe5 cst_lock_f2
 #   probe6 frames_received[31:0]
 ##############################################################################
+#create_bd_cell -type ip -vlnv xilinx.com:ip:ila:6.2 ila_rx_demod
+#set_property -dict [list \
+#    CONFIG.C_PROBE0_WIDTH {16} \
+#    CONFIG.C_PROBE1_WIDTH {16} \
+#    CONFIG.C_PROBE2_WIDTH {1} \
+#    CONFIG.C_PROBE3_WIDTH {1} \
+#    CONFIG.C_PROBE4_WIDTH {1} \
+#    CONFIG.C_PROBE5_WIDTH {1} \
+#    CONFIG.C_PROBE6_WIDTH {32} \
+#    CONFIG.C_NUM_OF_PROBES {7} \
+#    CONFIG.C_DATA_DEPTH {4096} \
+#    CONFIG.C_TRIGIN_EN {false} \
+#] [get_bd_cells ila_rx_demod]
+
+#ad_connect $sys_cpu_clk ila_rx_demod/clk
+#ad_connect channelizer_rx1/dbg_tgt_i         ila_rx_demod/probe0
+#ad_connect channelizer_rx1/dbg_tgt_q         ila_rx_demod/probe1
+#ad_connect channelizer_rx1/dbg_tgt_valid     ila_rx_demod/probe2
+#ad_connect channelizer_rx1/frame_sync_locked ila_rx_demod/probe3
+#ad_connect channelizer_rx1/cst_lock_f1       ila_rx_demod/probe4
+#ad_connect channelizer_rx1/cst_lock_f2       ila_rx_demod/probe5
+#ad_connect channelizer_rx1/frames_received   ila_rx_demod/probe6
+
+#puts "INFO: haifuraiya - RX demod ILA inserted (7 probes, depth 4096)"
+
+
+##############################################################################
+# ILA 1/2 -- ila_rx_demod : carrier-loop view, storage-qualified on dbg_tgt_valid
+##############################################################################
 create_bd_cell -type ip -vlnv xilinx.com:ip:ila:6.2 ila_rx_demod
 set_property -dict [list \
-    CONFIG.C_PROBE0_WIDTH {16} \
-    CONFIG.C_PROBE1_WIDTH {16} \
-    CONFIG.C_PROBE2_WIDTH {1} \
-    CONFIG.C_PROBE3_WIDTH {1} \
-    CONFIG.C_PROBE4_WIDTH {1} \
-    CONFIG.C_PROBE5_WIDTH {1} \
-    CONFIG.C_PROBE6_WIDTH {32} \
-    CONFIG.C_NUM_OF_PROBES {7} \
-    CONFIG.C_DATA_DEPTH {4096} \
+    CONFIG.C_NUM_OF_PROBES {16} \
+    CONFIG.C_DATA_DEPTH {2048} \
+    CONFIG.C_EN_STRG_QUAL {1} \
     CONFIG.C_TRIGIN_EN {false} \
+    CONFIG.C_PROBE0_WIDTH {16}  CONFIG.C_PROBE1_WIDTH {16} \
+    CONFIG.C_PROBE2_WIDTH {1}   CONFIG.C_PROBE3_WIDTH {32} \
+    CONFIG.C_PROBE4_WIDTH {32}  CONFIG.C_PROBE5_WIDTH {32} \
+    CONFIG.C_PROBE6_WIDTH {32}  CONFIG.C_PROBE7_WIDTH {32} \
+    CONFIG.C_PROBE8_WIDTH {32}  CONFIG.C_PROBE9_WIDTH {32} \
+    CONFIG.C_PROBE10_WIDTH {16} CONFIG.C_PROBE11_WIDTH {16} \
+    CONFIG.C_PROBE12_WIDTH {1}  CONFIG.C_PROBE13_WIDTH {1} \
+    CONFIG.C_PROBE14_WIDTH {1}  CONFIG.C_PROBE15_WIDTH {1} \
 ] [get_bd_cells ila_rx_demod]
-
 ad_connect $sys_cpu_clk ila_rx_demod/clk
-ad_connect channelizer_rx1/dbg_tgt_i         ila_rx_demod/probe0
-ad_connect channelizer_rx1/dbg_tgt_q         ila_rx_demod/probe1
-ad_connect channelizer_rx1/dbg_tgt_valid     ila_rx_demod/probe2
-ad_connect channelizer_rx1/frame_sync_locked ila_rx_demod/probe3
-ad_connect channelizer_rx1/cst_lock_f1       ila_rx_demod/probe4
-ad_connect channelizer_rx1/cst_lock_f2       ila_rx_demod/probe5
-ad_connect channelizer_rx1/frames_received   ila_rx_demod/probe6
+ad_connect channelizer_rx1/dbg_tgt_i           ila_rx_demod/probe0
+ad_connect channelizer_rx1/dbg_tgt_q           ila_rx_demod/probe1
+ad_connect channelizer_rx1/dbg_tgt_valid       ila_rx_demod/probe2
+ad_connect channelizer_rx1/dbg_cst_iq_delta    ila_rx_demod/probe3
+ad_connect channelizer_rx1/dbg_cst_acc_i       ila_rx_demod/probe4
+ad_connect channelizer_rx1/dbg_cst_acc_q       ila_rx_demod/probe5
+ad_connect channelizer_rx1/dbg_f1_err          ila_rx_demod/probe6
+ad_connect channelizer_rx1/dbg_f2_err          ila_rx_demod/probe7
+ad_connect channelizer_rx1/dbg_lpf_acc_f1      ila_rx_demod/probe8
+ad_connect channelizer_rx1/dbg_lpf_acc_f2      ila_rx_demod/probe9
+ad_connect channelizer_rx1/dbg_cst_locktime_f1 ila_rx_demod/probe10
+ad_connect channelizer_rx1/dbg_cst_locktime_f2 ila_rx_demod/probe11
+ad_connect channelizer_rx1/cst_lock_f1         ila_rx_demod/probe12
+ad_connect channelizer_rx1/cst_lock_f2         ila_rx_demod/probe13
+ad_connect channelizer_rx1/dbg_cst_unlock_f1   ila_rx_demod/probe14
+ad_connect channelizer_rx1/dbg_cst_unlock_f2   ila_rx_demod/probe15
 
-puts "INFO: haifuraiya - RX demod ILA inserted (7 probes, depth 4096)"
+##############################################################################
+# ILA 2/2 -- ila_rx_fsync : frame-sync view, storage-qualified on dbg_sym_valid
+##############################################################################
+create_bd_cell -type ip -vlnv xilinx.com:ip:ila:6.2 ila_rx_fsync
+set_property -dict [list \
+    CONFIG.C_NUM_OF_PROBES {8} \
+    CONFIG.C_DATA_DEPTH {4096} \
+    CONFIG.C_EN_STRG_QUAL {1} \
+    CONFIG.C_TRIGIN_EN {false} \
+    CONFIG.C_PROBE0_WIDTH {16} CONFIG.C_PROBE1_WIDTH {3} \
+    CONFIG.C_PROBE2_WIDTH {32} CONFIG.C_PROBE3_WIDTH {32} \
+    CONFIG.C_PROBE4_WIDTH {3}  CONFIG.C_PROBE5_WIDTH {1} \
+    CONFIG.C_PROBE6_WIDTH {32} CONFIG.C_PROBE7_WIDTH {1} \
+] [get_bd_cells ila_rx_fsync]
+ad_connect $sys_cpu_clk ila_rx_fsync/clk
+ad_connect channelizer_rx1/dbg_soft_corr     ila_rx_fsync/probe0
+ad_connect channelizer_rx1/dbg_fs_soft_q     ila_rx_fsync/probe1
+ad_connect channelizer_rx1/dbg_fs_corr       ila_rx_fsync/probe2
+ad_connect channelizer_rx1/dbg_fs_corr_peak  ila_rx_fsync/probe3
+ad_connect channelizer_rx1/dbg_fs_state      ila_rx_fsync/probe4
+ad_connect channelizer_rx1/frame_sync_locked ila_rx_fsync/probe5
+ad_connect channelizer_rx1/frames_received   ila_rx_fsync/probe6
+ad_connect channelizer_rx1/dbg_sym_valid     ila_rx_fsync/probe7
+
+puts "INFO: haifuraiya - RX ILAs: ila_rx_demod (16p carrier) + ila_rx_fsync (8p frame-sync)"
