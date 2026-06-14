@@ -355,10 +355,13 @@ puts "INFO: haifuraiya — channelizer + DMA run at PS clock; wrapper at adc_1_c
 ##############################################################################
 create_bd_cell -type ip -vlnv xilinx.com:ip:ila:6.2 ila_rx_demod
 set_property -dict [list \
-    CONFIG.C_NUM_OF_PROBES {16} \
-    CONFIG.C_DATA_DEPTH {2048} \
-    CONFIG.C_EN_STRG_QUAL {1} \
+    CONFIG.C_MONITOR_TYPE {Native} \
     CONFIG.C_TRIGIN_EN {false} \
+    CONFIG.C_EN_STRG_QUAL {1} \
+    CONFIG.C_DATA_DEPTH {2048} \
+    CONFIG.C_NUM_OF_PROBES {16} \
+] [get_bd_cells ila_rx_demod]
+set_property -dict [list \
     CONFIG.C_PROBE0_WIDTH {16}  CONFIG.C_PROBE1_WIDTH {16} \
     CONFIG.C_PROBE2_WIDTH {1}   CONFIG.C_PROBE3_WIDTH {32} \
     CONFIG.C_PROBE4_WIDTH {32}  CONFIG.C_PROBE5_WIDTH {32} \
@@ -391,10 +394,13 @@ ad_connect channelizer_rx1/dbg_cst_unlock_f2   ila_rx_demod/probe15
 ##############################################################################
 create_bd_cell -type ip -vlnv xilinx.com:ip:ila:6.2 ila_rx_fsync
 set_property -dict [list \
-    CONFIG.C_NUM_OF_PROBES {8} \
-    CONFIG.C_DATA_DEPTH {4096} \
-    CONFIG.C_EN_STRG_QUAL {1} \
+    CONFIG.C_MONITOR_TYPE {Native} \
     CONFIG.C_TRIGIN_EN {false} \
+    CONFIG.C_EN_STRG_QUAL {1} \
+    CONFIG.C_DATA_DEPTH {4096} \
+    CONFIG.C_NUM_OF_PROBES {8} \
+] [get_bd_cells ila_rx_fsync]
+set_property -dict [list \
     CONFIG.C_PROBE0_WIDTH {16} CONFIG.C_PROBE1_WIDTH {3} \
     CONFIG.C_PROBE2_WIDTH {32} CONFIG.C_PROBE3_WIDTH {32} \
     CONFIG.C_PROBE4_WIDTH {3}  CONFIG.C_PROBE5_WIDTH {1} \

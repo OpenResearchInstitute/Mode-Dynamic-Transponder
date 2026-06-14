@@ -33,7 +33,7 @@ use ieee.numeric_std.all;
 
 entity haifuraiya_rx_axi is
     generic (
-        TARGET_CHANNEL           : natural  := 0;
+        TARGET_CHANNEL           : natural  := 5;
         COMPLEX_INPUT            : boolean  := true;   -- proven path feeds channel Q
         N_CHANNELS               : positive := 64;
         M_DECIMATION             : positive := 16;
