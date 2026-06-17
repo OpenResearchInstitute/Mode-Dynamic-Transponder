@@ -147,7 +147,8 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     constant RUN_CHANNELIZER_TESTS : boolean := false;
 
     -- ===== Demod-path integration (added) =====
-    constant TARGET_CHANNEL : natural := 0;   -- channel to listen to first
+    constant TARGET_INPUT_BIN : natural := 5; -- channel to listen to first
+    constant TARGET_CHANNEL   : natural := N_CHANNELS - TARGET_INPUT_BIN;  -- output ch after commutator reversal
 
     -- Demod tuning. TODO: re-derive for the channel rate (~625 ksps, SPS ~11.53)
     -- per CHANNELIZER_DEMOD_CONTRACT.md. These placeholders let it elaborate and

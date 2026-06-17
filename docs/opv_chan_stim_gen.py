@@ -6,7 +6,7 @@ tb_haifuraiya_channelizer_axi.vhd  (injected at s_axis_data).
 Signal chain this feeds:
     file @ 20 Msps complex  ->  halfband_decimator (/2 -> 10 Msps)
                             ->  channelizer (M_DECIMATION=16 -> 625 ksps/ch)
-                            ->  channel 0 out  ->  msk_demodulator (I-only)
+                            ->  channel number out  ->  msk_demodulator (complex)
                             ->  frame_sync_detector_soft
 
 Domain model
@@ -17,16 +17,16 @@ Domain model
   Bitstream  : frames laid back-to-back, continuous (a receiver sees bits
                arrive off the air at clock cadence -- no gaps, no overfeed).
   Modulator  : continuous-phase MSK (h=1/2). bit=1 -> +fd, bit=0 -> -fd.
-               Centroid fc places the signal at a REAL IF inside channel 0
-               (off channel-centre DC), so the I-only Costas does not fold
-               its tones under real projection.
+               Centroid fc places the complex signal in a channel.
   Writer     : "iv qv" per line, signed-16 -- exactly what the TB's
                read(l,iv); read(l,qv) loop consumes.
 
 Frequencies (normalised to the 625 ksps channel rate the demod sees):
+  fc  = 0 Hz       -> channel 0 (centroid at DC for complex demod)
+  fc  = 781250 Hz  -> channel 5 (centroid at DC for complex demod)
   fc  = 110130 Hz  -> 0.176  (matches proven rx freq words)
   fd  = baud/4     -> tones fc-/+fd = 96580 / 123680 Hz
-                      (demod NCOs sit at 0x278E9F6B/0x32A84381 = 96560/123700;
+                      (demod NCOs used to sit at 0x278E9F6B/0x32A84381 = 96560/123700;
                        the ~30 Hz residual is well within Costas pull-in)
 """
 
@@ -112,7 +112,7 @@ def main():
                     help="number of back-to-back frames (>=4 to reach LOCK_FRAMES=3)")
     ap.add_argument("--fs",       type=float, default=20.0e6, help="input sample rate")
     ap.add_argument("--baud",     type=float, default=54200.0)
-    ap.add_argument("--fc",       type=float, default=110130.0, help="MSK centroid IF")
+    ap.add_argument("--fc",       type=float, default=0.0, help="MSK centroid IF")
     ap.add_argument("--fd",       type=float, default=None,
                     help="freq deviation (default baud/4 = true MSK h=1/2)")
     ap.add_argument("--amp",      type=float, default=3000.0, help="signal peak (ADC-like)")

@@ -42,20 +42,18 @@
 -------------------------------------------------------------------------------
 -- SCOPE / FOLLOW-ON (read before trusting non-zero channels)
 -------------------------------------------------------------------------------
---   * FFT bin 0 (the DC channel -- where the OPV test signal lives) is fully
---     correct with this change alone: bin 0 is the sum of all branches and a
---     sum is independent of branch order, so no output twiddle is needed.
---   * For channels k != 0, two things still live in the parent (top) and are
---     deliberately NOT in this file:
---        - the oversampled output phase rotation (twiddle e^{-j2*pi*k*M*m/N});
---        - a possible bin-order mirror (this backward-commutator convention
---          pairs with ifft, or read bins in mirrored order, vs the top's fft).
---     Until those land, the built-in channelizer CW self-tests that probe
---     specific non-zero bins will shift and must be re-baselined -- expected,
---     not a regression of this fix.
---   * The reference notebook docs/polyphase_channelizer.ipynb carries the same
---     forward-commutator convention at its source and should be corrected to
---     match (its process_sample counts input_phase UP).
+--   * For channels k != 0, the oversampled output phase rotation now lives in
+--     the parent (top): haifuraiya_channelizer_top.vhd applies the per-channel
+--     twiddle e^{-j2*pi*k*M*m/N} at the FFT output (channel_re/im). For
+--     M=16, N=64 this collapses to (-j)^(k*m mod 4) -- a swap/negate, no
+--     multiplier. k = r2_out_idx, m = per-frame block counter; k=0 -> identity,
+--     so the DC channel is untouched. The bin-order mirror folds into the
+--     rotation's sign (mirror == conjugate == sign-flip here), so it is one
+--     knob, pinned by measurement: ch59's baseband offset collapses to ~0 with
+--     the correct sign and doubles with the wrong one.
+--   * With the rotation in place, the built-in channelizer CW self-tests that
+--     probe specific non-zero bins are now correct and should be re-baselined
+--     to the rotated (centered) outputs.
 --
 -------------------------------------------------------------------------------
 -- INTERFACE / RESOURCES

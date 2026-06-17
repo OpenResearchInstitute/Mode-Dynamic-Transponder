@@ -138,6 +138,8 @@ add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f1_error}
 add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f2_error}
 add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbg_acc_i_f1}
 add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbg_acc_q_f1}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbg_acc_iq_delta_f1} 
+
 add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/tclk}
 add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/frame_sync_locked}
 add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/frames_received}
@@ -161,5 +163,11 @@ add_wave_divider "Frame Sync: Corrected Bit + Valid + Combined Symbol Lock"
 add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/rx_bit}
 add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/rx_bit_valid}
 add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/demod_sync_lock}
+# check tdest channel targeting
+add_wave_divider "TDEST monitor"
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chans_tdata}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chans_tdest}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chans_tvalid}
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chan_i_reg}
 
 run all

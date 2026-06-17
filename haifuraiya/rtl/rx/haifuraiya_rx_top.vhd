@@ -24,8 +24,8 @@ use ieee.numeric_std.all;
 
 entity haifuraiya_rx_top is
     generic (
-        TARGET_CHANNEL : natural := 0;     -- 0..63: channel to bring up first
-        COMPLEX_INPUT  : boolean := false; -- false = real I-only (today); true = feed channel Q
+        TARGET_CHANNEL : natural := 5;     -- 0..63: channel to bring up first
+        COMPLEX_INPUT  : boolean := true; -- false = real I-only (today); true = feed channel Q
         --RX_INVERT      : std_logic := '0'; -- bit polarity (matches msk_top rx_invert)
 
         -- channelizer dims (pass through)

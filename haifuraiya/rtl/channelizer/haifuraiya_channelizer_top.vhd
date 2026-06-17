@@ -119,6 +119,11 @@ architecture rtl of haifuraiya_channelizer_top is
     signal ready_r         : std_logic := '0';
     signal frame_dropped_r : std_logic := '0';
 
+    -- new signals
+    signal out_block      : unsigned(1 downto 0) := (others => '0');
+    signal rot_re, rot_im : signed(ACCUM_WIDTH - 1 downto 0);
+
+
 begin
 
     ---------------------------------------------------------------------------
@@ -272,8 +277,40 @@ begin
     ---------------------------------------------------------------------------
     -- Output mapping (40-bit, same scale as fft_n_pt)
     ---------------------------------------------------------------------------
-    channel_re    <= std_logic_vector(r2_out_re);
-    channel_im    <= std_logic_vector(r2_out_im);
+
+    --channel_re    <= std_logic_vector(r2_out_re);
+    --channel_im    <= std_logic_vector(r2_out_im);
+
+
+-- block index m (mod 4): one tick per emitted frame (same edge as channel_last)
+p_block : process(clk)
+begin
+  if rising_edge(clk) then
+    if reset = '1' then
+      out_block <= (others => '0');
+    elsif r2_out_valid = '1' and to_integer(r2_out_idx) = N_CHANNELS - 1 then
+      out_block <= out_block + 1;
+    end if;
+  end if;
+end process;
+
+-- oversampled output rotation: e^{-j2*pi*k*M*m/N} = (-j)^(k*m mod 4)  for M=16, N=64
+p_rot : process(r2_out_re, r2_out_im, r2_out_idx, out_block)
+  variable sel : integer range 0 to 3;
+begin
+  sel := (to_integer(r2_out_idx(1 downto 0)) * to_integer(out_block)) mod 4;
+  case sel is
+    when 0 => rot_re <=  r2_out_re; rot_im <=  r2_out_im;   -- x 1
+    when 1 => rot_re <= -r2_out_im; rot_im <=  r2_out_re;   -- x +j
+    when 2 => rot_re <= -r2_out_re; rot_im <= -r2_out_im;   -- x -1
+    when 3 => rot_re <=  r2_out_im; rot_im <= -r2_out_re;   -- x -j
+  end case;
+end process;
+
+channel_re <= std_logic_vector(rot_re);
+channel_im <= std_logic_vector(rot_im);
+
+
     channel_idx   <= std_logic_vector(r2_out_idx);
     channel_valid <= r2_out_valid and primed;
     channel_last  <= '1' when (r2_out_valid = '1' and primed = '1'
