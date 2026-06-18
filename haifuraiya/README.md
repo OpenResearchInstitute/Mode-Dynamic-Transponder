@@ -57,8 +57,8 @@ git submodule update --init --recursive   # DON'T ? no path means the whole tree
 
 The init below is **scoped**: every command names the exact path(s) it is
 allowed to touch. Copy each as a **single line**. There are deliberately no
-`\` line-continuations here ? a half-pasted continuation is exactly how you
-end up running the unscoped command above by accident.
+`\` line-continuations here becuase a half-pasted continuation is exactly how you
+end up running the unscoped command above by accident. Ask us how we know. 
 
 ```bash
 # 1. Clone without submodules
