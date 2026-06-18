@@ -169,5 +169,17 @@ add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chans_tdata}
 add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chans_tdest}
 add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chans_tvalid}
 add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chan_i_reg}
+# check clocks and related signals
+add_wave_divider "Clocks and Related"
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f1_nco_adjust} 
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f1_error_int} 
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dclk_slv} 
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dclk} 
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dclk_d} 
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_dec_lbk_tclk} 
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/tclk} 
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/tclk_dly} 
+add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/lbk_tclk}
+
 
 run all

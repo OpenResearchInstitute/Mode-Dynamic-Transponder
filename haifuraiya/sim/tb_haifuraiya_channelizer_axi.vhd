@@ -154,8 +154,8 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     -- per CHANNELIZER_DEMOD_CONTRACT.md. These placeholders let it elaborate and
     -- exercise the wiring; they will NOT produce lock until set correctly.
 
-    --rx_freq_word_f1 = 0x058CD20B   (lower tone, +13550 Hz)
-    --rx_freq_word_f2 = 0xFA732DF5   (upper tone, -13550 Hz)
+    --rx_freq_word_f1 = 0x058CD20B   (lower tone, +13550 Hz)?
+    --rx_freq_word_f2 = 0xFA732DF5   (upper tone, -13550 Hz)?
     --rx_freq_word_f2 = 0x10A67621   (upper tone, +40650 Hz)
     --rx_freq_word_f1 = 0x13333333    (0.0750 = centroid − half the offset)
     --rx_freq_word_f2 = 0x39999999    (0.2250 = centroid + half the offset)
