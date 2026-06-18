@@ -32,6 +32,17 @@ RESULT: matches the genie coherent bound (BER 0) down to ~0 dB SNR and beats the
 non-coherent magnitude detector by ~8x at -2 dB -- the coherent gain, where the link
 budget actually needs it.
 
+VALIDATED OPERATING POINTS (from stress sweeps -- see dd_coherent_stress.png)
+  * Symbol timing : ~0.7-symbol capture window (-0.5 .. +0.2 of a symbol around the
+                    naive boundary). Tune the recovered-clock dump phase to sit mid-window.
+  * Carrier freq  : Ki=0.03 pulls in a residual offset past 3 kHz cleanly (Ki=0.01 only
+                    reaches ~2 kHz). Default Ki bumped to 0.03 for that margin.
+  * Acquisition   : a ~90-deg error in the de Buda theta_c estimate puts a COLD loop in a
+                    bad branch (BER ~0.017). Drive the first ~16 symbols with the KNOWN
+                    preamble bits (data-aided) -> BER ~0.0004. Always preamble-aid acquisition.
+  * psi wordlength: the phase accumulator holds BER 0 at >=5 bits. 6-8 bits is ample;
+                    the new NCO is cheap.
+
 MAPS TO RTL
 -----------
   zc          = channelizer I/Q with carrier removed (mult by NCO @ theta_c from sync branch)
@@ -50,14 +61,18 @@ LO = np.exp(-1j*2*np.pi*fdev*_rel)  # lower tone reference  (bit -1)
 HI = np.exp(+1j*2*np.pi*fdev*_rel)  # upper tone reference  (bit +1)
 
 
-def detect(z, N, theta_c, Kp=0.20, Ki=0.01, resync_period=0, known_psi=None):
+def detect(z, N, theta_c, Kp=0.20, Ki=0.03, aided=0, known_bits=None,
+           resync_period=0, known_psi=None):
     """Decision-directed coherent MSK detection on complex baseband.
 
     z, N         : complex baseband (already at channel rate), length N
     theta_c      : carrier phase from the de Buda squared branch
-    Kp, Ki       : PI phase-loop gains
+    Kp, Ki       : PI phase-loop gains (Ki=0.03 -> pulls in >3 kHz residual offset)
+    aided        : drive the first `aided` symbols with known_bits (data-aided acquisition;
+                   ~16 resolves the bad-branch lock when theta_c is ~90 deg off)
+    known_bits   : known preamble bits for the aided window
     resync_period: if >0, re-seed psi from known_psi every this many symbols (sync word)
-    known_psi    : array of known reference phases for re-seed (preamble/sync derived)
+    known_psi    : array of known reference phases for re-seed
     returns      : (bits_hat, psi_history)
     """
     zc = z * np.exp(-1j*theta_c)        # remove carrier  -> residual = data phase psi_k
@@ -77,10 +92,11 @@ def detect(z, N, theta_c, Kp=0.20, Ki=0.01, resync_period=0, known_psi=None):
         Chi = np.sum(seg*np.conj(HI))
         b = -1.0 if np.real(Clo) > np.real(Chi) else 1.0   # COHERENT: real part only
         bits[k] = b
-        Cwin = Clo if b < 0 else Chi
+        drive = known_bits[k] if (aided and k < aided and known_bits is not None) else b
+        Cwin = Clo if drive < 0 else Chi
         perr = np.angle(Cwin)                      # residual phase error (0 when locked)
         integ += Ki*perr
-        psi += (np.pi/2)*b + Kp*perr + integ       # feedforward data phase + PI correction
+        psi += (np.pi/2)*drive + Kp*perr + integ   # feedforward data phase + PI correction
         psi_hist[k] = psi
     return bits, psi_hist
 
