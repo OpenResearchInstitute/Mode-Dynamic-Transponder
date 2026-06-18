@@ -150,21 +150,12 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     constant TARGET_INPUT_BIN : natural := 5; -- channel to listen to first
     constant TARGET_CHANNEL   : natural := N_CHANNELS - TARGET_INPUT_BIN;  -- output ch after commutator reversal
 
-    -- Demod tuning. TODO: re-derive for the channel rate (~625 ksps, SPS ~11.53)
-    -- per CHANNELIZER_DEMOD_CONTRACT.md. These placeholders let it elaborate and
-    -- exercise the wiring; they will NOT produce lock until set correctly.
-
     --rx_freq_word_f1 = 0x058CD20B   (lower tone, +13550 Hz)
     --rx_freq_word_f2 = 0xFA732DF5   (upper tone, -13550 Hz)
-    --rx_freq_word_f2 = 0x10A67621   (upper tone, +40650 Hz)
-    --rx_freq_word_f1 = 0x13333333    (0.0750 = centroid − half the offset)
-    --rx_freq_word_f2 = 0x39999999    (0.2250 = centroid + half the offset)
     --rx_freq_word_f1 = 0x278E9F6B    real msk_demod
     --rx_freq_word_f2 = 0x32A84381    real msk_demod
     constant FREQ_WORD_F1 : std_logic_vector(31 downto 0) := x"FA732DF5"; -- complex lower
     constant FREQ_WORD_F2 : std_logic_vector(31 downto 0) := x"058CD20B"; -- complex upper
-
-
 
     --constant LPF_P_GAIN    : std_logic_vector(23 downto 0) := x"000100";    -- TODO
     --constant LPF_I_GAIN    : std_logic_vector(23 downto 0) := x"000010";    -- TODO
@@ -173,7 +164,6 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     --constant LPF_I_SHIFT   : std_logic_vector(7 downto 0)  := x"0C";        -- TODO
     --constant SYM_LOCK_CNT  : std_logic_vector(9 downto 0)  := "0100000000"; -- TODO (256)
     --constant SYM_LOCK_THR  : std_logic_vector(15 downto 0) := x"0400";      -- TODO
-
 
     constant LPF_P_GAIN  : std_logic_vector(23 downto 0) := x"7FFFFF";   -- max
     constant LPF_I_GAIN  : std_logic_vector(23 downto 0) := x"7FFFFF";   -- max
