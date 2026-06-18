@@ -44,27 +44,46 @@ source ~/petalinux/2022.2/settings.sh
 
 ### Submodules
 
-It's complicated. 
+It's complicated. Read this before you run any `git submodule` command.
 
-Don't clone with --recurse-submodules or run git submodule update --init --recursive at the top level.
-It descends into pluto_msk and pulls ADI's multi-GB hdl + linux grandchildren that the ZCU102 build never uses.
+**Never run a blanket recursive update.** Both of these walk into
+`pluto_msk` and drag in ADI's multi-GB `hdl` + `linux` grandchildren that
+the ZCU102 build never uses:
 
-# 1. Clone (no blanket --recurse-submodules)
+```bash
+git clone --recurse-submodules ...        # DON'T
+git submodule update --init --recursive   # DON'T ? no path means the whole tree
+```
+
+The init below is **scoped**: every command names the exact path(s) it is
+allowed to touch. Copy each as a **single line**. There are deliberately no
+`\` line-continuations here ? a half-pasted continuation is exactly how you
+end up running the unscoped command above by accident.
+
+```bash
+# 1. Clone without submodules
 git clone https://github.com/OpenResearchInstitute/Mode-Dynamic-Transponder.git
-
 cd Mode-Dynamic-Transponder
 
-# 2. Direct ADI/ORI submodules -- recursive is safe for these
-git submodule update --init --recursive \
-    haifuraiya/third_party/hdl \
-    haifuraiya/third_party/meta-adi \
-    haifuraiya/third_party/power_detector \
-    haifuraiya/third_party/lowpass_ema
+# 2. ADI/ORI submodules ? recursion is bounded to these four named paths.
+#    (power_detector pulls lowpass_ema underneath it; that is the only reason --recursive is here.)
+git submodule update --init --recursive haifuraiya/third_party/hdl haifuraiya/third_party/meta-adi haifuraiya/third_party/power_detector haifuraiya/third_party/lowpass_ema
 
-# 3. pluto_msk: init the submodule, then ONLY the demod-chain leaves
+# 3. pluto_msk: init the submodule itself, NON-recursively (this must NOT pull hdl/firmware)
 git submodule update --init haifuraiya/third_party/pluto_msk
-git -C haifuraiya/third_party/pluto_msk submodule update --init \
-    nco pi_controller msk_demodulator
+
+# 4. Then ONLY the demod-chain leaves inside pluto_msk
+git -C haifuraiya/third_party/pluto_msk submodule update --init nco pi_controller msk_demodulator
+```
+
+**Verify nothing leaked.** A correct checkout leaves the heavy grandchildren
+uninitialized, so these two checks print nothing. If either prints `LEAK`,
+a recursive update escaped its scope ? `cd ..`, delete the clone, and start over:
+
+```bash
+test -e haifuraiya/third_party/pluto_msk/hdl/.git && echo "LEAK: pluto_msk/hdl initialized"
+test -e haifuraiya/third_party/pluto_msk/firmware/linux/.git && echo "LEAK: pluto_msk/firmware/linux initialized"
+```
 
 | Submodule | Source | Purpose |
 |---|---|---|
