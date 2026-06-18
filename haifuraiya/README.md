@@ -52,7 +52,7 @@ the ZCU102 build never uses:
 
 ```bash
 git clone --recurse-submodules ...        # DON'T
-git submodule update --init --recursive   # DON'T ? no path means the whole tree
+git submodule update --init --recursive   # DON'T - no path means the whole tree
 ```
 
 The init below is **scoped**: every command names the exact path(s) it is
@@ -65,7 +65,7 @@ end up running the unscoped command above by accident. Ask us how we know.
 git clone https://github.com/OpenResearchInstitute/Mode-Dynamic-Transponder.git
 cd Mode-Dynamic-Transponder
 
-# 2. ADI/ORI submodules ? recursion is bounded to these four named paths.
+# 2. ADI/ORI submodules - recursion is bounded to these four named paths.
 #    (power_detector pulls lowpass_ema underneath it; that is the only reason --recursive is here.)
 git submodule update --init --recursive haifuraiya/third_party/hdl haifuraiya/third_party/meta-adi haifuraiya/third_party/power_detector haifuraiya/third_party/lowpass_ema
 
@@ -78,7 +78,7 @@ git -C haifuraiya/third_party/pluto_msk submodule update --init nco pi_controlle
 
 **Verify nothing leaked.** A correct checkout leaves the heavy grandchildren
 uninitialized, so these two checks print nothing. If either prints `LEAK`,
-a recursive update escaped its scope ? `cd ..`, delete the clone, and start over:
+a recursive update escaped its scope - `cd ..`, delete the clone, and start over:
 
 ```bash
 test -e haifuraiya/third_party/pluto_msk/hdl/.git && echo "LEAK: pluto_msk/hdl initialized"
