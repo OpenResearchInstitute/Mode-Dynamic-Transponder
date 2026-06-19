@@ -46,9 +46,9 @@ source ~/petalinux/2022.2/settings.sh
 
 It's complicated. Read this before you run any `git submodule` command.
 
-**Never run a blanket recursive update.** Both of these walk into
-`pluto_msk` and drag in ADI's multi-GB `hdl` + `linux` grandchildren that
-the ZCU102 build never uses:
+**Never run a blanket recursive update.** Both of these walk into `pluto_msk`
+and drag in its own grandchildren — nested `hdl` and `firmware/linux`, multi-GB
+ADI trees that nothing in this repo uses:
 
 ```bash
 git clone --recurse-submodules ...        # DON'T
@@ -57,28 +57,41 @@ git submodule update --init --recursive   # DON'T - no path means the whole tree
 
 The init below is **scoped**: every command names the exact path(s) it is
 allowed to touch. Copy each as a **single line**. There are deliberately no
-`\` line-continuations here becuase a half-pasted continuation is exactly how you
-end up running the unscoped command above by accident. Ask us how we know. 
+`\` line-continuations here, because a half-pasted continuation is exactly how
+you end up running the unscoped command above by accident. Ask us how we know.
 
 ```bash
 # 1. Clone without submodules
 git clone https://github.com/OpenResearchInstitute/Mode-Dynamic-Transponder.git
 cd Mode-Dynamic-Transponder
 
-# 2. ADI/ORI submodules - recursion is bounded to these four named paths.
-#    (power_detector pulls lowpass_ema underneath it; that is the only reason --recursive is here.)
-git submodule update --init --recursive haifuraiya/third_party/hdl haifuraiya/third_party/meta-adi haifuraiya/third_party/power_detector haifuraiya/third_party/lowpass_ema
+# 2. Sim dependencies - channelizer + demod. Plain --init, named paths, no recursion.
+#    power_detector and lowpass_ema are parallel top-level submodules; neither nests the other.
+git submodule update --init haifuraiya/third_party/power_detector haifuraiya/third_party/lowpass_ema
 
-# 3. pluto_msk: init the submodule itself, NON-recursively (this must NOT pull hdl/firmware)
+# 3. pluto_msk itself, NON-recursively (must NOT pull its hdl/firmware grandchildren).
 git submodule update --init haifuraiya/third_party/pluto_msk
 
-# 4. Then ONLY the demod-chain leaves inside pluto_msk
+# 4. Then ONLY the demod-chain leaves inside pluto_msk.
 git -C haifuraiya/third_party/pluto_msk submodule update --init nco pi_controller msk_demodulator
+
+# 5. HARDWARE / XSA + PetaLinux build ONLY - ADI repos, large. Skip these for sim-only work.
+git submodule update --init haifuraiya/third_party/hdl haifuraiya/third_party/meta-adi
+```
+
+**After init, the work branches are detached.** `git submodule update` checks
+out the pinned *commit*, not a branch - so `pluto_msk` and `msk_demodulator`
+land in detached HEAD (at `198531a` and `14cc404`). If you are going to commit
+changes inside them, reattach first or your commits orphan:
+
+```bash
+git -C haifuraiya/third_party/pluto_msk checkout haifuraiya-complex-demod
+git -C haifuraiya/third_party/pluto_msk/msk_demodulator checkout decouple-carrier-loops
 ```
 
 **Verify nothing leaked.** A correct checkout leaves the heavy grandchildren
-uninitialized, so these two checks print nothing. If either prints `LEAK`,
-a recursive update escaped its scope - `cd ..`, delete the clone, and start over:
+uninitialized, so these two checks print nothing. If either prints `LEAK`, a
+recursive update escaped its scope - `cd ..`, delete the clone, and start over:
 
 ```bash
 test -e haifuraiya/third_party/pluto_msk/hdl/.git && echo "LEAK: pluto_msk/hdl initialized"
@@ -87,11 +100,11 @@ test -e haifuraiya/third_party/pluto_msk/firmware/linux/.git && echo "LEAK: plut
 
 | Submodule | Source | Purpose |
 |---|---|---|
-| `hdl` | analogdevicesinc/hdl @ `hdl_2022_r2` | ADI's ADRV9002 reference Vivado project (this is where the XSA is built) |
-| `meta-adi` | analogdevicesinc/meta-adi @ `2022_R2` | ADI's Yocto layer (kernel drivers, device tree) |
-| `power_detector` | OpenResearchInstitute/power_detector | RF power detection used inside the channelizer |
-| `lowpass_ema` | OpenResearchInstitute/lowpass_ema | EMA filter primitive (used inside power_detector) |
-| `pluto_msk` | OpenResearchInstitute/pluto_msk | OPV MSK demodulator + frame-sync VHDL. Init only nco, pi_controlle>
+| `power_detector` | OpenResearchInstitute/power_detector | RF power detection inside the channelizer. **Sim.** |
+| `lowpass_ema` | OpenResearchInstitute/lowpass_ema | EMA filter primitive used by the channelizer. **Sim.** |
+| `pluto_msk` | OpenResearchInstitute/pluto_msk @ `haifuraiya-complex-demod` | OPV MSK demod + frame-sync VHDL. Init only `nco`, `pi_controller`, `msk_demodulator` (demod is on `decouple-carrier-loops`); leave `hdl`, `firmware/*`, `msk_modulator`, `prbs` uninitialized. **Sim.** |
+| `hdl` | analogdevicesinc/hdl @ `hdl_2022_r2` | ADI ADRV9002 reference Vivado project - where the XSA is built. **Hardware only.** |
+| `meta-adi` | analogdevicesinc/meta-adi @ `2022_R2` | ADI Yocto layer (kernel drivers, device tree). **Hardware only.** |
 
 ### Lab setup
 
