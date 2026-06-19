@@ -178,10 +178,13 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     constant LPF_P_GAIN  : std_logic_vector(23 downto 0) := x"7FFFFF";   -- max
     constant LPF_I_GAIN  : std_logic_vector(23 downto 0) := x"7FFFFF";   -- max
     constant LPF_ALPHA   : std_logic_vector(23 downto 0) := x"000000";
-    constant LPF_P_SHIFT : std_logic_vector(7 downto 0)  := x"14";       -- 20
-    constant LPF_I_SHIFT : std_logic_vector(7 downto 0)  := x"1D";       -- 29
+    --constant LPF_P_SHIFT : std_logic_vector(7 downto 0)  := x"14";       -- 20
+    --constant LPF_I_SHIFT : std_logic_vector(7 downto 0)  := x"1D";       -- 29
     constant SYM_LOCK_CNT : std_logic_vector(9 downto 0)  := "0010000000"; -- 128 (RDL default)
     constant SYM_LOCK_THR : std_logic_vector(15 downto 0) := x"0008"; -- was 0x0018 (decimal 24)
+
+    constant LPF_P_SHIFT : std_logic_vector(7 downto 0)  := x"0D";       -- 13 (was 20)
+    constant LPF_I_SHIFT : std_logic_vector(7 downto 0)  := x"10";       -- 16 (was 29)
 
     signal chan_i_reg  : std_logic_vector(15 downto 0) := (others => '0');
     signal chan_q_reg  : std_logic_vector(15 downto 0) := (others => '0');
