@@ -332,7 +332,7 @@ u_rx : entity work.haifuraiya_rx_axi
         variable cnt : integer := 0;
     begin
         if rising_edge(aclk) then
-            if rx_svalid = '1' and cnt < 8000 then
+            if rx_svalid = '1' and cnt < 60000 then
                 write(l, to_integer(signed(chan_i_reg)));
                 write(l, string'(" "));
                 write(l, to_integer(signed(chan_q_reg)));

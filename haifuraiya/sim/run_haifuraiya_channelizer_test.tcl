@@ -97,6 +97,9 @@ safe_add_files sources_1 {
     ../rtl/channelizer/polyphase_filterbank_parallel.vhd
     ../rtl/channelizer/fft_pkg.vhd
     ../rtl/channelizer/fft_n_pt.vhd
+    ../rtl/channelizer/r2sdf_fft.vhd
+    ../rtl/channelizer/r2sdf_reorder.vhd
+    ../rtl/channelizer/r2sdf_stage.vhd
 }
 
 # Haifuraiya top wrapper
@@ -186,7 +189,6 @@ add_wave -into {Top_IO} -radix dec /tb_haifuraiya_channelizer_top/sample_im
 add_wave -into {Top_IO} /tb_haifuraiya_channelizer_top/sample_valid
 add_wave -into {Top_IO} -radix dec /tb_haifuraiya_channelizer_top/channel_re
 add_wave -into {Top_IO} -radix dec /tb_haifuraiya_channelizer_top/channel_im
-add_wave -into {Top_IO} -radix unsigned /tb_haifuraiya_channelizer_top/channel_idx
 add_wave -into {Top_IO} /tb_haifuraiya_channelizer_top/channel_valid
 add_wave -into {Top_IO} /tb_haifuraiya_channelizer_top/channel_last
 
@@ -197,81 +199,17 @@ add_wave -into {Status} /tb_haifuraiya_channelizer_top/frame_dropped
 # Filterbank I path
 add_wave -into {Filterbank_I} -radix dec /tb_haifuraiya_channelizer_top/dut/u_filterbank_i/sample_in
 add_wave -into {Filterbank_I} /tb_haifuraiya_channelizer_top/dut/u_filterbank_i/sample_valid
-add_wave -into {Filterbank_I} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_filterbank_i/branch_select
 add_wave -into {Filterbank_I} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_filterbank_i/samples_since_fc
-add_wave -into {Filterbank_I} /tb_haifuraiya_channelizer_top/dut/u_filterbank_i/frame_complete_d0
-add_wave -into {Filterbank_I} /tb_haifuraiya_channelizer_top/dut/u_filterbank_i/frame_complete_d1
 add_wave -into {Filterbank_I} /tb_haifuraiya_channelizer_top/dut/u_filterbank_i/outputs_valid
 add_wave -into {Filterbank_I} -radix hex /tb_haifuraiya_channelizer_top/dut/fb_i_outputs
 
 # Filterbank Q path
 add_wave -into {Filterbank_Q} -radix dec /tb_haifuraiya_channelizer_top/dut/u_filterbank_q/sample_in
 add_wave -into {Filterbank_Q} /tb_haifuraiya_channelizer_top/dut/u_filterbank_q/sample_valid
-add_wave -into {Filterbank_Q} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_filterbank_q/branch_select
 add_wave -into {Filterbank_Q} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_filterbank_q/samples_since_fc
-add_wave -into {Filterbank_Q} /tb_haifuraiya_channelizer_top/dut/u_filterbank_q/frame_complete_d0
-add_wave -into {Filterbank_Q} /tb_haifuraiya_channelizer_top/dut/u_filterbank_q/frame_complete_d1
 add_wave -into {Filterbank_Q} /tb_haifuraiya_channelizer_top/dut/u_filterbank_q/outputs_valid
 add_wave -into {Filterbank_Q} -radix hex /tb_haifuraiya_channelizer_top/dut/fb_q_outputs
 
-# Parallel-to-Sequential adapter (dual-FFT version)
-# The arbiter signals show round-robin behavior:
-#   next_fft toggles between '0' and '1' on each successful latch
-#   current_fft selects which FFT is being streamed to
-add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/p2s_state
-add_wave -into {P2S_Adapter} -radix unsigned /tb_haifuraiya_channelizer_top/dut/p2s_idx
-add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/next_fft
-add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/current_fft
-add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/fft0_busy
-add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/fft1_busy
-add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/frame_dropped_r
-# FFT_0 input drive (shown here so you can see which FFT is receiving)
-add_wave -into {P2S_Adapter} -radix dec /tb_haifuraiya_channelizer_top/dut/fft0_x_re
-add_wave -into {P2S_Adapter} -radix unsigned /tb_haifuraiya_channelizer_top/dut/fft0_x_idx
-add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/fft0_x_valid
-add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/fft0_x_last
-# FFT_1 input drive
-add_wave -into {P2S_Adapter} -radix dec /tb_haifuraiya_channelizer_top/dut/fft1_x_re
-add_wave -into {P2S_Adapter} -radix unsigned /tb_haifuraiya_channelizer_top/dut/fft1_x_idx
-add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/fft1_x_valid
-add_wave -into {P2S_Adapter} /tb_haifuraiya_channelizer_top/dut/fft1_x_last
-
-# FFT_0 internals
-add_wave -into {FFT_0} /tb_haifuraiya_channelizer_top/dut/u_fft_0/state
-add_wave -into {FFT_0} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft_0/stage_cnt
-add_wave -into {FFT_0} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft_0/butterfly_cnt
-add_wave -into {FFT_0} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft_0/out_cnt
-add_wave -into {FFT_0} /tb_haifuraiya_channelizer_top/dut/u_fft_0/src_is_buf_a
-add_wave -into {FFT_0} /tb_haifuraiya_channelizer_top/dut/fft0_busy
-add_wave -into {FFT_0} /tb_haifuraiya_channelizer_top/dut/fft0_out_valid
-add_wave -into {FFT_0} /tb_haifuraiya_channelizer_top/dut/fft0_out_last
-add_wave -into {FFT_0} -radix unsigned /tb_haifuraiya_channelizer_top/dut/fft0_out_idx
-add_wave -into {FFT_0} -radix dec /tb_haifuraiya_channelizer_top/dut/fft0_out_re
-add_wave -into {FFT_0} -radix dec /tb_haifuraiya_channelizer_top/dut/fft0_out_im
-
-# FFT_1 internals
-add_wave -into {FFT_1} /tb_haifuraiya_channelizer_top/dut/u_fft_1/state
-add_wave -into {FFT_1} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft_1/stage_cnt
-add_wave -into {FFT_1} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft_1/butterfly_cnt
-add_wave -into {FFT_1} -radix unsigned /tb_haifuraiya_channelizer_top/dut/u_fft_1/out_cnt
-add_wave -into {FFT_1} /tb_haifuraiya_channelizer_top/dut/u_fft_1/src_is_buf_a
-add_wave -into {FFT_1} /tb_haifuraiya_channelizer_top/dut/fft1_busy
-add_wave -into {FFT_1} /tb_haifuraiya_channelizer_top/dut/fft1_out_valid
-add_wave -into {FFT_1} /tb_haifuraiya_channelizer_top/dut/fft1_out_last
-add_wave -into {FFT_1} -radix unsigned /tb_haifuraiya_channelizer_top/dut/fft1_out_idx
-add_wave -into {FFT_1} -radix dec /tb_haifuraiya_channelizer_top/dut/fft1_out_re
-add_wave -into {FFT_1} -radix dec /tb_haifuraiya_channelizer_top/dut/fft1_out_im
-
-# Output Capture: easier to read the captured frame than the raw stream
-add_wave -into {Output_Capture} -radix unsigned /tb_haifuraiya_channelizer_top/frame_seq_at_last_capture
-# Sample bins of interest for the tone tests
-add_wave -into {Output_Capture} -radix dec /tb_haifuraiya_channelizer_top/frame_re[0]
-add_wave -into {Output_Capture} -radix dec /tb_haifuraiya_channelizer_top/frame_re[4]
-add_wave -into {Output_Capture} -radix dec /tb_haifuraiya_channelizer_top/frame_re[15]
-add_wave -into {Output_Capture} -radix dec /tb_haifuraiya_channelizer_top/frame_re[16]
-add_wave -into {Output_Capture} -radix dec /tb_haifuraiya_channelizer_top/frame_re[17]
-add_wave -into {Output_Capture} -radix dec /tb_haifuraiya_channelizer_top/frame_re[28]
-add_wave -into {Output_Capture} -radix dec /tb_haifuraiya_channelizer_top/frame_re[40]
 
 ################################################################################
 # Run simulation
@@ -287,7 +225,7 @@ puts "         adjacent-rejection, OPV-carrier"
 puts "========================================"
 puts ""
 
-run 5 ms
+run 20 ms
 
 puts ""
 puts "Simulation complete!"
