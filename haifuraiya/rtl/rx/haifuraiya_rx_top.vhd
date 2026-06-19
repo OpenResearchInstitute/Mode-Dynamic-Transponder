@@ -152,6 +152,7 @@ architecture rtl of haifuraiya_rx_top is
     signal rx_i_to_demod : std_logic_vector(DEMOD_SAMPLE_W-1 downto 0);
     signal rx_q_to_demod : std_logic_vector(DEMOD_SAMPLE_W-1 downto 0);
 
+
     -- demod outputs
     signal rx_data      : std_logic;
     signal rx_data_soft : signed(15 downto 0);
@@ -179,6 +180,15 @@ architecture rtl of haifuraiya_rx_top is
     signal prod_q_g : signed(32 downto 0);
     signal gi, gq   : signed(15 downto 0);
 
+    -- DC block (one-pole leaky integrator) on the channel sample, ahead of the
+    -- gain stage. Strips the channel-center carrier the stimulus IF leaves at
+    -- 0 Hz after channelization (and real ADRV9002 LO leakage). Corner ~ fs/(2*pi*2^K);
+    -- at 625 ksps, DCB_SHIFT=11 -> ~49 Hz, decades below the +/-13550 Hz tones.
+    -- tau = 2^DCB_SHIFT / fs ~= 3.3 ms; settles well inside the 40 ms preamble.
+    constant DCB_SHIFT : integer := 11;
+    signal dc_acc_i, dc_acc_q     : signed(15 + DCB_SHIFT downto 0) := (others => '0');
+    signal chan_i_dcb, chan_q_dcb : signed(15 downto 0) := (others => '0');
+
 begin
 
     reset_h <= not aresetn;
@@ -191,8 +201,8 @@ begin
 
 
     gain_u   <= unsigned(gain_manual);
-    prod_i_g <= signed(chan_i_reg) * signed('0' & std_logic_vector(gain_u)); -- 16x17
-    prod_q_g <= signed(chan_q_reg) * signed('0' & std_logic_vector(gain_u));
+    prod_i_g <= chan_i_dcb * signed('0' & std_logic_vector(gain_u)); -- 16x17 (DC-blocked)
+    prod_q_g <= chan_q_dcb * signed('0' & std_logic_vector(gain_u));
     gi <= sat16( shift_right(prod_i_g, 10) );   -- Q6.10 -> drop 10 frac bits
     gq <= sat16( shift_right(prod_q_g, 10) );
     gain_current <= gain_manual;                -- readback seam (auto fills this later)
@@ -259,15 +269,32 @@ begin
     -- TDEST demux: forward ONLY TARGET_CHANNEL's I to the demod.
     ----------------------------------------------------------------------------
     demux : process(aclk)
+        variable dc_i_v, dc_q_v : signed(15 downto 0);
     begin
         if rising_edge(aclk) then
             rx_svalid <= '0';                      -- default: no new sample
             if reset_h = '1' then
                 rx_svalid  <= '0';
+                dc_acc_i   <= (others => '0');
+                dc_acc_q   <= (others => '0');
+                chan_i_dcb <= (others => '0');
+                chan_q_dcb <= (others => '0');
             elsif chans_tvalid = '1' and chans_tready = '1' then
                 if to_integer(unsigned(chans_tdest(5 downto 0))) = TARGET_CHANNEL then
-                    chan_i_reg <= chans_tdata(15 downto 0);   -- I = TDATA[15:0]
-                    chan_q_reg <= chans_tdata(31 downto 16);  -- Q = TDATA[31:16] (debug tap only)
+                    chan_i_reg <= chans_tdata(15 downto 0);   -- I = TDATA[15:0]  (raw, debug tap)
+                    chan_q_reg <= chans_tdata(31 downto 16);  -- Q = TDATA[31:16] (raw, debug tap)
+
+                    -- DC block, computed on THIS edge so chan_i_dcb/chan_q_dcb stay
+                    -- aligned with rx_svalid (no extra pipeline delay). dc_est = acc >> K;
+                    -- out = sample - dc_est; leak (sample - dc_est) back into the accumulator.
+                    dc_i_v := dc_acc_i(dc_acc_i'high downto DCB_SHIFT);
+                    dc_q_v := dc_acc_q(dc_acc_q'high downto DCB_SHIFT);
+                    chan_i_dcb <= signed(chans_tdata(15 downto 0))  - dc_i_v;
+                    chan_q_dcb <= signed(chans_tdata(31 downto 16)) - dc_q_v;
+                    dc_acc_i <= dc_acc_i + (resize(signed(chans_tdata(15 downto 0)),  dc_acc_i'length)
+                                            - resize(dc_i_v, dc_acc_i'length));
+                    dc_acc_q <= dc_acc_q + (resize(signed(chans_tdata(31 downto 16)), dc_acc_q'length)
+                                            - resize(dc_q_v, dc_acc_q'length));
                     rx_svalid  <= '1';
                 end if;
             end if;
@@ -280,9 +307,17 @@ begin
     --                 when COMPLEX_INPUT else (others => '0');
 
     -- conditional signal drivers slice gi/gq instead of chan_i_reg/chan_q_reg here:
-    rx_i_to_demod <= std_logic_vector(gi(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1));
-    rx_q_to_demod <= std_logic_vector(gq(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1))
-                     when COMPLEX_INPUT else (others => '0');
+    --rx_i_to_demod <= std_logic_vector(gi(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1));
+    --rx_q_to_demod <= std_logic_vector(gq(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1))
+    --                 when COMPLEX_INPUT else (others => '0');
+
+
+    -- was: rx_i<=gi, rx_q<=gq
+    rx_i_to_demod <= std_logic_vector(gq(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1));
+    rx_q_to_demod <= std_logic_vector(gi(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1)) 
+                when COMPLEX_INPUT else (others => '0');
+
+
 
     ----------------------------------------------------------------------------
     -- MSK demodulator (complex). Loopback/decoder-lbk tied off.
@@ -367,8 +402,11 @@ begin
     cst_lock_f2 <= lock_f2;
 
     -- debug tap out (aligned: chan_i_reg/chan_q_reg and rx_svalid update on the same edge)
-    dbg_tgt_i     <= chan_i_reg;
-    dbg_tgt_q     <= chan_q_reg;
+    --dbg_tgt_i     <= chan_i_reg; 
+    --dbg_tgt_q     <= chan_q_reg;
+    dbg_tgt_i     <= std_logic_vector(chan_i_dcb); -- flip to these to check the dc blocker
+    dbg_tgt_q     <= std_logic_vector(chan_q_dcb); -- flip to these to check the dc blocker
+
     dbg_tgt_valid <= rx_svalid;
 
     -- concurrent assignments? do they go here?
