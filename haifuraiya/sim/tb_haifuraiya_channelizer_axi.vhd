@@ -117,6 +117,26 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     signal s_axi_ctrl_rvalid  : std_logic;
     signal s_axi_ctrl_rready  : std_logic := '0';
 
+    -- s_axi_demod driver signals (was tied idle at the DUT; now driven so the
+    -- bench can write the demod register file and bracket its init)
+    signal s_axi_demod_awaddr  : std_logic_vector(ADDR_WIDTH - 1 downto 0) := (others => '0');
+    signal s_axi_demod_awvalid : std_logic := '0';
+    signal s_axi_demod_awready : std_logic;
+    signal s_axi_demod_wdata   : std_logic_vector(31 downto 0) := (others => '0');
+    signal s_axi_demod_wstrb   : std_logic_vector(3 downto 0)  := "1111";
+    signal s_axi_demod_wvalid  : std_logic := '0';
+    signal s_axi_demod_wready  : std_logic;
+    signal s_axi_demod_bresp   : std_logic_vector(1 downto 0);
+    signal s_axi_demod_bvalid  : std_logic;
+    signal s_axi_demod_bready  : std_logic := '0';
+    signal s_axi_demod_araddr  : std_logic_vector(ADDR_WIDTH - 1 downto 0) := (others => '0');
+    signal s_axi_demod_arvalid : std_logic := '0';
+    signal s_axi_demod_arready : std_logic;
+    signal s_axi_demod_rdata   : std_logic_vector(31 downto 0);
+    signal s_axi_demod_rresp   : std_logic_vector(1 downto 0);
+    signal s_axi_demod_rvalid  : std_logic;
+    signal s_axi_demod_rready  : std_logic := '0';
+
     ---------------------------------------------------------------------------
     -- Stimulus / capture state
     ---------------------------------------------------------------------------
@@ -145,6 +165,12 @@ architecture sim of tb_haifuraiya_channelizer_axi is
 
     -- true = full regression, false = jump to OPV injection for tuning
     constant RUN_CHANNELIZER_TESTS : boolean := false;
+
+    -- Bracket bypass. true = run the 16-write demod init bracket (test the demod
+    -- path). false = skip it, going channelizer-enable -> injection directly,
+    -- exactly like the old bench that ran the channelizer fine. Flip to false to
+    -- prove the channelizer + feed still work, isolating the bracket as suspect.
+    constant DO_DEMOD_BRACKET : boolean := true;
 
     -- ===== Demod-path integration (added) =====
     constant TARGET_INPUT_BIN : natural := 5; -- channel to listen to first
@@ -182,9 +208,6 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     --constant LPF_I_SHIFT : std_logic_vector(7 downto 0)  := x"1D";       -- 29
     constant SYM_LOCK_CNT : std_logic_vector(9 downto 0)  := "0010000000"; -- 128 (RDL default)
     constant SYM_LOCK_THR : std_logic_vector(15 downto 0) := x"0008"; -- was 0x0018 (decimal 24)
-
-    constant LPF_P_SHIFT : std_logic_vector(7 downto 0)  := x"0D";       -- 13 (was 20)
-    constant LPF_I_SHIFT : std_logic_vector(7 downto 0)  := x"10";       -- 16 (was 29)
 
     signal chan_i_reg  : std_logic_vector(15 downto 0) := (others => '0');
     signal chan_q_reg  : std_logic_vector(15 downto 0) := (others => '0');
@@ -262,17 +285,17 @@ u_rx : entity work.haifuraiya_rx_axi
         s_axi_ctrl_rresp   => s_axi_ctrl_rresp,   s_axi_ctrl_rvalid  => s_axi_ctrl_rvalid,
         s_axi_ctrl_rready  => s_axi_ctrl_rready,
 
-        -- demod AXI-Lite: held idle -> tuning comes from register resets
-        s_axi_demod_awaddr  => (others => '0'), s_axi_demod_awvalid => '0',
-        s_axi_demod_awready => open,
-        s_axi_demod_wdata   => (others => '0'), s_axi_demod_wstrb   => (others => '0'),
-        s_axi_demod_wvalid  => '0',             s_axi_demod_wready  => open,
-        s_axi_demod_bresp   => open,            s_axi_demod_bvalid  => open,
-        s_axi_demod_bready  => '0',
-        s_axi_demod_araddr  => (others => '0'), s_axi_demod_arvalid => '0',
-        s_axi_demod_arready => open,
-        s_axi_demod_rdata   => open,            s_axi_demod_rresp   => open,
-        s_axi_demod_rvalid  => open,            s_axi_demod_rready  => '0',
+        -- demod AXI-Lite: now driven by the bench (axi_write_demod / axi_read_demod)
+        s_axi_demod_awaddr  => s_axi_demod_awaddr,  s_axi_demod_awvalid => s_axi_demod_awvalid,
+        s_axi_demod_awready => s_axi_demod_awready,
+        s_axi_demod_wdata   => s_axi_demod_wdata,   s_axi_demod_wstrb   => s_axi_demod_wstrb,
+        s_axi_demod_wvalid  => s_axi_demod_wvalid,  s_axi_demod_wready  => s_axi_demod_wready,
+        s_axi_demod_bresp   => s_axi_demod_bresp,   s_axi_demod_bvalid  => s_axi_demod_bvalid,
+        s_axi_demod_bready  => s_axi_demod_bready,
+        s_axi_demod_araddr  => s_axi_demod_araddr,  s_axi_demod_arvalid => s_axi_demod_arvalid,
+        s_axi_demod_arready => s_axi_demod_arready,
+        s_axi_demod_rdata   => s_axi_demod_rdata,   s_axi_demod_rresp   => s_axi_demod_rresp,
+        s_axi_demod_rvalid  => s_axi_demod_rvalid,  s_axi_demod_rready  => s_axi_demod_rready,
 
         -- watch these
         frame_sync_locked => frame_sync_locked, frames_received => frames_received,
@@ -457,6 +480,67 @@ u_rx : entity work.haifuraiya_rx_axi
         end procedure;
 
         ---------------------------------------------------------------------
+        -- AXI-Lite WRITE to the DEMOD slave (s_axi_demod).
+        -- Data is std_logic_vector, not integer: the freq words (0xFA732DF5)
+        -- overflow VHDL's 32-bit signed integer. Same single-beat handshake
+        -- as the channelizer slave (AW+W together, then B).
+        ---------------------------------------------------------------------
+        procedure axi_write_demod(constant addr : in integer;
+                                  constant data : in std_logic_vector(31 downto 0)) is
+            variable aw_done, w_done : boolean := false;
+            variable to_cnt          : integer := 0;
+        begin
+            s_axi_demod_awaddr  <= std_logic_vector(to_unsigned(addr, ADDR_WIDTH));
+            s_axi_demod_wdata   <= data;
+            s_axi_demod_awvalid <= '1';
+            s_axi_demod_wvalid  <= '1';
+            s_axi_demod_bready  <= '1';
+            -- Accept AW and W in EITHER order; do not require the same edge.
+            aw_done := false;  w_done := false;
+            while not (aw_done and w_done) loop
+                wait until rising_edge(aclk);
+                if s_axi_demod_awready = '1' then s_axi_demod_awvalid <= '0'; aw_done := true; end if;
+                if s_axi_demod_wready  = '1' then s_axi_demod_wvalid  <= '0'; w_done  := true; end if;
+                to_cnt := to_cnt + 1;
+                assert to_cnt < 1000
+                    report "TIMEOUT in axi_write_demod: awready/wready never asserted (addr 0x" &
+                           to_hstring(to_unsigned(addr, 16)) & ")" severity failure;
+            end loop;
+            -- B-channel response, now with its own timeout. THIS is the wait
+            -- that ran silently to 62 ms: AW and W were accepted but bvalid
+            -- never came back, and there was no guard here.
+            to_cnt := 0;
+            loop
+                wait until rising_edge(aclk);
+                exit when s_axi_demod_bvalid = '1';
+                to_cnt := to_cnt + 1;
+                assert to_cnt < 1000
+                    report "TIMEOUT waiting for bvalid in axi_write_demod (addr 0x" &
+                           to_hstring(to_unsigned(addr, 16)) &
+                           ") -- slave took the write but never responded" severity failure;
+            end loop;
+            s_axi_demod_bready <= '0';
+            wait until rising_edge(aclk);
+        end procedure;
+
+        ---------------------------------------------------------------------
+        -- AXI-Lite READ from the DEMOD slave; returns data in `data_out`.
+        ---------------------------------------------------------------------
+        procedure axi_read_demod(constant addr     : in  integer;
+                                 variable data_out : out std_logic_vector(31 downto 0)) is
+        begin
+            s_axi_demod_araddr  <= std_logic_vector(to_unsigned(addr, ADDR_WIDTH));
+            s_axi_demod_arvalid <= '1';
+            s_axi_demod_rready  <= '1';
+            wait until rising_edge(aclk) and s_axi_demod_arready = '1';
+            s_axi_demod_arvalid <= '0';
+            wait until rising_edge(aclk) and s_axi_demod_rvalid = '1';
+            data_out := s_axi_demod_rdata;
+            s_axi_demod_rready  <= '0';
+            wait until rising_edge(aclk);
+        end procedure;
+
+        ---------------------------------------------------------------------
         -- Drive one input sample via AXIS
         ---------------------------------------------------------------------
         --procedure send_sample(constant re_val : in integer;
@@ -542,6 +626,7 @@ u_rx : entity work.haifuraiya_rx_axi
         variable rdata          : integer;
         variable max_power      : integer;
         variable max_idx        : integer;
+        variable v_demod_ver    : std_logic_vector(31 downto 0);
         variable power_k        : integer;
         variable cycles_per_smp : integer;
         variable tone_phase     : real;
@@ -565,12 +650,14 @@ u_rx : entity work.haifuraiya_rx_axi
         variable n_mid         : integer;
         constant NOISE_AMP     : integer := 3000;   -- input peak; RMS ~1700, like the ADC
         constant NOISE_SAMPLES : integer := 15000;  -- enough frames for the ema_2 cascade to settle
+        --file fin               : text open read_mode is "tone_plus.txt";
         file fin               : text open read_mode is "opv_chan_stim_dc.txt";
         --file fin               : text open read_mode is "opv_chan_stim.txt";
         --file fin               : text open read_mode is "cw_tone_27k_10msps.txt";
         variable l             : line;
         variable iv, qv        : integer;
         variable n_fed         : integer := 0;
+        variable tready_to     : integer := 0;   -- timeout counter for the tready wait
 
     begin
 
@@ -946,6 +1033,57 @@ wait for 1 us;    -- let the design come back up
     axi_write(ADDR_CONTROL, 1);              -- soft reset (bit0=1): core_reset=1, clears the EMA cascade
     axi_write(ADDR_CONTROL, 2);              -- release + enable (bit1=1): core_reset=0, run
     wait for 2 us;                           -- let the reset settle / pipeline re-prime before the burst
+    report "MILESTONE 1: channelizer configured + enabled" severity note;
+
+    -- =========================================================================
+    -- DEMOD INIT BRACKET
+    -- Learned from the standalone msk_top bench: MSK_INIT=1 -> write all config
+    -- -> MSK_INIT=0. The channelizer is up and flowing; hold the demod in init,
+    -- configure it, then release it ONTO the live channel output. Recall
+    -- init = reset_h OR demod_init, so writing the bit re-asserts init even
+    -- though reset_h fell long ago. This is the step the old bench could not do
+    -- (s_axi_demod was tied idle), and the reason the demod never initialized.
+    -- =========================================================================
+    if DO_DEMOD_BRACKET then
+    -- VERSION GATE: which RTL is actually bound in this sim?
+    -- Read DEMOD_VERSION (0x000) BEFORE the first write. Reads ride AR/R,
+    -- independent of the AW/W/B channel that has been hanging, so this
+    -- returns even if the 0x05C write later stalls.
+    --   0x00050000 -> v0.5.0, the current source is bound. Bracket is real RTL.
+    --   0x0003xxxx -> a stale v0.3 register file is bound; purge IP cache/gen.
+    axi_read_demod(16#000#, v_demod_ver);
+    report "DEMOD_VERSION readback = 0x" & to_hstring(v_demod_ver) severity note;
+
+    axi_write_demod(16#05C#, x"00000001");   -- DEMOD_INIT = 1 : hold the loops in reset
+    axi_write_demod(16#004#, x"00000000");   -- CONTROL: rx_invert = 1 (match bring-up.sh)
+    axi_write_demod(16#008#, FREQ_WORD_F1);  -- FREQ_F1   -13550 Hz @ 625 ksps
+    axi_write_demod(16#00C#, FREQ_WORD_F2);  -- FREQ_F2   +13550 Hz
+    axi_write_demod(16#010#, x"007FFFFF");   -- LPF_P_GAIN (max)
+    axi_write_demod(16#014#, x"007FFFFF");   -- LPF_I_GAIN (max)
+    axi_write_demod(16#018#, x"00000000");   -- LPF_ALPHA  (bring-up.sh uses 0x80; standalone used 0 -- A/B if marginal)
+    axi_write_demod(16#01C#, x"00000011");   -- LPF_P_SHIFT = 17  (match bring-up.sh)
+    axi_write_demod(16#020#, x"00000014");   -- LPF_I_SHIFT = 20  (hold I - P = 3)
+    axi_write_demod(16#024#, x"00000010");   -- SYM_LOCK_COUNT = 16  (standalone count; reset default was 128)
+    axi_write_demod(16#028#, x"00000008");   -- SYM_LOCK_THRESHOLD = 8  (CALIBRATE vs CST_IQ_DELTA on real amplitude)
+    axi_write_demod(16#064#, x"00000000");   -- RX_SAMPLE_DISCARD = 0 (not 0x18) 
+    axi_write_demod(16#050#, x"000001F4");   -- QUANT_THR_1 = 500
+    axi_write_demod(16#054#, x"00000578");   -- QUANT_THR_2 = 1400
+    axi_write_demod(16#058#, x"00000AF8");   -- QUANT_THR_3 = 2800
+    axi_write_demod(16#060#, x"00000004");   -- LOOP_CTRL : rx_enable=1, not frozen/zeroed
+    axi_write_demod(16#05C#, x"00000000");   -- DEMOD_INIT = 0 : release onto the live channel output
+
+    axi_read_demod(16#01C#, v_demod_ver);
+    report "READBACK P_SHIFT = 0x" & to_hstring(v_demod_ver) severity note;
+    axi_read_demod(16#020#, v_demod_ver);
+    report "READBACK I_SHIFT = 0x" & to_hstring(v_demod_ver) severity note;
+	
+    wait for 2 us;                           -- let the re-init settle before the burst arrives
+    report "MILESTONE 2: demod bracket complete; endfile(fin)=" &
+           boolean'image(endfile(fin)) severity note;
+    else
+    report "MILESTONE 2 SKIPPED: DO_DEMOD_BRACKET=false (channelizer-only path, like the old bench)"
+           severity note;
+    end if;
 
 while not endfile(fin) loop
     readline(fin, l);
@@ -954,14 +1092,28 @@ while not endfile(fin) loop
     s_axis_data_tdata(15 downto 0)  <= std_logic_vector(to_signed(iv, 16));
     s_axis_data_tdata(31 downto 16) <= std_logic_vector(to_signed(qv, 16));
     s_axis_data_tvalid <= '1';
-    wait until rising_edge(aclk) and s_axis_data_tready = '1';
+    -- wait for tready, but with a bounded timeout so a stuck stream fails loud
+    tready_to := 0;
+    loop
+        wait until rising_edge(aclk);
+        exit when s_axis_data_tready = '1';
+        tready_to := tready_to + 1;
+        assert tready_to < 100000
+            report "TIMEOUT: s_axis_data_tready never asserted (sample " &
+                   integer'image(n_fed) & ")" severity failure;
+    end loop;
     n_fed := n_fed + 1;
+    if n_fed = 1 then
+        report "MILESTONE 3: first sample accepted by the channelizer" severity note;
+    end if;
     s_axis_data_tvalid <= '0';
     for k in 1 to SMP_PERIOD-1 loop
         wait until rising_edge(aclk);
     end loop;
 end loop;
 s_axis_data_tvalid <= '0';
+report "MILESTONE 4: injection complete, fed " & integer'image(n_fed) &
+       " samples" severity note;
 
 
 

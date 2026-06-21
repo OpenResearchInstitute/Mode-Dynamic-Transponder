@@ -101,6 +101,7 @@ foreach f [get_files -of_objects [get_filesets sim_1] -filter {FILE_TYPE == VHDL
 
 # Stage the OPV I/Q stimulus into the xsim working dir (read by p_stim's file
 # playback). Kept in sim/ so it survives the project delete/recreate above.
+#set stim_file [file join [file dirname [info script]] "tone_minus.txt"]
 set stim_file [file join [file dirname [info script]] "opv_chan_stim_dc.txt"]
 #set stim_file [file join [file dirname [info script]] "opv_chan_stim.txt"]
 #set stim_file [file join [file dirname [info script]] "cw_tone_27k_10msps.txt"]
@@ -131,55 +132,124 @@ puts "  - 'TESTS FAILED' error    -> investigate"
 puts "========================================"
 
 
-# demod loop visibility (instance-internal -> not auto-added)
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/lpf_accum_f1}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/lpf_accum_f2}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f1_error}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f2_error}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbg_acc_i_f1}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbg_acc_q_f1}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbg_acc_iq_delta_f1} 
+################################################################################
+# Waveform layout -- collapsible groups, ordered by signal flow (same idiom as
+# the standalone msk_modem bench: add_wave_group + add_wave -into).
+#
+# NEW this round: the Demod_AXI_Init_Bracket group. Watch s_axi_demod_* carry
+# the bracket writes and u_demod/init pulse 1->0 -- the step the old bench could
+# not perform (the demod slave used to be tied idle).
+################################################################################
 
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/tclk}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/frame_sync_locked}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/frames_received}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/cst_lock_f1}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/cst_lock_f2}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/rx_data_soft}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/rx_svalid}
-add_wave_divider "Frame Sync Management"
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_corr_peak}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_correlation}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_state}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_consecutive_good}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_missed_syncs}
-# real hard/soft bit decisions (live, inside the demod)
-add_wave_divider "Bit Decisions"
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_data}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_data_soft}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_dvalid}
-# the corrected bit + valid + combined lock as frame sync sees them
-add_wave_divider "Frame Sync: Corrected Bit + Valid + Combined Symbol Lock"
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/rx_bit}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/rx_bit_valid}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/demod_sync_lock}
-# check tdest channel targeting
-add_wave_divider "TDEST monitor"
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chans_tdata}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chans_tdest}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chans_tvalid}
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chan_i_reg}
-# check clocks and related signals
-add_wave_divider "Clocks and Related"
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f1_nco_adjust} 
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f1_error_int} 
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dclk_slv} 
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dclk} 
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dclk_d} 
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_dec_lbk_tclk} 
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/tclk} 
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/tclk_dly} 
-add_wave {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/lbk_tclk}
+# --- TB progress / counters -------------------------------------------------
+add_wave_group {TB_Control}
+add_wave -into {TB_Control} -radix unsigned {/tb_haifuraiya_channelizer_axi/frames_observed}
+add_wave -into {TB_Control} -radix unsigned {/tb_haifuraiya_channelizer_axi/n_target_samps}
+add_wave -into {TB_Control} -radix unsigned {/tb_haifuraiya_channelizer_axi/n_soft_beats}
+add_wave -into {TB_Control} -radix unsigned {/tb_haifuraiya_channelizer_axi/n_soft_frames}
+add_wave -into {TB_Control} {/tb_haifuraiya_channelizer_axi/running}
 
+# --- control plane: channelizer AXI-Lite writes -----------------------------
+add_wave_group {Channelizer_AXI_Ctrl}
+add_wave -into {Channelizer_AXI_Ctrl} -radix hex {/tb_haifuraiya_channelizer_axi/s_axi_ctrl_awaddr}
+add_wave -into {Channelizer_AXI_Ctrl} {/tb_haifuraiya_channelizer_axi/s_axi_ctrl_awvalid}
+add_wave -into {Channelizer_AXI_Ctrl} -radix hex {/tb_haifuraiya_channelizer_axi/s_axi_ctrl_wdata}
+add_wave -into {Channelizer_AXI_Ctrl} {/tb_haifuraiya_channelizer_axi/s_axi_ctrl_wvalid}
+add_wave -into {Channelizer_AXI_Ctrl} {/tb_haifuraiya_channelizer_axi/s_axi_ctrl_bvalid}
+
+# --- NEW control plane: demod AXI-Lite init bracket -------------------------
+#   cause (AXI writes) + effect (init / rx_enable inside the demod)
+add_wave_group {Demod_AXI_Init_Bracket}
+add_wave -into {Demod_AXI_Init_Bracket} -radix hex {/tb_haifuraiya_channelizer_axi/s_axi_demod_awaddr}
+add_wave -into {Demod_AXI_Init_Bracket} {/tb_haifuraiya_channelizer_axi/s_axi_demod_awvalid}
+add_wave -into {Demod_AXI_Init_Bracket} {/tb_haifuraiya_channelizer_axi/s_axi_demod_awready}
+add_wave -into {Demod_AXI_Init_Bracket} -radix hex {/tb_haifuraiya_channelizer_axi/s_axi_demod_wdata}
+add_wave -into {Demod_AXI_Init_Bracket} {/tb_haifuraiya_channelizer_axi/s_axi_demod_wvalid}
+add_wave -into {Demod_AXI_Init_Bracket} {/tb_haifuraiya_channelizer_axi/s_axi_demod_wready}
+add_wave -into {Demod_AXI_Init_Bracket} {/tb_haifuraiya_channelizer_axi/s_axi_demod_bvalid}
+add_wave -into {Demod_AXI_Init_Bracket} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/init}
+add_wave -into {Demod_AXI_Init_Bracket} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_enable}
+
+# --- channelizer INPUT stream: the burst going IN.  WATCH tready: if tvalid
+#     sits high while tready stays low, p_stim is stalled at the injection-loop
+#     wait (tb line ~1046) because the core is not accepting samples.
+add_wave_group {Channelizer_Input}
+add_wave -into {Channelizer_Input}            {/tb_haifuraiya_channelizer_axi/s_axis_data_tvalid}
+add_wave -into {Channelizer_Input}            {/tb_haifuraiya_channelizer_axi/s_axis_data_tready}
+add_wave -into {Channelizer_Input} -radix hex {/tb_haifuraiya_channelizer_axi/s_axis_data_tdata}
+
+# --- channelizer output / channel targeting ---------------------------------
+add_wave_group {Channelizer_Output_TDEST}
+add_wave -into {Channelizer_Output_TDEST} -radix hex      {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chans_tdata}
+add_wave -into {Channelizer_Output_TDEST} -radix unsigned {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chans_tdest}
+add_wave -into {Channelizer_Output_TDEST}                 {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chans_tvalid}
+
+# --- samples handed to the demod --------------------------------------------
+add_wave_group {Demod_Input}
+add_wave -into {Demod_Input}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/rx_svalid}
+add_wave -into {Demod_Input} -radix hex {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chan_i_reg}
+add_wave -into {Demod_Input} -radix hex {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/chan_q_reg}
+add_wave -into {Demod_Input} -radix unsigned {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/discard_rxnco}
+
+# --- Costas carrier recovery (f1 & f2) --------------------------------------
+add_wave_group {Costas_Loops}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/lpf_accum_f1}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/lpf_accum_f2}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f1_error}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f2_error}
+add_wave -into {Costas_Loops} -radix hex {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f1_nco_adjust}
+add_wave -into {Costas_Loops} -radix hex {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/f2_nco_adjust}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/cst_lock_f1}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/cst_lock_f2}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbg_acc_i_f1}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbg_acc_q_f1}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbg_acc_iq_delta_f1}
+
+# --- Costas Math ------------------------------------------------------------
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/u_f1/rx_cos_acc}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/u_f1/rx_sin_acc}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/u_f1/rx_cos_dump}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/u_f1/rx_sin_dump}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/data_f1}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/u_f2/rx_cos_acc}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/u_f2/rx_sin_acc}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/u_f2/rx_cos_dump}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/u_f2/rx_sin_dump}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/data_f2}
+
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/U_f1/u_lock_detect/acc_valid}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/U_f2/u_lock_detect/acc_valid}  
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/U_f1/u_lock_detect/icntr}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/U_f2/u_lock_detect/icntr}  
+
+
+# --- bit decisions ----------------------------------------------------------
+add_wave_group {Bit_Decisions}
+add_wave -into {Bit_Decisions} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_data}
+add_wave -into {Bit_Decisions} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_data_soft}
+add_wave -into {Bit_Decisions} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_dvalid}
+
+# --- frame sync -------------------------------------------------------------
+add_wave_group {Frame_Sync}
+add_wave -into {Frame_Sync}                 {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/frame_sync_locked}
+add_wave -into {Frame_Sync} -radix unsigned {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/frames_received}
+add_wave -into {Frame_Sync} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_corr_peak}
+add_wave -into {Frame_Sync} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_correlation}
+add_wave -into {Frame_Sync} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_state}
+add_wave -into {Frame_Sync} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_consecutive_good}
+add_wave -into {Frame_Sync} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/debug_missed_syncs}
+add_wave -into {Frame_Sync} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/rx_bit}
+add_wave -into {Frame_Sync} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/rx_bit_valid}
+add_wave -into {Frame_Sync} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_fsync/demod_sync_lock}
+
+# --- clocks / timing recovery -----------------------------------------------
+add_wave_group {Clocks}
+add_wave -into {Clocks} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/tclk}
+add_wave -into {Clocks} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/tclk_dly}
+add_wave -into {Clocks} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dclk}
+add_wave -into {Clocks} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dclk_d}
+add_wave -into {Clocks} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dclk_slv}
+add_wave -into {Clocks} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_dec_lbk_tclk}
+add_wave -into {Clocks} {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/lbk_tclk}
 
 run all

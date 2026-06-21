@@ -38,10 +38,41 @@
 --   0x020  LPF_I_SHIFT          RW   integral shift                 [7:0]
 --   0x024  SYM_LOCK_COUNT       RW   symbol lock count              [9:0]
 --   0x028  SYM_LOCK_THRESHOLD   RW   symbol lock threshold          [15:0]
+--   0x030  GAIN_MANUAL          RW   manual gain (Q6.10)            [15:0]
+--   0x038  GAIN_CURRENT         RO   current gain (Q6.10)           [15:0]
 --   0x040  DEMOD_STATUS         RO   bit 0: frame_sync_locked
 --                                    bit 1: cst_lock_f1
 --                                    bit 2: cst_lock_f2
 --   0x044  FRAMES_RECEIVED      RO   frames decoded since reset
+--   0x048  FS_HUNT_THRESH       RW   frame-sync hunt threshold
+--   0x04C  FS_VERIFY_THRESH     RW   frame-sync verify threshold
+--   0x050  QUANT_THR_1          RW   soft-bit quantizer threshold 1 [15:0]
+--   0x054  QUANT_THR_2          RW   soft-bit quantizer threshold 2 [15:0]
+--   0x058  QUANT_THR_3          RW   soft-bit quantizer threshold 3 [15:0]
+--
+--   --- demod control plane added (mirrors pluto_msk msk_demodulator ports) -
+--   0x05C  DEMOD_INIT           RW   bit 0: rx_init (write 1 then 0 = re-init)
+--   0x060  LOOP_CTRL            RW   bit 0: lpf_freeze
+--                                    bit 1: lpf_zero
+--                                    bit 2: rx_enable (reset 1)
+--   0x064  RX_SAMPLE_DISCARD    RW   discard_rxnco                  [7:0]
+--
+--   --- demod loop telemetry added (read-only, live) ----------------------
+--   0x068  F1_NCO_ADJUST        RO   f1 carrier NCO adjust (drift)  [31:0]
+--   0x06C  F2_NCO_ADJUST        RO   f2 carrier NCO adjust (drift)  [31:0]
+--   0x070  F1_ERROR             RO   f1 Costas loop error           [31:0]
+--   0x074  F2_ERROR             RO   f2 Costas loop error           [31:0]
+--   0x078  LPF_ACCUM_F1         RO   f1 loop-filter accumulator     [31:0]
+--   0x07C  LPF_ACCUM_F2         RO   f2 loop-filter accumulator     [31:0]
+--   0x080  CST_LOCKTIME_F1      RO   f1 symbols-held counter        [15:0]
+--   0x084  CST_LOCKTIME_F2      RO   f2 symbols-held counter        [15:0]
+--   0x088  LOCK_STATUS          RO   bit 0: cst_lock_f1
+--                                    bit 1: cst_lock_f2
+--                                    bit 2: cst_unlock_f1 (sticky in core)
+--                                    bit 3: cst_unlock_f2 (sticky in core)
+--   0x08C  CST_ACC_I_F1         RO   f1 symbol-lock cal tap (acc I) [31:0]
+--   0x090  CST_ACC_Q_F1         RO   f1 symbol-lock cal tap (acc Q) [31:0]
+--   0x094  CST_IQ_DELTA_F1      RO   f1 symbol-lock cal tap (delta) [31:0]
 --
 -------------------------------------------------------------------------------
 -- IMPLEMENTATION NOTES
@@ -50,6 +81,12 @@
 -- write path, one for the read path). Always-ready when idle; never
 -- reordered; no outstanding transactions. Identical handshake to
 -- axi_lite_regs.vhd.
+--
+-- The control-plane outputs (DEMOD_INIT, LOOP_CTRL, RX_SAMPLE_DISCARD) carry
+-- the msk_demodulator ports that rx_top previously tied off as constants.
+-- The telemetry inputs are the demod's live loop signals -- most are already
+-- routed to rx_top's dbg_* outputs for the ILA; this just also makes them
+-- devmem-readable. f1/f2_nco_adjust are new rx_top outputs (were => open).
 -------------------------------------------------------------------------------
 
 library ieee;
@@ -60,7 +97,7 @@ entity haifuraiya_demod_regs is
     generic (
         ADDR_WIDTH    : positive := 12;   -- 4 KB window
         VERSION_MAJOR : natural  := 0;
-        VERSION_MINOR : natural  := 3;
+        VERSION_MINOR : natural  := 5;    -- bumped: expanded demod control plane
         VERSION_PATCH : natural  := 0
     );
     port (
@@ -109,13 +146,40 @@ entity haifuraiya_demod_regs is
         quant_thr_3           : out std_logic_vector(15 downto 0);
 
         ---------------------------------------------------------------------
+        -- NEW: demod control outputs (rx_top -> msk_demodulator)
+        -- These carry ports rx_top previously tied off as constants.
+        ---------------------------------------------------------------------
+        demod_init            : out std_logic;
+        lpf_freeze            : out std_logic;
+        lpf_zero              : out std_logic;
+        rx_enable             : out std_logic;
+        rx_sample_discard     : out std_logic_vector(7 downto 0);
+
+        ---------------------------------------------------------------------
         -- Inputs from rx_top (status / telemetry)
         ---------------------------------------------------------------------
         frame_sync_locked : in  std_logic;
         frames_received   : in  std_logic_vector(31 downto 0);
         cst_lock_f1       : in  std_logic;
         cst_lock_f2       : in  std_logic;
-        gain_current      : in std_logic_vector(15 downto 0)
+        gain_current      : in  std_logic_vector(15 downto 0);
+
+        ---------------------------------------------------------------------
+        -- NEW: demod loop telemetry inputs (rx_top <- msk_demodulator)
+        ---------------------------------------------------------------------
+        f1_nco_adjust     : in  std_logic_vector(31 downto 0);
+        f2_nco_adjust     : in  std_logic_vector(31 downto 0);
+        f1_error          : in  std_logic_vector(31 downto 0);
+        f2_error          : in  std_logic_vector(31 downto 0);
+        lpf_accum_f1      : in  std_logic_vector(31 downto 0);
+        lpf_accum_f2      : in  std_logic_vector(31 downto 0);
+        cst_lock_time_f1  : in  std_logic_vector(15 downto 0);
+        cst_lock_time_f2  : in  std_logic_vector(15 downto 0);
+        cst_unlock_f1     : in  std_logic;
+        cst_unlock_f2     : in  std_logic;
+        cst_acc_i_f1      : in  std_logic_vector(31 downto 0);
+        cst_acc_q_f1      : in  std_logic_vector(31 downto 0);
+        cst_iq_delta_f1   : in  std_logic_vector(31 downto 0)
     );
 end entity haifuraiya_demod_regs;
 
@@ -149,6 +213,13 @@ architecture rtl of haifuraiya_demod_regs is
     signal reg_quant_thr_2        : std_logic_vector(15 downto 0) := x"0578";       -- 1400
     signal reg_quant_thr_3        : std_logic_vector(15 downto 0) := x"0AF8";       -- 2800
 
+    -- NEW: demod control-plane storage
+    signal reg_demod_init         : std_logic                    := '0';
+    signal reg_lpf_freeze         : std_logic                    := '0';
+    signal reg_lpf_zero           : std_logic                    := '0';
+    signal reg_rx_enable          : std_logic                    := '1';  -- run by default
+    signal reg_rx_sample_discard  : std_logic_vector(7 downto 0) := x"00";
+
     ---------------------------------------------------------------------------
     -- Address constants
     ---------------------------------------------------------------------------
@@ -172,6 +243,23 @@ architecture rtl of haifuraiya_demod_regs is
     constant ADDR_QUANT_THR_1      : std_logic_vector(11 downto 0) := x"050";
     constant ADDR_QUANT_THR_2      : std_logic_vector(11 downto 0) := x"054";
     constant ADDR_QUANT_THR_3      : std_logic_vector(11 downto 0) := x"058";
+    -- NEW: demod control
+    constant ADDR_DEMOD_INIT       : std_logic_vector(11 downto 0) := x"05C";
+    constant ADDR_LOOP_CTRL        : std_logic_vector(11 downto 0) := x"060";
+    constant ADDR_RX_SAMPLE_DISCARD: std_logic_vector(11 downto 0) := x"064";
+    -- NEW: demod telemetry (read-only)
+    constant ADDR_F1_NCO_ADJUST    : std_logic_vector(11 downto 0) := x"068";
+    constant ADDR_F2_NCO_ADJUST    : std_logic_vector(11 downto 0) := x"06C";
+    constant ADDR_F1_ERROR         : std_logic_vector(11 downto 0) := x"070";
+    constant ADDR_F2_ERROR         : std_logic_vector(11 downto 0) := x"074";
+    constant ADDR_LPF_ACCUM_F1     : std_logic_vector(11 downto 0) := x"078";
+    constant ADDR_LPF_ACCUM_F2     : std_logic_vector(11 downto 0) := x"07C";
+    constant ADDR_CST_LOCKTIME_F1  : std_logic_vector(11 downto 0) := x"080";
+    constant ADDR_CST_LOCKTIME_F2  : std_logic_vector(11 downto 0) := x"084";
+    constant ADDR_LOCK_STATUS      : std_logic_vector(11 downto 0) := x"088";
+    constant ADDR_CST_ACC_I_F1     : std_logic_vector(11 downto 0) := x"08C";
+    constant ADDR_CST_ACC_Q_F1     : std_logic_vector(11 downto 0) := x"090";
+    constant ADDR_CST_IQ_DELTA_F1  : std_logic_vector(11 downto 0) := x"094";
 
     -- VERSION fixed value: {major, minor, patch, 0x00}
     constant VERSION_WORD : std_logic_vector(31 downto 0) :=
@@ -219,6 +307,13 @@ begin
     quant_thr_2           <= reg_quant_thr_2;
     quant_thr_3           <= reg_quant_thr_3;
 
+    -- NEW: demod control-plane outputs
+    demod_init            <= reg_demod_init;
+    lpf_freeze            <= reg_lpf_freeze;
+    lpf_zero              <= reg_lpf_zero;
+    rx_enable             <= reg_rx_enable;
+    rx_sample_discard     <= reg_rx_sample_discard;
+
     ---------------------------------------------------------------------------
     -- WRITE PATH
     ---------------------------------------------------------------------------
@@ -255,7 +350,12 @@ begin
                 reg_quant_thr_1        <= x"01F4";       -- 500
                 reg_quant_thr_2        <= x"0578";       -- 1400
                 reg_quant_thr_3        <= x"0AF8";       -- 2800
-
+                -- NEW: demod control plane resets
+                reg_demod_init         <= '0';
+                reg_lpf_freeze         <= '0';
+                reg_lpf_zero           <= '0';
+                reg_rx_enable          <= '1';
+                reg_rx_sample_discard  <= x"00";
 
             else
                 case w_state is
@@ -293,7 +393,7 @@ begin
                                 reg_sym_lock_count <= s_axi_wdata(9 downto 0);
                             when ADDR_SYM_THR =>
                                 reg_sym_lock_threshold <= s_axi_wdata(15 downto 0);
-                            when ADDR_GAIN_MANUAL => 
+                            when ADDR_GAIN_MANUAL =>
                                 reg_gain_manual <= s_axi_wdata(15 downto 0);
                             when ADDR_FS_HUNT_THRESH =>
                                 reg_fs_hunt_thresh <= s_axi_wdata(31 downto 0);
@@ -305,6 +405,15 @@ begin
                                 reg_quant_thr_2 <= s_axi_wdata(15 downto 0);
                             when ADDR_QUANT_THR_3 =>
                                 reg_quant_thr_3 <= s_axi_wdata(15 downto 0);
+                            -- NEW: demod control plane writes
+                            when ADDR_DEMOD_INIT =>
+                                reg_demod_init <= s_axi_wdata(0);
+                            when ADDR_LOOP_CTRL =>
+                                reg_lpf_freeze <= s_axi_wdata(0);
+                                reg_lpf_zero   <= s_axi_wdata(1);
+                                reg_rx_enable  <= s_axi_wdata(2);
+                            when ADDR_RX_SAMPLE_DISCARD =>
+                                reg_rx_sample_discard <= s_axi_wdata(7 downto 0);
                             when others =>
                                 null;  -- writes to RO addresses ignored
                         end case;
@@ -390,9 +499,9 @@ begin
                                 r_data_int(2) <= cst_lock_f2;
                             when ADDR_FRAMES_RX =>
                                 r_data_int <= frames_received;
-                            when ADDR_GAIN_MANUAL => 
+                            when ADDR_GAIN_MANUAL =>
                                 r_data_int <= x"0000" & reg_gain_manual;
-                            when ADDR_GAIN_CURRENT => 
+                            when ADDR_GAIN_CURRENT =>
                                 r_data_int <= x"0000" & gain_current;
                             when ADDR_FS_HUNT_THRESH =>
                                 r_data_int <= reg_fs_hunt_thresh;
@@ -404,6 +513,47 @@ begin
                                 r_data_int <= x"0000" & reg_quant_thr_2;
                             when ADDR_QUANT_THR_3 =>
                                 r_data_int <= x"0000" & reg_quant_thr_3;
+                            -- NEW: demod control-plane readback
+                            when ADDR_DEMOD_INIT =>
+                                r_data_int    <= (others => '0');
+                                r_data_int(0) <= reg_demod_init;
+                            when ADDR_LOOP_CTRL =>
+                                r_data_int    <= (others => '0');
+                                r_data_int(0) <= reg_lpf_freeze;
+                                r_data_int(1) <= reg_lpf_zero;
+                                r_data_int(2) <= reg_rx_enable;
+                            when ADDR_RX_SAMPLE_DISCARD =>
+                                r_data_int <= (others => '0');
+                                r_data_int(7 downto 0) <= reg_rx_sample_discard;
+                            -- NEW: demod telemetry (live, read-only)
+                            when ADDR_F1_NCO_ADJUST =>
+                                r_data_int <= f1_nco_adjust;
+                            when ADDR_F2_NCO_ADJUST =>
+                                r_data_int <= f2_nco_adjust;
+                            when ADDR_F1_ERROR =>
+                                r_data_int <= f1_error;
+                            when ADDR_F2_ERROR =>
+                                r_data_int <= f2_error;
+                            when ADDR_LPF_ACCUM_F1 =>
+                                r_data_int <= lpf_accum_f1;
+                            when ADDR_LPF_ACCUM_F2 =>
+                                r_data_int <= lpf_accum_f2;
+                            when ADDR_CST_LOCKTIME_F1 =>
+                                r_data_int <= x"0000" & cst_lock_time_f1;
+                            when ADDR_CST_LOCKTIME_F2 =>
+                                r_data_int <= x"0000" & cst_lock_time_f2;
+                            when ADDR_LOCK_STATUS =>
+                                r_data_int    <= (others => '0');
+                                r_data_int(0) <= cst_lock_f1;
+                                r_data_int(1) <= cst_lock_f2;
+                                r_data_int(2) <= cst_unlock_f1;
+                                r_data_int(3) <= cst_unlock_f2;
+                            when ADDR_CST_ACC_I_F1 =>
+                                r_data_int <= cst_acc_i_f1;
+                            when ADDR_CST_ACC_Q_F1 =>
+                                r_data_int <= cst_acc_q_f1;
+                            when ADDR_CST_IQ_DELTA_F1 =>
+                                r_data_int <= cst_iq_delta_f1;
                             when others =>
                                 r_data_int <= (others => '0');
                         end case;

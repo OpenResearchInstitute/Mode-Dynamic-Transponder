@@ -812,7 +812,7 @@
     <spirit:usage>register</spirit:usage>
     <spirit:register>
       <spirit:name>DEMOD_VERSION</spirit:name>
-      <spirit:description>Major.minor.patch version. Reads 0x00030000 = v0.3.0.</spirit:description>
+      <spirit:description>Major.minor.patch version. Reads 0x00050000 = v0.5.0.</spirit:description>
       <spirit:addressOffset>0x000</spirit:addressOffset>
       <spirit:size spirit:format="long">32</spirit:size>
       <spirit:access>read-only</spirit:access>
@@ -888,6 +888,20 @@
       <spirit:access>read-write</spirit:access>
     </spirit:register>
     <spirit:register>
+      <spirit:name>GAIN_MANUAL</spirit:name>
+      <spirit:description>Manual AGC gain [15:0]. Reset 0x0C00.</spirit:description>
+      <spirit:addressOffset>0x030</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-write</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>GAIN_CURRENT</spirit:name>
+      <spirit:description>Current AGC gain [15:0]. Live.</spirit:description>
+      <spirit:addressOffset>0x038</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
       <spirit:name>DEMOD_STATUS</spirit:name>
       <spirit:description>Bit 0: frame_sync_locked. Bit 1: cst_lock_f1. Bit 2: cst_lock_f2.</spirit:description>
       <spirit:addressOffset>0x040</spirit:addressOffset>
@@ -898,6 +912,146 @@
       <spirit:name>FRAMES_RECEIVED</spirit:name>
       <spirit:description>Frames decoded since reset.</spirit:description>
       <spirit:addressOffset>0x044</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>FS_HUNT_THRESH</spirit:name>
+      <spirit:description>Frame-sync hunt correlation threshold [31:0]. Reset 0x00009470.</spirit:description>
+      <spirit:addressOffset>0x048</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-write</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>FS_VERIFY_THRESH</spirit:name>
+      <spirit:description>Frame-sync verify correlation threshold [31:0]. Reset 0x00005DC0 (24000).</spirit:description>
+      <spirit:addressOffset>0x04C</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-write</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>QUANT_THR_1</spirit:name>
+      <spirit:description>Soft-bit quantizer threshold 1 [15:0]. Reset 0x01F4 (500).</spirit:description>
+      <spirit:addressOffset>0x050</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-write</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>QUANT_THR_2</spirit:name>
+      <spirit:description>Soft-bit quantizer threshold 2 [15:0]. Reset 0x0578 (1400).</spirit:description>
+      <spirit:addressOffset>0x054</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-write</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>QUANT_THR_3</spirit:name>
+      <spirit:description>Soft-bit quantizer threshold 3 [15:0]. Reset 0x0AF8 (2800).</spirit:description>
+      <spirit:addressOffset>0x058</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-write</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>DEMOD_INIT</spirit:name>
+      <spirit:description>Bit 0: demod_init. 1 = hold demod in synchronous init. Reset 0.</spirit:description>
+      <spirit:addressOffset>0x05C</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-write</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>LOOP_CTRL</spirit:name>
+      <spirit:description>Bit 0: lpf_freeze. Bit 1: lpf_zero. Bit 2: rx_enable. Reset rx_enable=1.</spirit:description>
+      <spirit:addressOffset>0x060</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-write</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>RX_SAMPLE_DISCARD</spirit:name>
+      <spirit:description>Input samples discarded after enable [7:0]. Reset 0x00.</spirit:description>
+      <spirit:addressOffset>0x064</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-write</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>F1_NCO_ADJUST</spirit:name>
+      <spirit:description>F1 Costas NCO frequency adjust. Live telemetry.</spirit:description>
+      <spirit:addressOffset>0x068</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>F2_NCO_ADJUST</spirit:name>
+      <spirit:description>F2 Costas NCO frequency adjust. Live telemetry.</spirit:description>
+      <spirit:addressOffset>0x06C</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>F1_ERROR</spirit:name>
+      <spirit:description>F1 Costas phase error. Live telemetry.</spirit:description>
+      <spirit:addressOffset>0x070</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>F2_ERROR</spirit:name>
+      <spirit:description>F2 Costas phase error. Live telemetry.</spirit:description>
+      <spirit:addressOffset>0x074</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>LPF_ACCUM_F1</spirit:name>
+      <spirit:description>F1 loop-filter accumulator. Live telemetry.</spirit:description>
+      <spirit:addressOffset>0x078</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>LPF_ACCUM_F2</spirit:name>
+      <spirit:description>F2 loop-filter accumulator. Live telemetry.</spirit:description>
+      <spirit:addressOffset>0x07C</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>CST_LOCKTIME_F1</spirit:name>
+      <spirit:description>F1 Costas lock dwell time [15:0]. Live telemetry.</spirit:description>
+      <spirit:addressOffset>0x080</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>CST_LOCKTIME_F2</spirit:name>
+      <spirit:description>F2 Costas lock dwell time [15:0]. Live telemetry.</spirit:description>
+      <spirit:addressOffset>0x084</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>LOCK_STATUS</spirit:name>
+      <spirit:description>Bit 0: cst_lock_f1. Bit 1: cst_lock_f2. Bit 2: cst_unlock_f1. Bit 3: cst_unlock_f2.</spirit:description>
+      <spirit:addressOffset>0x088</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>CST_ACC_I_F1</spirit:name>
+      <spirit:description>F1 Costas I accumulator. Live telemetry.</spirit:description>
+      <spirit:addressOffset>0x08C</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>CST_ACC_Q_F1</spirit:name>
+      <spirit:description>F1 Costas Q accumulator. Live telemetry.</spirit:description>
+      <spirit:addressOffset>0x090</spirit:addressOffset>
+      <spirit:size spirit:format="long">32</spirit:size>
+      <spirit:access>read-only</spirit:access>
+    </spirit:register>
+    <spirit:register>
+      <spirit:name>CST_IQ_DELTA_F1</spirit:name>
+      <spirit:description>F1 Costas I/Q delta. Live telemetry.</spirit:description>
+      <spirit:addressOffset>0x094</spirit:addressOffset>
       <spirit:size spirit:format="long">32</spirit:size>
       <spirit:access>read-only</spirit:access>
     </spirit:register>
@@ -2378,7 +2532,6 @@
     <xilinx:packagingInfo>
       <xilinx:xilinxVersion>2022.2</xilinx:xilinxVersion>
       <xilinx:checksum xilinx:scope="busInterfaces" xilinx:value="6c84cd56"/>
-      <xilinx:checksum xilinx:scope="memoryMaps" xilinx:value="14c3f1fe"/>
       <xilinx:checksum xilinx:scope="fileGroups" xilinx:value="85d15f00"/>
       <xilinx:checksum xilinx:scope="ports" xilinx:value="39539d4b"/>
       <xilinx:checksum xilinx:scope="hdlParameters" xilinx:value="e1f64911"/>

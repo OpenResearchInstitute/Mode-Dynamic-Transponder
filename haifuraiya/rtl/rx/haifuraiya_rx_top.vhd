@@ -78,6 +78,17 @@ entity haifuraiya_rx_top is
         symbol_lock_count     : in  std_logic_vector(9 downto 0);
         symbol_lock_threshold : in  std_logic_vector(15 downto 0);
         rx_invert             : in std_logic;
+        
+        -- demod control plane (from regs)
+        demod_init            : in  std_logic;
+        lpf_freeze            : in  std_logic;
+        lpf_zero              : in  std_logic;
+        rx_enable             : in  std_logic;
+        rx_sample_discard     : in  std_logic_vector(7 downto 0);
+
+        -- carrier NCO adjust (drift) -> regs
+        f1_nco_adjust         : out std_logic_vector(31 downto 0);
+        f2_nco_adjust         : out std_logic_vector(31 downto 0);
 
         -- status / telemetry
         frame_sync_locked : out std_logic;
@@ -99,6 +110,9 @@ entity haifuraiya_rx_top is
         -- frame sync thresholds
         fs_hunt_thresh    : in std_logic_vector(31 downto 0);
         fs_verify_thresh  : in std_logic_vector(31 downto 0);
+        quant_thr_1       : in std_logic_vector(15 downto 0);
+        quant_thr_2       : in std_logic_vector(15 downto 0);
+        quant_thr_3       : in std_logic_vector(15 downto 0);
 
         -- frame-sync taps
         dbg_fs_state      : out std_logic_vector(2 downto 0);
@@ -134,7 +148,8 @@ architecture rtl of haifuraiya_rx_top is
     -- Confirm by measuring the channel-0 I amplitude with the real 20 Msps stimulus.
     constant RX_SLICE_HI    : natural := 13; -- was 15, now 13 to fix alignment issue
 
-    signal reset_h : std_logic;         -- active-high reset for the modem blocks
+    signal reset_h      : std_logic;         -- active-high reset for the modem blocks
+    signal demod_init_h : std_logic;
 
     -- channelizer per-channel output bus
     signal chans_tdata  : std_logic_vector(31 downto 0);
@@ -182,6 +197,7 @@ architecture rtl of haifuraiya_rx_top is
 begin
 
     reset_h <= not aresetn;
+    demod_init_h <= reset_h or demod_init;
 
     -- accept every channel beat; act only on the target
     chans_tready <= '1';
@@ -302,24 +318,29 @@ begin
         )
         port map (
             clk  => aclk,
-            init => reset_h,
+            init => demod_init_h,      -- was reset_h
+
 
             rx_freq_word_f1 => rx_freq_word_f1,
             rx_freq_word_f2 => rx_freq_word_f2,
-            discard_rxnco   => (others => '0'),
+            discard_rxnco => rx_sample_discard, -- was (others => '0')
+
 
             lpf_p_gain  => lpf_p_gain,
             lpf_i_gain  => lpf_i_gain,
             lpf_p_shift => lpf_p_shift,
             lpf_i_shift => lpf_i_shift,
-            lpf_freeze  => '0',
-            lpf_zero    => '0',
             lpf_alpha   => lpf_alpha,
+            lpf_freeze  => lpf_freeze,        -- was '0'
+            lpf_zero    => lpf_zero,          -- was '0'
+
 
             --lpf_accum_f1 => open,
             --lpf_accum_f2 => open,
-            f1_nco_adjust => open,
-            f2_nco_adjust => open,
+            f1_nco_adjust => f1_nco_adjust,     -- was open
+            f2_nco_adjust => f2_nco_adjust,     -- was open
+
+
             --f1_error => open,
             --f2_error => open,
 
@@ -328,7 +349,7 @@ begin
             rx_dec_lbk_f1   => (others => '0'),
             rx_dec_lbk_f2   => (others => '0'),
 
-            rx_enable  => '1',
+            rx_enable     => rx_enable,         -- was '1'
             rx_svalid  => rx_svalid,
             --rx_samples => chan_i_reg(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1),
             rx_i_samples => rx_i_to_demod,
@@ -351,6 +372,7 @@ begin
             --dbg_acc_i_f1       => open,
             --dbg_acc_q_f1       => open,
             --dbg_acc_iq_delta_f1 => open,
+
 
             dbg_acc_iq_delta_f1 => dbg_cst_iq_delta, --remapped
             dbg_acc_i_f1        => dbg_cst_acc_i, --remapped
@@ -415,6 +437,9 @@ begin
             frames_received        => frames_received,
             frame_sync_errors      => open,
             frame_buffer_overflow  => open,
+            quant_thr_1_i          => quant_thr_1,
+            quant_thr_2_i          => quant_thr_2,
+            quant_thr_3_i          => quant_thr_3,
 
             demod_sync_lock => demod_lock,
 

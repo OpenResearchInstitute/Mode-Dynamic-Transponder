@@ -11,7 +11,7 @@
 -------------------------------------------------------------------------------
 -- OVERVIEW
 -------------------------------------------------------------------------------
--- The PS-facing skin packaged as the Haifuraiya receiver IP (v0.4). Pure
+-- The PS-facing skin packaged as the Haifuraiya receiver IP (v0.5). Pure
 -- structural stitching -- no logic, no registers, no FSMs of its own:
 --
 --   haifuraiya_rx_axi            <- this file: the IP boundary
@@ -164,9 +164,20 @@ architecture rtl of haifuraiya_rx_axi is
     -- frame sync thresholds
     signal cfg_fs_hunt_thresh     : std_logic_vector(31 downto 0);
     signal cfg_fs_verify_thresh   : std_logic_vector(31 downto 0);
+    signal cfg_quant_thr_1        : std_logic_vector(15 downto 0);
+    signal cfg_quant_thr_2        : std_logic_vector(15 downto 0);
+    signal cfg_quant_thr_3        : std_logic_vector(15 downto 0);
 
     signal cfg_gain_manual        : std_logic_vector(15 downto 0);
     signal sts_gain_current       : std_logic_vector(15 downto 0);
+
+    signal cfg_demod_init         : std_logic;
+    signal cfg_lpf_freeze         : std_logic;
+    signal cfg_lpf_zero           : std_logic;
+    signal cfg_rx_enable          : std_logic;
+    signal cfg_rx_sample_discard  : std_logic_vector(7 downto 0);
+    signal demod_f1_nco_adjust    : std_logic_vector(31 downto 0);
+    signal demod_f2_nco_adjust    : std_logic_vector(31 downto 0);
 
 begin
 
@@ -185,7 +196,7 @@ begin
         generic map (
             ADDR_WIDTH    => C_S_AXI_DEMOD_ADDR_WIDTH,
             VERSION_MAJOR => 0,
-            VERSION_MINOR => 4,
+            VERSION_MINOR => 5,
             VERSION_PATCH => 0
         )
         port map (
@@ -227,9 +238,27 @@ begin
             cst_lock_f2           => sts_cst_lock_f2,
             fs_hunt_thresh        => cfg_fs_hunt_thresh,
             fs_verify_thresh      => cfg_fs_verify_thresh,
-            quant_thr_1           => open,
-            quant_thr_2           => open,
-            quant_thr_3           => open,
+            quant_thr_1           => cfg_quant_thr_1,
+            quant_thr_2           => cfg_quant_thr_2,
+            quant_thr_3           => cfg_quant_thr_3,
+            demod_init            => cfg_demod_init,
+            lpf_freeze            => cfg_lpf_freeze,
+            lpf_zero              => cfg_lpf_zero,
+            rx_enable             => cfg_rx_enable,
+            rx_sample_discard     => cfg_rx_sample_discard,
+            f1_nco_adjust         => demod_f1_nco_adjust,
+            f2_nco_adjust         => demod_f2_nco_adjust,
+            f1_error              => dbg_f1_err,
+            f2_error              => dbg_f2_err,
+            lpf_accum_f1          => dbg_lpf_acc_f1,
+            lpf_accum_f2          => dbg_lpf_acc_f2,
+            cst_lock_time_f1      => dbg_cst_locktime_f1,
+            cst_lock_time_f2      => dbg_cst_locktime_f2,
+            cst_unlock_f1         => dbg_cst_unlock_f1,
+            cst_unlock_f2         => dbg_cst_unlock_f2,
+            cst_acc_i_f1          => dbg_cst_acc_i,
+            cst_acc_q_f1          => dbg_cst_acc_q,
+            cst_iq_delta_f1       => dbg_cst_iq_delta,
 
             gain_manual           => cfg_gain_manual,
             gain_current          => sts_gain_current
@@ -305,6 +334,9 @@ begin
             dbg_fs_soft_q     => dbg_fs_soft_q,
             dbg_soft_corr     => dbg_soft_corr,
             dbg_sym_valid     => dbg_sym_valid,
+            quant_thr_1       => cfg_quant_thr_1,
+            quant_thr_2       => cfg_quant_thr_2,
+            quant_thr_3       => cfg_quant_thr_3,
 
             dbg_cst_iq_delta    => dbg_cst_iq_delta,
             dbg_cst_acc_i       => dbg_cst_acc_i,
@@ -317,6 +349,13 @@ begin
             dbg_cst_locktime_f2 => dbg_cst_locktime_f2,
             dbg_cst_unlock_f1   => dbg_cst_unlock_f1,
             dbg_cst_unlock_f2   => dbg_cst_unlock_f2,
+            demod_init          => cfg_demod_init,
+            lpf_freeze          => cfg_lpf_freeze,
+            lpf_zero            => cfg_lpf_zero,
+            rx_enable           => cfg_rx_enable,
+            rx_sample_discard   => cfg_rx_sample_discard,
+            f1_nco_adjust       => demod_f1_nco_adjust,
+            f2_nco_adjust       => demod_f2_nco_adjust,
 
             gain_manual         => cfg_gain_manual,
             gain_current        => sts_gain_current
