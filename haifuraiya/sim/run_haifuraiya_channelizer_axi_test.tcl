@@ -222,6 +222,21 @@ add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_
 add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/U_f1/u_lock_detect/icntr}
 add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/U_f2/u_lock_detect/icntr}  
 
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbu_sq_re}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbu_mix_re}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbu_fir_i}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbu_angle}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbu_phase}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/pi_out}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbu_sq_im}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbu_mix_im}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbu_fir_q}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/dbu_angle_valid}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/common_err}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/common_adj_valid}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_i_samples}
+add_wave -into {Costas_Loops}            {/tb_haifuraiya_channelizer_axi/u_rx/u_rx/u_demod/rx_q_samples}
+
 
 # --- bit decisions ----------------------------------------------------------
 add_wave_group {Bit_Decisions}

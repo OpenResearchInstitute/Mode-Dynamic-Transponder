@@ -251,6 +251,10 @@ begin
 
 
 
+
+
+
+
 u_rx : entity work.haifuraiya_rx_axi
     generic map (
         TARGET_CHANNEL           => TARGET_CHANNEL,
@@ -603,6 +607,10 @@ u_rx : entity work.haifuraiya_rx_axi
 	    wait for CLK_PERIOD;            -- tvalid high for exactly 1 cycle
 	    s_axis_data_tvalid <= '0';
 	end procedure;
+
+
+
+
 
 
         ---------------------------------------------------------------------
@@ -1058,17 +1066,35 @@ wait for 1 us;    -- let the design come back up
     axi_write_demod(16#004#, x"00000000");   -- CONTROL: rx_invert = 1 (match bring-up.sh)
     axi_write_demod(16#008#, FREQ_WORD_F1);  -- FREQ_F1   -13550 Hz @ 625 ksps
     axi_write_demod(16#00C#, FREQ_WORD_F2);  -- FREQ_F2   +13550 Hz
-    axi_write_demod(16#010#, x"007FFFFF");   -- LPF_P_GAIN (max)
-    axi_write_demod(16#014#, x"007FFFFF");   -- LPF_I_GAIN (max)
+    axi_write_demod(16#010#, x"0000051F");   -- LPF_P_GAIN -> Kp = 0x51F/2^17 = 0.0100
+    axi_write_demod(16#014#, x"000000D2");   -- LPF_I_GAIN -> Ki = 0xD2 /2^20 = 0.0002
     axi_write_demod(16#018#, x"00000000");   -- LPF_ALPHA  (bring-up.sh uses 0x80; standalone used 0 -- A/B if marginal)
     axi_write_demod(16#01C#, x"00000011");   -- LPF_P_SHIFT = 17  (match bring-up.sh)
     axi_write_demod(16#020#, x"00000014");   -- LPF_I_SHIFT = 20  (hold I - P = 3)
     axi_write_demod(16#024#, x"00000010");   -- SYM_LOCK_COUNT = 16  (standalone count; reset default was 128)
     axi_write_demod(16#028#, x"00000008");   -- SYM_LOCK_THRESHOLD = 8  (CALIBRATE vs CST_IQ_DELTA on real amplitude)
     axi_write_demod(16#064#, x"00000000");   -- RX_SAMPLE_DISCARD = 0 (not 0x18) 
-    axi_write_demod(16#050#, x"000001F4");   -- QUANT_THR_1 = 500
-    axi_write_demod(16#054#, x"00000578");   -- QUANT_THR_2 = 1400
-    axi_write_demod(16#058#, x"00000AF8");   -- QUANT_THR_3 = 2800
+
+    -- Quantizer for the soft decisions thresholds are below. Commented out is the W shape 
+    -- from the Case of the Missing 24 dB, and the note says that shape was tuned for a 
+    -- reason at some point. 
+    -- So we don't throw it away. Once we have real noise on hardware, run a short BER 
+    -- comparison of the uniform set against the current 500/1400/2800 and keep whichever wins. 
+    -- The histogram sets the scale; a BER run picks the shape. Conventional-and-scale is 
+    -- the right place to start; let the bit errors have the final word.
+
+    --axi_write_demod(16#050#, x"000001F4");   -- QUANT_THR_1 = 500
+    --axi_write_demod(16#054#, x"00000578");   -- QUANT_THR_2 = 1400
+    --axi_write_demod(16#058#, x"00000AF8");   -- QUANT_THR_3 = 2800
+
+    -- this is conventional textbook shape for the simulation
+    axi_write_demod(16#050#, x"0000021C");   -- QUANT_THR_1 = 540
+    axi_write_demod(16#054#, x"00000654");   -- QUANT_THR_2 = 1620
+    axi_write_demod(16#058#, x"00000A8C");   -- QUANT_THR_3 = 2700
+
+    axi_write_demod(16#048#, x"0001C138");   -- HUNTING threshold of 115000
+    axi_write_demod(16#04C#, x"000109A0");   -- VERIFYING_SYNC threshold of 68000
+
     axi_write_demod(16#060#, x"00000004");   -- LOOP_CTRL : rx_enable=1, not frozen/zeroed
     axi_write_demod(16#05C#, x"00000000");   -- DEMOD_INIT = 0 : release onto the live channel output
 
