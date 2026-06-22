@@ -179,7 +179,32 @@ architecture rtl of haifuraiya_rx_axi is
     signal demod_f1_nco_adjust    : std_logic_vector(31 downto 0);
     signal demod_f2_nco_adjust    : std_logic_vector(31 downto 0);
 
+    -- internal copies so the RO status regs can READ these (VHDL-93: cannot read OUT ports)
+    signal dbg_cst_iq_delta_s : std_logic_vector(31 downto 0);
+    signal dbg_cst_acc_i_s : std_logic_vector(31 downto 0);
+    signal dbg_cst_acc_q_s : std_logic_vector(31 downto 0);
+    signal dbg_f1_err_s : std_logic_vector(31 downto 0);
+    signal dbg_f2_err_s : std_logic_vector(31 downto 0);
+    signal dbg_lpf_acc_f1_s : std_logic_vector(31 downto 0);
+    signal dbg_lpf_acc_f2_s : std_logic_vector(31 downto 0);
+    signal dbg_cst_locktime_f1_s : std_logic_vector(15 downto 0);
+    signal dbg_cst_locktime_f2_s : std_logic_vector(15 downto 0);
+    signal dbg_cst_unlock_f1_s : std_logic;
+    signal dbg_cst_unlock_f2_s : std_logic;
 begin
+
+    -- mirror internal debug copies out to the ILA ports
+    dbg_cst_iq_delta <= dbg_cst_iq_delta_s;
+    dbg_cst_acc_i <= dbg_cst_acc_i_s;
+    dbg_cst_acc_q <= dbg_cst_acc_q_s;
+    dbg_f1_err <= dbg_f1_err_s;
+    dbg_f2_err <= dbg_f2_err_s;
+    dbg_lpf_acc_f1 <= dbg_lpf_acc_f1_s;
+    dbg_lpf_acc_f2 <= dbg_lpf_acc_f2_s;
+    dbg_cst_locktime_f1 <= dbg_cst_locktime_f1_s;
+    dbg_cst_locktime_f2 <= dbg_cst_locktime_f2_s;
+    dbg_cst_unlock_f1 <= dbg_cst_unlock_f1_s;
+    dbg_cst_unlock_f2 <= dbg_cst_unlock_f2_s;
 
 
 
@@ -248,17 +273,17 @@ begin
             rx_sample_discard     => cfg_rx_sample_discard,
             f1_nco_adjust         => demod_f1_nco_adjust,
             f2_nco_adjust         => demod_f2_nco_adjust,
-            f1_error              => dbg_f1_err,
-            f2_error              => dbg_f2_err,
-            lpf_accum_f1          => dbg_lpf_acc_f1,
-            lpf_accum_f2          => dbg_lpf_acc_f2,
-            cst_lock_time_f1      => dbg_cst_locktime_f1,
-            cst_lock_time_f2      => dbg_cst_locktime_f2,
-            cst_unlock_f1         => dbg_cst_unlock_f1,
-            cst_unlock_f2         => dbg_cst_unlock_f2,
-            cst_acc_i_f1          => dbg_cst_acc_i,
-            cst_acc_q_f1          => dbg_cst_acc_q,
-            cst_iq_delta_f1       => dbg_cst_iq_delta,
+            f1_error              => dbg_f1_err_s,
+            f2_error              => dbg_f2_err_s,
+            lpf_accum_f1          => dbg_lpf_acc_f1_s,
+            lpf_accum_f2          => dbg_lpf_acc_f2_s,
+            cst_lock_time_f1      => dbg_cst_locktime_f1_s,
+            cst_lock_time_f2      => dbg_cst_locktime_f2_s,
+            cst_unlock_f1         => dbg_cst_unlock_f1_s,
+            cst_unlock_f2         => dbg_cst_unlock_f2_s,
+            cst_acc_i_f1          => dbg_cst_acc_i_s,
+            cst_acc_q_f1          => dbg_cst_acc_q_s,
+            cst_iq_delta_f1       => dbg_cst_iq_delta_s,
 
             gain_manual           => cfg_gain_manual,
             gain_current          => sts_gain_current
@@ -338,17 +363,17 @@ begin
             quant_thr_2       => cfg_quant_thr_2,
             quant_thr_3       => cfg_quant_thr_3,
 
-            dbg_cst_iq_delta    => dbg_cst_iq_delta,
-            dbg_cst_acc_i       => dbg_cst_acc_i,
-            dbg_cst_acc_q       => dbg_cst_acc_q,
-            dbg_f1_err          => dbg_f1_err,
-            dbg_f2_err          => dbg_f2_err,
-            dbg_lpf_acc_f1      => dbg_lpf_acc_f1,
-            dbg_lpf_acc_f2      => dbg_lpf_acc_f2,
-            dbg_cst_locktime_f1 => dbg_cst_locktime_f1,
-            dbg_cst_locktime_f2 => dbg_cst_locktime_f2,
-            dbg_cst_unlock_f1   => dbg_cst_unlock_f1,
-            dbg_cst_unlock_f2   => dbg_cst_unlock_f2,
+            dbg_cst_iq_delta    => dbg_cst_iq_delta_s,
+            dbg_cst_acc_i       => dbg_cst_acc_i_s,
+            dbg_cst_acc_q       => dbg_cst_acc_q_s,
+            dbg_f1_err          => dbg_f1_err_s,
+            dbg_f2_err          => dbg_f2_err_s,
+            dbg_lpf_acc_f1      => dbg_lpf_acc_f1_s,
+            dbg_lpf_acc_f2      => dbg_lpf_acc_f2_s,
+            dbg_cst_locktime_f1 => dbg_cst_locktime_f1_s,
+            dbg_cst_locktime_f2 => dbg_cst_locktime_f2_s,
+            dbg_cst_unlock_f1   => dbg_cst_unlock_f1_s,
+            dbg_cst_unlock_f2   => dbg_cst_unlock_f2_s,
             demod_init          => cfg_demod_init,
             lpf_freeze          => cfg_lpf_freeze,
             lpf_zero            => cfg_lpf_zero,

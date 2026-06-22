@@ -146,7 +146,8 @@ architecture rtl of haifuraiya_rx_top is
     --   15 -> chan_i_reg(15 downto 4) : top 12 bits, no clipping (safe default)
     --   13 -> chan_i_reg(13 downto 2) : +12 dB into the loop, clips above 2^13
     -- Confirm by measuring the channel-0 I amplitude with the real 20 Msps stimulus.
-    constant RX_SLICE_HI    : natural := 13; -- was 15, now 13 to fix alignment issue
+
+    constant RX_SLICE_HI : natural := 15;   -- 16-bit gi/gq, take the true top 12 bits [15:4]
 
     signal reset_h      : std_logic;         -- active-high reset for the modem blocks
     signal demod_init_h : std_logic;
@@ -408,8 +409,8 @@ begin
     ----------------------------------------------------------------------------
     u_fsync : entity work.frame_sync_detector_soft
         generic map (
-            HUNTING_THRESHOLD => 38000,   -- was 60000 in libreSDR
-            LOCKED_THRESHOLD  => 24000    -- was 36000 in libreSDR
+            HUNTING_THRESHOLD => 115000,   -- was 60000 in libreSDR
+            LOCKED_THRESHOLD  => 68000    -- was 36000 in libreSDR
         )
         port map (
             clk   => aclk,

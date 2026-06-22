@@ -207,8 +207,8 @@ architecture rtl of haifuraiya_demod_regs is
     signal reg_sym_lock_count     : std_logic_vector(9 downto 0)   := "0010000000"; -- 128
     signal reg_sym_lock_threshold : std_logic_vector(15 downto 0)  := x"0008";      -- 8
     signal reg_gain_manual        : std_logic_vector(15 downto 0)  := x"0400";      -- 1024
-    signal reg_fs_hunt_thresh     : std_logic_vector(31 downto 0) := x"00009470";   -- 38000
-    signal reg_fs_verify_thresh   : std_logic_vector(31 downto 0) := x"00005DC0";   -- 24000
+    signal reg_fs_hunt_thresh     : std_logic_vector(31 downto 0) := x"0001C138";   -- 115000
+    signal reg_fs_verify_thresh   : std_logic_vector(31 downto 0) := x"000109A0";   -- 68000
     signal reg_quant_thr_1        : std_logic_vector(15 downto 0) := x"01F4";       -- 500
     signal reg_quant_thr_2        : std_logic_vector(15 downto 0) := x"0578";       -- 1400
     signal reg_quant_thr_3        : std_logic_vector(15 downto 0) := x"0AF8";       -- 2800
