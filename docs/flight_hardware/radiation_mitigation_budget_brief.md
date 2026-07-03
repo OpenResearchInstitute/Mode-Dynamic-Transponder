@@ -1,3 +1,4 @@
+
 # Radiation Mitigation and the Fabric Budget (Team Brief)
 
 **Audience:** MDT / Haifuraiya flight-build team.
@@ -101,17 +102,121 @@ fabric tally.
 
 ---
 
+## Part 2: What to actually harden - the state-classification model
+
+The reflex that busts the budget is "triplicate everything." It is the wrong model for
+a streaming communications payload, and it never fits. The right model is a domain
+model of state: classify every register and RAM not by what it is, but by what a single
+bit-flip does to it and how long the damage lasts. Do that pass and the mitigation
+falls out mechanically - and cheaply, because only one class is expensive and it is the
+smallest.
+
+### The three buckets
+
+**Bucket 1 - self-healing (transient-tolerant streaming state).** A flip corrupts one
+sample, which flushes out of the pipeline in a handful of clocks and is gone. It is
+indistinguishable from an RF noise hit, and you already fly a machine whose whole job is
+absorbing those: the FEC (the Viterbi decoder, and the ground receiver's LDPC). No TMR.
+This is the DSP-heavy majority of the design, and it stays single.
+
+**Bucket 2 - self-recovering (loop and adaptive state).** A flip can knock a loop out of
+lock or perturb an average, but the loop's job is to re-converge, so it heals itself. No
+TMR. You add a cheap watchdog that notices "unlocked too long" and triggers re-acquire,
+which matches how the loop already behaves.
+
+**Bucket 3 - persistent control state (does not self-heal).** Control FSMs, sequencers,
+counters, and set-once config registers. A flip here does not flush and does not
+re-converge; it hangs or mis-sequences the block until reset, and on a 16:1 core a stuck
+sequencer corrupts all sixteen channels at once. This is what earns TMR. It is a few
+percent of the fabric, so tripling it is noise on a part you run at ~13% LUT.
+
+### The D&D framing (for the team)
+
+You are not plate-armoring every hit point - that is full TMR, and it is why it never
+fits. You run layered defenses matched to the threat:
+
+- **XilSEM scrubbing** is the cleric re-consecrating the ground every round, keeping the
+  rules of reality (the configuration that defines the circuit) from corrupting. A
+  separate hardened NPC; costs the party no resources.
+- **The datapath has regeneration.** A transient hit is a scratch that heals next turn;
+  the FEC is the regeneration spell. You do not armor the arrows - samples are
+  consumable.
+- **Heavy armor goes on the one caster who, if confused, wipes the party** - the
+  control-flow logic. Only it gets a triple-vote on "what do we do next."
+- **Memories get a ward that auto-corrects a smudged rune** - BRAM/URAM ECC.
+- **The DM keeps a "reset the scene if it all glitches" rule** - the SEFI watchdog.
+
+### MDT / Haifuraiya classification
+
+| MDT block / state | Class | Effect of a single upset | Mitigation (fabric cost) |
+|---|---|---|---|
+| Polyphase filterbanks, FFT, halfband, channel EQ | Self-healing | one corrupted sample, flushes in a few clocks | none; flush + FEC (no cost) |
+| de Buda FIR, square, mix | Self-healing | one bad sample; the loop treats it as noise | none (no cost) |
+| CORDIC (16 stages) | Self-healing | one bad angle, flushes in 16 clocks | none (no cost) |
+| Power-detector squaring (I^2 + Q^2) | Self-healing | one bad power sample, absorbed by the EMA | none (no cost) |
+| DVB-S2 encode datapath (BCH, LDPC, map, shape) | Self-healing | one bad TX symbol; the ground LDPC absorbs it | none (no cost) |
+| Costas f1/f2 NCO phase + loop-filter accumulators | Self-recovering | possible loss of lock; the loop re-acquires | lock watchdog + re-acquire (negligible) |
+| de Buda common carrier NCO + PI integrator | Self-recovering | carrier wander or unlock; re-converges | watchdog (negligible) |
+| Costas lock-detect accumulators / counters | Self-recovering | false lock/unlock; re-evaluated continuously | watchdog + hysteresis (negligible) |
+| AGC / power-detector EMA feedback (51-bit mult_sum) | Self-recovering | transient wrong gain; decays over ~1/alpha, saturation bounds it | ECC on the state RAM + existing SAT clamp (negligible) |
+| Symbol-timing recovery state | Self-recovering | timing slip; re-locks | watchdog (negligible) |
+| 16:1 interleave sequencer / channel counter | TMR-critical | wrong-channel addressing; corrupts all 16 channels; persists | TMR: triplicate + vote (small: a few FF + voter) |
+| WP2 power-detector channel counter | TMR-critical | wrong-channel addressing; persists | TMR (small) |
+| Frame-sync FSM (sync detect, boundaries) | TMR-critical | lost frame alignment; wrong TLAST/TDEST; persists | TMR core FSM + robust re-sync (small) |
+| AXI-Stream handshake / control FSMs | TMR-critical | protocol violation or deadlock; persists | TMR (small) |
+| DVB-S2 PLframe / header sequencer | TMR-critical | malformed frames; ground loses lock; persists | TMR control FSM (small) |
+| Config registers (alpha, shifts, modes, thresholds) | TMR-critical (persistent) | silently wrong config for the rest of the mission | TMR the bits, or periodic refresh from a PMC golden copy (tiny) |
+| All state RAMs (WP1 interleave state, WP2 EMA table, FIR windows) | Memory content | corrupted stored value until read | BRAM/URAM hardware ECC (no fabric) |
+| Constant memories (channelizer coeffs, LDPC/BCH tables) | Memory content | corrupted constant until reload | ECC or periodic reload from golden (no fabric) |
+| CRAM + NPI config bits (define the circuit itself) | Config memory | routing/logic corruption anywhere until scrubbed (~ms) | XilSEM (PMC firmware, no fabric) |
+
+### What the RTL change actually is (it is contained)
+
+- **TMR of an FSM:** three copies of that FSM's registers plus a majority voter on its
+  outputs. A local edit to a small module, not a datapath rewrite. Vivado can assist,
+  and paired with XilSEM you usually avoid the heavy physically-isolated TMR flow,
+  because the triplication catches the transient flop upset and the scrubber repairs the
+  underlying config before a second copy can accumulate an upset.
+- **BRAM/URAM ECC:** a primitive mode or attribute on the RAM, plus handling the
+  corrected and uncorrectable flags. Not fabric.
+- **Watchdogs:** mostly PS/PMC firmware plus a little liveness logic.
+
+None of this touches the DSP columns.
+
+### Budget impact
+
+The DSP number that binds you barely moves, because the DSP-heavy datapath is Bucket 1
+and stays single. The cost lands in LUTs for triplicated control, which is small on a
+part running at ~13% LUT. The ~76% DSP picture survives essentially intact, and the 24%
+headroom is more than selective control-TMR needs. Full TMR of the datapath (the
+"triplicate everything" reflex) would be ~3x and would not fit - which is exactly why
+you classify first and triplicate only Bucket 3.
+
+The real deliverable of the radiation work item is the classification pass itself: for
+every state element, decide self-healing / self-recovering / persistent-critical. The
+risk is misclassifying a couple of elements, not the fabric. Do the pass; do not assume
+it.
+
+---
+
 ## Team takeaways
 
-1. Do not budget fabric for XilSEM on Versal. It is PMC firmware, not soft IP.
-2. Do budget fabric for selective TMR. That is the real cost, and it is a design
-   choice about which logic to triplicate.
-3. The 16:1 baseline's ~24% DSP headroom is reserved for that TMR. Treat it as
-   allocated, not spare.
-4. XilSEM's real costs are power, PMC RAM, and scrub latency. Put them in the
-   radiation work item and the power/reliability analyses.
-5. Scrubbing plus selective TMR is the flight combination. Neither alone is the
-   answer: XilSEM stops accumulation, TMR handles the immediate transient.
+1. Do not triplicate everything. Classify state first by fault behavior - self-healing,
+   self-recovering, persistent-critical - and TMR only the last bucket.
+2. The DSP-heavy datapath is self-healing (flush + FEC), so it stays single. The DSP
+   budget barely moves and the ~76% picture survives.
+3. TMR goes on control only: sequencers, FSMs, config registers. That is a few percent
+   of fabric, small on a part at ~13% LUT.
+4. Loops get watchdogs, not triplication - they re-acquire on their own.
+5. All state and constant RAMs get hardware ECC (no fabric); XilSEM covers config
+   memory (PMC firmware, no fabric). Neither threatens the budget.
+6. Do not budget fabric for XilSEM on Versal. It is PMC firmware, not soft IP. Its real
+   costs are power, PMC RAM, and scrub latency - put those in the power/reliability
+   analyses.
+7. Scrubbing plus selective TMR is the flight combination: XilSEM stops accumulation,
+   TMR handles the immediate transient on the logic that cannot self-heal.
+8. The deliverable is the classification pass. The risk is misclassifying an element,
+   not the fabric. Do the pass for real.
 
 ---
 
