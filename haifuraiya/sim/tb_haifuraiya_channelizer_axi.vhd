@@ -173,12 +173,8 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     constant DO_DEMOD_BRACKET : boolean := true;
 
     -- ===== Demod-path integration (added) =====
-    constant TARGET_INPUT_BIN : natural := 5; -- channel to listen to first
-    constant TARGET_CHANNEL   : natural := N_CHANNELS - TARGET_INPUT_BIN;  -- output ch after commutator reversal
-
-    -- Demod tuning. TODO: re-derive for the channel rate (~625 ksps, SPS ~11.53)
-    -- per CHANNELIZER_DEMOD_CONTRACT.md. These placeholders let it elaborate and
-    -- exercise the wiring; they will NOT produce lock until set correctly.
+    constant TARGET_INPUT_BIN : natural := 5; -- input tone bin to listen to
+    constant TARGET_CHANNEL : natural := TARGET_INPUT_BIN;   -- fix landed: arithmetic numbering
 
     --rx_freq_word_f1 = 0x058CD20B   (lower tone, +13550 Hz)?
     --rx_freq_word_f2 = 0xFA732DF5   (upper tone, -13550 Hz)?
@@ -211,6 +207,8 @@ architecture sim of tb_haifuraiya_channelizer_axi is
 
     signal chan_i_reg  : std_logic_vector(15 downto 0) := (others => '0');
     signal chan_q_reg  : std_logic_vector(15 downto 0) := (others => '0');
+    signal dbg_soft_corr_s : std_logic_vector(15 downto 0);
+    signal dbg_sym_valid_s : std_logic;
     signal rx_svalid   : std_logic := '0';
     signal lock_f1, lock_f2 : std_logic;
 
@@ -226,7 +224,8 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     signal n_target_samps : integer := 0;  -- samples handed to the demod
     signal n_soft_beats   : integer := 0;  -- soft bits emitted
     signal n_soft_frames  : integer := 0;  -- frame_sync frames
-
+    signal n_soft_raw     : natural := 0;
+    signal dbg_f1_err_s : std_logic_vector(31 downto 0) := (others => '0');
 
 
 
@@ -306,8 +305,10 @@ u_rx : entity work.haifuraiya_rx_axi
         cst_lock_f1 => lock_f1, cst_lock_f2 => lock_f2,
 
         -- debug tap -> TB capture signals
-        dbg_tgt_i => chan_i_reg, dbg_tgt_q => chan_q_reg, dbg_tgt_valid => rx_svalid
+        dbg_tgt_i => chan_i_reg, dbg_tgt_q => chan_q_reg, dbg_tgt_valid => rx_svalid,
+        dbg_soft_corr => dbg_soft_corr_s, dbg_sym_valid => dbg_sym_valid_s
     );
+
 
 
 
@@ -352,12 +353,33 @@ u_rx : entity work.haifuraiya_rx_axi
     end process;
 
 
+    --------------------------------------------------------------------------
+    -- Raw soft capture. debug_soft_quantized tells you WHICH code; this tells
+    -- you WHERE the thresholds belong.
+    --   QUANT_THR = mean|soft| / 3.5 * {1,2,3}
+    -- the ratio opv_demod.hpp's FrameDecoder::decode() forces:
+    --   n = (-soft/scale)*3.5 + 3.5,  scale = mean|soft| over the frame.
+    -- dbg_soft_corr is rx_data_soft AFTER the rx_invert correction, which is
+    -- exactly what the frame sync correlator and the quantiser see.
+    --------------------------------------------------------------------------
+    p_soft_raw_cap : process(aclk)
+        file     fr : text open write_mode is "soft_raw.txt";
+        variable lr : line;
+    begin
+        if rising_edge(aclk) then
+            if dbg_sym_valid_s = '1' then
+                write(lr, to_integer(signed(dbg_soft_corr_s)));
+                writeline(fr, lr);
+                n_soft_raw <= n_soft_raw + 1;
+            end if;
+        end if;
+    end process;
 
     ---------------------------------------------------------------
     -- Capture the channel-0 complex output
     ---------------------------------------------------------------
     p_chan_cap : process(aclk)
-        file fc      : text open write_mode is "chan0_iq.txt";
+        file fc      : text open write_mode is "channel_iq.txt";
         variable l   : line;
         variable cnt : integer := 0;
     begin
@@ -373,6 +395,24 @@ u_rx : entity work.haifuraiya_rx_axi
     end process;
 
 
+    ---------------------------------------------------------------
+    -- Capture f1_error (= cd_ang, carrier phase error) once per symbol
+    -- Gate on value-change: f1_error updates only at dump, holds otherwise,
+    -- so this yields one sample/symbol with no held repeats. No 2008 needed.
+    ---------------------------------------------------------------
+    p_f1_error_cap : process(aclk)
+        file file_f1  : text open write_mode is "f1_error.txt";
+        variable lf1  : line;
+        variable prev : std_logic_vector(31 downto 0) := (others => '0');
+    begin
+        if rising_edge(aclk) then
+            if dbg_f1_err_s /= prev then
+                write(lf1, to_integer(signed(dbg_f1_err_s)));
+                writeline(file_f1, lf1);
+                prev := dbg_f1_err_s;
+            end if;
+        end if;
+    end process;
 
     ---------------------------------------------------------------------------
     -- Output AXIS capture
@@ -659,7 +699,7 @@ u_rx : entity work.haifuraiya_rx_axi
         constant NOISE_AMP     : integer := 3000;   -- input peak; RMS ~1700, like the ADC
         constant NOISE_SAMPLES : integer := 15000;  -- enough frames for the ema_2 cascade to settle
         --file fin               : text open read_mode is "tone_plus.txt";
-        file fin               : text open read_mode is "opv_chan_stim_dc.txt";
+        file fin               : text open read_mode is "opv_chan_stim.txt";
         --file fin               : text open read_mode is "opv_chan_stim.txt";
         --file fin               : text open read_mode is "cw_tone_27k_10msps.txt";
         variable l             : line;
@@ -988,7 +1028,6 @@ wait for 1 us;    -- let the design come back up
         axi_write(ADDR_OUTPUT_SHIFT, 14);   -- match the board
         axi_write(ADDR_CONTROL, 1);         -- soft reset: core_reset=1, clears EMA cascade
         axi_write(ADDR_CONTROL, 2);         -- release + enable: core_reset=0, run
-        -- alpha defaults are already 4096/64 (correct) -- no alpha writes needed
 
         for i in 0 to NOISE_SAMPLES - 1 loop
             uniform(seed1, seed2, rnd);
@@ -1038,6 +1077,19 @@ wait for 1 us;    -- let the design come back up
 
     -- Configure the channelizer to match the board before feeding the burst
     axi_write(ADDR_OUTPUT_SHIFT, 14);        -- match the board: 4x more channel amplitude than default 16
+    
+    -- POWER_ALPHA1/2 set the power-detector EMA time constants:
+    --     tau = 2^18 / ALPHA  channel samples,  at 625 ksps
+    -- The normalizer's gain is GAIN_TARGET/sqrt(power), so the AGC settling
+    -- time IS the power detector's settling time. Every OPV transmission opens
+    -- with one 40 ms preamble frame, so the gain must converge inside 40 ms.
+    --   ALPHA2 =  64 -> tau 6.55 ms -> 5*tau = 32.8 ms   (7 ms of margin)
+    --   ALPHA2 = 256 -> tau 1.64 ms -> 5*tau =  8.2 ms   (32 ms of margin)
+    -- Costs slightly noisier CHANNEL_POWER telemetry, which Bouro can average.
+    -- Do not leave these to reset defaults. GAIN_MANUAL taught us that.
+    axi_write(ADDR_ALPHA1, 4096);   -- tau1 = 64 samples = 0.10 ms
+    axi_write(ADDR_ALPHA2,  256);   -- tau2 = 1024 samples = 1.64 ms
+
     axi_write(ADDR_CONTROL, 1);              -- soft reset (bit0=1): core_reset=1, clears the EMA cascade
     axi_write(ADDR_CONTROL, 2);              -- release + enable (bit1=1): core_reset=0, run
     wait for 2 us;                           -- let the reset settle / pipeline re-prime before the burst
@@ -1063,37 +1115,56 @@ wait for 1 us;    -- let the design come back up
     report "DEMOD_VERSION readback = 0x" & to_hstring(v_demod_ver) severity note;
 
     axi_write_demod(16#05C#, x"00000001");   -- DEMOD_INIT = 1 : hold the loops in reset
-    axi_write_demod(16#004#, x"00000000");   -- CONTROL: rx_invert = 1 (match bring-up.sh)
+    axi_write_demod(16#004#, x"00000000");   -- CONTROL: rx_invert = 0 (coordinate with bring-up.sh)
     axi_write_demod(16#008#, FREQ_WORD_F1);  -- FREQ_F1   -13550 Hz @ 625 ksps
     axi_write_demod(16#00C#, FREQ_WORD_F2);  -- FREQ_F2   +13550 Hz
-    axi_write_demod(16#010#, x"0000051F");   -- LPF_P_GAIN -> Kp = 0x51F/2^17 = 0.0100
-    axi_write_demod(16#014#, x"000000D2");   -- LPF_I_GAIN -> Ki = 0xD2 /2^20 = 0.0002
+    axi_write_demod(16#010#, x"00000033");   -- LPF_P_GAIN
+    axi_write_demod(16#014#, x"00000007");   -- LPF_I_GAIN
     axi_write_demod(16#018#, x"00000000");   -- LPF_ALPHA  (bring-up.sh uses 0x80; standalone used 0 -- A/B if marginal)
-    axi_write_demod(16#01C#, x"00000011");   -- LPF_P_SHIFT = 17  (match bring-up.sh)
-    axi_write_demod(16#020#, x"00000014");   -- LPF_I_SHIFT = 20  (hold I - P = 3)
-    axi_write_demod(16#024#, x"00000010");   -- SYM_LOCK_COUNT = 16  (standalone count; reset default was 128)
+    axi_write_demod(16#01C#, x"00000002");   -- LPF_P_SHIFT 2 
+    axi_write_demod(16#020#, x"0000000C");   -- LPF_I_SHIFT 6
+    axi_write_demod(16#024#, x"00000080");   -- SYM_LOCK_COUNT = 128  (standalone count; reset default was 128)
     axi_write_demod(16#028#, x"00000008");   -- SYM_LOCK_THRESHOLD = 8  (CALIBRATE vs CST_IQ_DELTA on real amplitude)
+    axi_write_demod(16#030#, x"00000400");   -- GAIN_MANUAL = 1024 = 1.000 (Q6.10)
     axi_write_demod(16#064#, x"00000000");   -- RX_SAMPLE_DISCARD = 0 (not 0x18) 
 
-    -- Quantizer for the soft decisions thresholds are below. Commented out is the W shape 
-    -- from the Case of the Missing 24 dB, and the note says that shape was tuned for a 
-    -- reason at some point. 
-    -- So we don't throw it away. Once we have real noise on hardware, run a short BER 
+    -- Once we have real noise on hardware, run a short BER 
     -- comparison of the uniform set against the current 500/1400/2800 and keep whichever wins. 
     -- The histogram sets the scale; a BER run picks the shape. Conventional-and-scale is 
     -- the right place to start; let the bit errors have the final word.
 
-    --axi_write_demod(16#050#, x"000001F4");   -- QUANT_THR_1 = 500
-    --axi_write_demod(16#054#, x"00000578");   -- QUANT_THR_2 = 1400
-    --axi_write_demod(16#058#, x"00000AF8");   -- QUANT_THR_3 = 2800
+    -- QUANT_THR ratio 1:2:3, forced by opv_demod.hpp:
+    --   n = (-soft/scale)*3.5 + 3.5,  scale = mean|soft| over the frame
+    -- so the boundaries sit at scale/3.5, 2*scale/3.5, 3*scale/3.5.
+    -- Calibrated for mean|soft| = 3916 at demod amp ~545 (gain_manual unity,
+    -- normalizer bypassed). These MOVE when NORM_AUTO goes to '1'.
+    -- we recalculated from soft_cap collection, and re-ran at NORM_AUTO = 0. 
 
-    -- this is conventional textbook shape for the simulation
-    axi_write_demod(16#050#, x"0000021C");   -- QUANT_THR_1 = 540
-    axi_write_demod(16#054#, x"00000654");   -- QUANT_THR_2 = 1620
-    axi_write_demod(16#058#, x"00000A8C");   -- QUANT_THR_3 = 2700
+    -- shortcuts:
+    -- mean|soft|  = debug_corr_peak / 24
+    -- QUANT_THR_1 = debug_corr_peak / 84        (= mean/3.5)
+    -- QUANT_THR_2 = 2 x QUANT_THR_1
+    -- QUANT_THR_3 = 3 x QUANT_THR_1
+    -- FS_HUNT     = 0.80 x debug_corr_peak
+    -- FS_VERIFY   = 0.40 x debug_corr_peak
 
-    axi_write_demod(16#048#, x"0001C138");   -- HUNTING threshold of 115000
-    axi_write_demod(16#04C#, x"000109A0");   -- VERIFYING_SYNC threshold of 68000
+    -- these are from the NORM_AUTO = 0 simulation
+    --axi_write_demod(16#050#, x"00000D7C");   -- QUANT_THR_1 =   3452
+    --axi_write_demod(16#054#, x"00001AF8");   -- QUANT_THR_2 =   6904
+    --axi_write_demod(16#058#, x"00002874");   -- QUANT_THR_3 =  10356
+    --axi_write_demod(16#048#, x"00038A25");   -- FS_HUNT_THRESH   = 231973  (80%)
+    --axi_write_demod(16#04C#, x"0001C512");   -- FS_VERIFY_THRESH = 115986  (40%)
+
+    axi_write_demod(16#050#, x"0000134E");   -- QUANT_THR_1 =   4942
+    axi_write_demod(16#054#, x"0000269C");   -- QUANT_THR_2 =   9884
+    axi_write_demod(16#058#, x"000039EA");   -- QUANT_THR_3 =  14826
+
+    --axi_write_demod(16#048#, x"0005FE43");   -- FS_HUNT_THRESH   = 392,771
+    --axi_write_demod(16#04C#, x"0004EF83");   -- FS_VERIFY_THRESH = 323,459
+
+    -- now we have normalized limits on the hunting and verifying thresholds
+    axi_write_demod(16#048#, x"00000055");   -- FS_HUNT_PCT   = 85
+    axi_write_demod(16#04C#, x"00000046");   -- FS_VERIFY_PCT = 70
 
     axi_write_demod(16#060#, x"00000004");   -- LOOP_CTRL : rx_enable=1, not frozen/zeroed
     axi_write_demod(16#05C#, x"00000000");   -- DEMOD_INIT = 0 : release onto the live channel output
@@ -1161,6 +1232,7 @@ report "MILESTONE 4: injection complete, fed " & integer'image(n_fed) &
         report "  PASS: " & integer'image(tests_pass);
         report "  FAIL: " & integer'image(tests_fail);
         report "================================================";
+        report "soft_raw: captured " & integer'image(n_soft_raw) & " symbols" severity note;
 
         report "DEMOD PATH: target samples=" & integer'image(n_target_samps)
          & "  soft beats=" & integer'image(n_soft_beats)
