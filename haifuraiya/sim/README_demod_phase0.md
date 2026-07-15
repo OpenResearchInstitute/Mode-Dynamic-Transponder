@@ -407,3 +407,35 @@ REMAINING before fabric (bookkeeping, not design):
   3. Fixed-point quantization (<=0.2 dB budget), node by node.
   4. VHDL: msk_mlse4.vhd + vbank + TED, dump-compare per block against
      the fixed-point model; frame sync and K=7 fabric blocks unchanged.
+
+## Session 5, part 2 (2026-07-16): statistics and hardening
+
+Record sweeps (hers, 10 seeds x 8, exact-CPM stimuli): mlse_sweep.csv and
+baseline_v2.csv. New receiver dominated from 10 dB down (75/80 at 8 dB vs
+17-19; 56/80 at 4.5 vs 3-4); slipP 0.00 through 6 dB. Two findings drove
+a hardening pass:
+
+1. SNR-independent ~6% frame deficit at high SNR = frame-1 losses.
+   Diagnosis chain (each step measured): all losses are frame 1 ->
+   acquisition gear (TED gains x3 for first 1000 syms) recovered half ->
+   coarse preamble acquisition added (kept as insurance; not the cause) ->
+   autopsy: affected bursts run WHOLE-BURST at metric ~500 with correct
+   bytes; timing and |V| energy measured IDENTICAL to good bursts ->
+   residual cause = stable PSP theta attractor (~1-1.5 dB, ~30% of bursts,
+   noise-realization dependent). QUALITY item, not a frame-loss item,
+   because:
+2. extract_frames hardened to fabric doctrine: energy floor
+   (MIN_SYNC_ENERGY analog), sync search opens at symbol 1000
+   (demod_sync_lock analog), and hunt = FIRST-above-threshold rather than
+   argmax (a degraded-but-valid frame 1 must not lose to a stronger
+   frame 2). One self-inflicted regression en route (a blind regex patch
+   hit resolve()'s failure check; 8 dB collapsed to 0/80) -- caught by the
+   gates within one run and reverted. The framework polices its builders.
+
+POST-HARDENING (10 seeds x 8): 80/80 at 12, 8, AND 6 dB. 59/80 at 4.5.
+Interop 10/10 preserved throughout.
+
+OPEN (tuning, not blocking): PSP theta attractor -- costs metric margin
+(~500 vs ~30) in ~30% of bursts; the path to more 4.5 dB frames.
+Candidates: theta updates weighted by |V|, squaring-EMA anchor blend,
+second-order PSP. Then: quantization, then VHDL.

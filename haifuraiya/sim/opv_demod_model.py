@@ -285,18 +285,31 @@ def extract_frames(soft):
     pat = np.array([1.0 if ((SYNC_WORD >> (SYNC_BITS-1-i)) & 1) == 0 else -1.0
                     for i in range(SYNC_BITS)])
     w = np.lib.stride_tricks.sliding_window_view(soft, SYNC_BITS)
-    c = (w @ pat) / (np.abs(w).sum(axis=1) + 1e-9)
+    e = np.abs(w).sum(axis=1)
+    c = (w @ pat) / (e + 1e-9)
+    # energy floor (the fabric's MIN_SYNC_ENERGY doctrine, scale-free):
+    # junk soft in acquisition/silence regions is weak; require real energy
+    # before a correlation may count as sync.
+    c = np.where(e > 0.5 * np.median(e), c, 0.0)
     frames = []
-    pos, locked = 0, False
+    # demod_sync_lock doctrine (as in fabric): sync search opens only after
+    # the demodulator has settled. The preamble is >= 2168 symbols; opening
+    # at 1000 skips acquisition junk while preceding the first frame sync.
+    pos, locked = min(1000, max(0, len(c) - 1)), False
     while pos + SYNC_BITS + ENCODED_BITS <= len(soft):
         if not locked:
             hi = min(pos + 2 * FRAME_SYMBOLS, len(c))
             if hi <= pos:
                 break
-            k = pos + int(np.argmax(c[pos:hi]))
-            if c[k] < 0.85:
+            # first-above-threshold (not argmax): a degraded-but-valid
+            # early frame must not lose the hunt to a stronger later one.
+            # Junk peaks are already fenced by the sync-lock start and the
+            # energy floor.
+            above = np.nonzero(c[pos:hi] >= 0.85)[0]
+            if len(above) == 0:
                 pos = hi
                 continue
+            k = pos + int(above[0])
         else:
             lo = max(pos - 4, 0)
             hi = min(pos + 5, len(c))
@@ -393,7 +406,8 @@ def mlse4_psp(V, g_phase=0.05, th_init=(0.0, np.pi/4, np.pi/2, 3*np.pi/4)):
     return soft
 
 
-def track_mlse(s, alpha_t=0.06, beta_t=0.0025, el=0.5, sps_nom=None):
+def track_mlse(s, alpha_t=0.06, beta_t=0.0025, el=0.5, sps_nom=None,
+               acq_syms=1000, acq_boost=3.0, pos0=None):
     """Timing loop with V-bank winner early-late TED (session 5).
     Same 3x correlation cost and PI structure as the legacy loop; the
     error signal is pattern-independent (the V-bank winner always holds
@@ -402,7 +416,8 @@ def track_mlse(s, alpha_t=0.06, beta_t=0.0025, el=0.5, sps_nom=None):
     m = CoherentModel(sps_nom if sps_nom else 625000.0/54200.0)
     g = np.exp(1j*np.radians(GAMMA_UNIFY_DEG))
     EL = el
-    pos, freq = EL + 1.0, 0.0
+    pos = EL + 1.0 + (pos0 if pos0 is not None else 0.0)
+    freq = 0.0
     Y1o, Y2o = [], []
     prev = None
     n = len(s); k = 0
@@ -423,8 +438,9 @@ def track_mlse(s, alpha_t=0.06, beta_t=0.0025, el=0.5, sps_nom=None):
             Al = _bank(p1l,p2l,y1l,y2l)
             w = int(np.argmax(Ac))
             err = (Al[w] - Ae[w]) / (Ac[w] + 1e-9)
-            freq = min(max(freq + beta_t*err, -0.05), 0.05)
-            adj  = min(max(alpha_t*err + freq, -2.0), 2.0)
+            gear = acq_boost if k < acq_syms else 1.0   # acquisition gear
+            freq = min(max(freq + gear*beta_t*err, -0.05), 0.05)
+            adj  = min(max(gear*alpha_t*err + freq, -2.0), 2.0)
         else:
             adj = 0.0
         prev = (y1e,y2e,y1c,y2c,y1l,y2l,k)
@@ -443,4 +459,30 @@ def demod_mlse(x):
         gd = sum(1 for _, mt, by in fr if by is not None)
         if gd > best[1]:
             best = (fr, gd)
+    return best[0]
+
+
+def coarse_acquire(s, sps_nom=None, n_off=8, k0=200, k1=420):
+    """Preamble-aided coarse timing: search n_off grid offsets across one
+    symbol; metric = sum of V-bank winner magnitudes over preamble symbols
+    k0..k1. Returns the best starting offset in [0, sps). Fabric-honest:
+    this is what the preamble is for."""
+    m = CoherentModel(sps_nom if sps_nom else 625000.0/54200.0)
+    g = np.exp(1j*np.radians(GAMMA_UNIFY_DEG))
+    best = (None, -1.0)
+    for off in np.arange(n_off)/n_off*m.sps:
+        tot = 0.0
+        prev = None
+        for k in range(k0, k1):
+            pos = 1.0 + off + k*m.sps
+            if pos + m.sps + 2 >= len(s): break
+            y1, y2 = m.corr_at(s, pos)
+            if prev is not None:
+                p1, p2, kp = prev
+                Qp = p2*g*(1.0 if kp % 2 == 0 else -1.0)
+                Qc = y2*g*(1.0 if k % 2 == 0 else -1.0)
+                tot += max(abs(p1+y1), abs(Qp-Qc), abs(p1-Qc), abs(Qp+y1))
+            prev = (y1, y2, k)
+        if tot > best[1]:
+            best = (off, tot)
     return best[0]
