@@ -439,3 +439,22 @@ OPEN (tuning, not blocking): PSP theta attractor -- costs metric margin
 (~500 vs ~30) in ~30% of bursts; the path to more 4.5 dB frames.
 Candidates: theta updates weighted by |V|, squaring-EMA anchor blend,
 second-order PSP. Then: quantization, then VHDL.
+
+## Session 6 (2026-07-16): QUANTIZATION -- reference parity achieved
+
+Staged, each gated on the harness (6 seeds x 6, 12/6/4.5 dB):
+  1. angle() -> decision-directed phase error: NO CORDIC. No loss.
+  2. |.| -> amax + (3/8)min: NO SQRT. Within noise.
+  3. TED divide -> fixed scale 2^16 (input pinned rms 9000 by the
+     normalizer, per LEVEL_PLAN): NO DIVIDE. No loss.
+  4. Widths: Y/V 18-bit grid, 16-bit phase words + Q1.15 sin/cos LUT
+     (pluto_msk part), gamma via same LUT, gains as shifts (1/16, 1/512,
+     gear x4, PSP 1/16), soft int16.
+FULL FIXED-POINT: 36/36, 36/36, 30/36 vs float 36/36, 36/36, 29/36.
+Quantization damage: not measurable at this resolution (<< 0.2 dB budget
+pending the 10x8 record run: ebn0_multiseed --mlse --fp).
+
+Shipped: track_fp, vbank_fp, mlse4_fp, demod_mlse_fp; harness --fp.
+REMAINING quantization node: corr_at internals (Catmull-Rom coeffs exact
+in Q2.14, interp samples 18b, twiddles Q1.15, integer accumulator, pos as
+int + Q16 fraction) -- to be fixed as the first VHDL block's spec.

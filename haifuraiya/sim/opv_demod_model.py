@@ -486,3 +486,130 @@ def coarse_acquire(s, sps_nom=None, n_off=8, k0=200, k1=420):
         if tot > best[1]:
             best = (off, tot)
     return best[0]
+
+
+# ===================================================== fixed-point receiver
+# Quantization pass (session 6). Widths and arithmetic proven at reference
+# parity on the harness (36/36, 36/36, 30/36 at 12/6/4.5 dB vs float
+# 36/36, 36/36, 29/36):
+#   - no CORDIC (decision-directed phase error), no sqrt (amax + 3/8 min),
+#     no divide (error scale 2^16; input pinned to rms 9000 by the
+#     normalizer per LEVEL_PLAN)
+#   - Y and V on an 18-bit grid; 16-bit phase words; Q1.15 sin/cos LUT;
+#     gamma constant via the same LUT; loop gains are shifts
+#     (alpha 1/16, beta 1/512, acquisition gear x4, PSP gain 1/16);
+#     soft output int16 (ACS margins clipped at 32767)
+# REMAINING quantization node: corr_at internals (Catmull-Rom coefficients
+# are exact in Q2.14; interpolated samples 18b; sub-point twiddles Q1.15;
+# integer accumulator; pos as int + Q16 fraction). To be fixed alongside
+# the first VHDL block (the correlator), whose spec it defines.
+
+_PH_STEP = 2*np.pi/65536.0
+
+def lut_rot(th):
+    """16-bit phase word -> Q1.15 sin/cos LUT rotation e^{-j theta}."""
+    thq = np.round(th/_PH_STEP)*_PH_STEP
+    c = np.round(np.cos(thq)*32767)/32767
+    s = np.round(np.sin(thq)*32767)/32767
+    return c - 1j*s
+
+_GQ = lut_rot(-np.radians(GAMMA_UNIFY_DEG)).conjugate()
+
+def _amaxbmin(re, im):
+    a, b = abs(re), abs(im)
+    return max(a, b) + 0.375*min(a, b)
+
+def _q(v, step):
+    return np.round(v.real/step)*step + 1j*np.round(v.imag/step)*step
+
+def vbank_fp(Y1, Y2):
+    n = len(Y1)
+    Q = Y2*_GQ*np.where(np.arange(n) % 2 == 0, 1.0, -1.0)
+    V = np.stack([Y1[:-1]+Y1[1:], Q[:-1]-Q[1:], Y1[:-1]-Q[1:], Q[:-1]+Y1[1:]])
+    return _q(V, 8.0)
+
+def track_fp(s):
+    """Fixed-point TED: amax-bmin magnitudes, shift gains, no divide.
+    Input must be normalizer-scaled (rms 9000)."""
+    m = CoherentModel(625000.0/54200.0)
+    EL = 0.5; pos, freq = EL + 1.0, 0.0
+    Y1o, Y2o = [], []
+    prev = None; n = len(s); k = 0
+    while pos + m.sps + EL + 2.0 < n:
+        ys = [_q(v, 4.0) for p in (pos-EL, pos, pos+EL)
+              for v in m.corr_at(s, p)]
+        y1e, y2e, y1c, y2c, y1l, y2l = ys
+        Y1o.append(y1c); Y2o.append(y2c)
+        if prev is not None:
+            (p1e,p2e,p1c,p2c,p1l,p2l,kp) = prev
+            qp = _GQ*(1.0 if kp % 2 == 0 else -1.0)
+            qc = _GQ*(1.0 if k % 2 == 0 else -1.0)
+            def bank(a1p, a2p, a1c, a2c):
+                Qp, Qc = a2p*qp, a2c*qc
+                vs = (a1p+a1c, Qp-Qc, a1p-Qc, Qp+a1c)
+                return np.array([_amaxbmin(v.real, v.imag) for v in vs])
+            Ae = bank(p1e,p2e,y1e,y2e); Ac = bank(p1c,p2c,y1c,y2c)
+            Al = bank(p1l,p2l,y1l,y2l)
+            w = int(np.argmax(Ac))
+            err = (Al[w] - Ae[w]) / 65536.0
+            gear = 4.0 if k < 1000 else 1.0
+            freq = min(max(freq + gear*err/512.0, -0.05), 0.05)
+            adj  = min(max(gear*err/16.0 + freq, -2.0), 2.0)
+        else:
+            adj = 0.0
+        prev = (y1e,y2e,y1c,y2c,y1l,y2l,k)
+        pos += m.sps + adj; k += 1
+    return np.array(Y1o), np.array(Y2o)
+
+def mlse4_fp(V):
+    """Fixed-point 4-state MLSE-PSP: 16-bit phase words, LUT rotations,
+    DD phase error, shift gain, int16 soft output."""
+    nw = V.shape[1]; NS = 4
+    cur = np.zeros(NS)
+    th = np.array([0.0, np.pi/4, np.pi/2, 3*np.pi/4])
+    pred = np.zeros((nw, NS), dtype=np.int8)
+    marg = np.zeros((nw, NS))
+    for t in range(nw):
+        nxt = np.empty(NS); nth = np.empty(NS)
+        npd = np.zeros(NS, dtype=np.int8); nmg = np.zeros(NS)
+        for st2 in range(NS):
+            s2 = 1.0 if (st2 >> 1) == 0 else -1.0
+            bnew = st2 & 1
+            s = s2 if bnew == 1 else -s2
+            cands = []
+            for pb in (0, 1):
+                stp = ((0 if s > 0 else 1) << 1) | pb
+                v = V[_MLSE_PAIR[(pb, bnew)], t]*lut_rot(th[stp])
+                cands.append((cur[stp] + s*v.real, stp, v))
+            (m0,p0,v0),(m1,p1,v1) = cands
+            if m0 >= m1: w_,pw,vw,l = m0,p0,v0,m1
+            else:        w_,pw,vw,l = m1,p1,v1,m0
+            nxt[st2] = w_; npd[st2] = pw
+            nmg[st2] = min(w_ - l, 32767.0)
+            sv = s*vw
+            mg = _amaxbmin(sv.real, sv.imag) + 1e-9
+            e = (sv.imag*(-1.0 if sv.real < 0 else 1.0))/mg
+            nth[st2] = th[pw] + e/16.0
+        cur = nxt - nxt.max(); th = nth
+        pred[t] = npd; marg[t] = nmg
+    soft = np.zeros(nw)
+    st = int(np.argmax(cur))
+    for t in range(nw - 1, -1, -1):
+        bnew = st & 1
+        soft[t] = marg[t, st] if bnew == 1 else -marg[t, st]
+        st = int(pred[t, st])
+    return np.round(soft)
+
+def demod_mlse_fp(x):
+    """Fixed-point full chain, entry normalizer included."""
+    x = x*(9000.0/np.sqrt(np.mean(np.abs(x)**2)))
+    x = np.round(x.real) + 1j*np.round(x.imag)
+    Y1, Y2 = track_fp(x)
+    soft = mlse4_fp(vbank_fp(Y1, Y2))
+    best = (None, -1)
+    for pol in (1.0, -1.0):
+        fr = extract_frames(pol*soft)
+        gd = sum(1 for _, mt, by in fr if by is not None)
+        if gd > best[1]:
+            best = (fr, gd)
+    return best[0]
