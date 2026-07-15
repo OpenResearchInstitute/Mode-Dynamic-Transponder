@@ -348,3 +348,34 @@ REMAINING GATES before VHDL:
      gives better timing observables than the old dominant-tone TED).
   4. Axis/PSP acquisition characterization within the preamble budget.
   5. Fixed-point quantization (<=0.2 dB), then msk_mlse4.vhd et al.
+
+## Session 4, part 2: FULL-CHAIN GATES (2026-07-16) -- "Go flight"
+
+BURN 1  full chain, clean, self-modulated:  6/6 frames, ALL METRICS 0. GO.
+        (Required upgrading the python modulator to exact fractional-
+        boundary CPM: the old per-sample tone switching carried +/-0.5
+        sample transition jitter that the NEW receiver is sensitive
+        enough to see (~metric 180) and the old receiver's floor had
+        masked. The instrument outgrew its fixture; fixture fixed.)
+BURN 2  interop, C++ opv-mod through channelizer (canonical chan5):
+        10/10 frames byte-identical to the reference decode, including
+        frame 1 (metric 30). GO. Required phase-diverse PSP init
+        (states seeded at 0/45/90/135 deg) to cover axis acquisition.
+BURN 3  8 dB noise, full chain with the OLD timing loop: 2/18.
+        NOT a detector result: genie-timed MLSE at 8 dB is 1.3e-3 BER.
+        The old TED slips at 8 dB with probability ~1.0 (baseline data);
+        timing is now the sole threshold-setting element of the chain.
+
+Chain as of this gate:
+  timing loop (OLD, slip-prone)  <- the one remaining pre-VHDL component
+  -> Y1,Y2 -> vbank_unified -> mlse4_psp (soft) -> extract/frame path
+  -> K=7 decode. Everything right of the timing loop is proven clean
+  and interoperable.
+
+NEXT: TED co-design on the V-bank observables. The bank's winner
+statistic gives a far better timing discriminant than the old dominant-
+tone trick (full 2T energy, pattern-independent thanks to the open eye).
+Candidates: early-late on |V_winner|, or ML gradient on the coherent
+projection. Gates: slip-free at 8 dB over the sweep, acquisition within
+the preamble, then the full multi-seed sweep (exact-CPM modulator) vs a
+re-run baseline, then quantization, then VHDL.

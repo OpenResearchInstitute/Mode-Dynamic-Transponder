@@ -89,16 +89,23 @@ def expected_onair_for_payloads(payload_frames):
 
 # ------------------------------------------------------------- modulator ----
 def msk_modulate(bits, fs=625000.0, amp=9000.0, phase0=0.0):
-    """Phase-continuous CPFSK h=0.5 at arbitrary fs (fractional sps native).
-    bit 0 -> -FREQ_DEV, bit 1 -> +FREQ_DEV (sense is self-healed by resolve()).
-    Returns complex float array, one sample per 1/fs, len ~= nbits*fs/Rs."""
+    """Phase-continuous CPFSK h=0.5 with EXACT fractional symbol boundaries.
+    The phase at sample n is the exact integral of the instantaneous
+    frequency: phase(t) = 2*pi*FREQ_DEV * (S(t)), where S(t) is the signed
+    time integral of the bit sequence (+1/-1) up to t, with transitions at
+    the true fractional positions k*sps. Eliminates the +/-0.5-sample
+    transition jitter of per-sample switching (which the MLSE receiver is
+    sensitive enough to see as ~metric-180 ISI)."""
     sps = fs / SYMBOL_RATE
+    a = np.where(np.asarray(bits) == 1, 1.0, -1.0)
+    # cumulative signed symbol-time at each boundary (units of samples)
+    cum = np.concatenate([[0.0], np.cumsum(a) * sps])
     n_out = int(np.floor(len(bits) * sps))
-    t = np.arange(n_out)
-    sym = np.minimum((t / sps).astype(np.int64), len(bits) - 1)
-    freq = np.where(bits[sym] == 1, +FREQ_DEV, -FREQ_DEV)
-    dphi = 2 * np.pi * freq / fs
-    phase = phase0 + np.concatenate([[0.0], np.cumsum(dphi[:-1])])
+    t = np.arange(n_out, dtype=np.float64)
+    k = np.minimum((t / sps).astype(np.int64), len(bits) - 1)
+    # exact signed integral up to time t: boundary value + partial symbol
+    S = cum[k] + a[k] * (t - k * sps)
+    phase = phase0 + 2 * np.pi * FREQ_DEV * S / fs
     return amp * np.exp(1j * phase)
 
 def make_burst(payload_frames, fs=625000.0, amp=9000.0,

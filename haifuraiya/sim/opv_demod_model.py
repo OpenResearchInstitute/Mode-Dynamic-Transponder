@@ -37,12 +37,27 @@ MF_M_FLOOR   = 12
 
 # ---------------------------------------------------------------- front end --
 class CoherentModel:
-    def __init__(self, sps_nom, freq_offset=0.0):
+    def __init__(self, sps_nom, freq_offset=0.0, raw_decision=False):
         self.sps = float(sps_nom)
         self.foff = float(freq_offset)
         self.el = 0.5
         self.alpha_t = 0.06
         self.beta_t = 0.0025
+        # EXPERIMENT 1 (2026-07-15): raw integer-window decision correlations.
+        # Measured: the Catmull-Rom interpolating correlator loses ~3.6 dB of
+        # detection SNR vs a raw-sample correlator (9.06 vs 12.62 dB coherent
+        # at Eb/N0=10, ideal 13.01). raw_decision=True uses raw windows for
+        # the on-time (decision) correlations; the TED early/late arms keep
+        # the interpolator, where sub-sample offsets are required and SNR is
+        # less critical. This is also the hardware-natural structure.
+        self.raw_decision = bool(raw_decision)
+        # EXPERIMENT 2: post-lock gain scheduling. After settle_syms symbols
+        # the timing PI and Costas gains are scaled by gain_sched (loops keep
+        # acquisition agility, then quiet down to reduce noise-driven jitter,
+        # which measurement shows sets an SNR-independent BER floor ~3e-2).
+        # gain_sched = 1.0 reproduces the baseline exactly.
+        self.settle_syms = 2000
+        self.gain_sched = 1.0
         self._recompute()
 
     def _recompute(self):
@@ -65,6 +80,16 @@ class CoherentModel:
         return b + 0.5*f*(c - a + f*(2.0*a - 5.0*b + 4.0*c - d
                                      + f*(3.0*(b - c) + d - a)))
 
+    def corr_at_raw(self, s, base):
+        """Tone correlations over one symbol using RAW integer samples in
+        [ceil(base), floor(base+sps)], phase-continuous absolute LO."""
+        n0 = int(np.ceil(base))
+        n1 = int(np.floor(base + self.sps))
+        n = np.arange(n0, min(n1 + 1, len(s)))
+        v = s[n]
+        return (np.sum(v * np.exp(1j * self.inc1 * n)),
+                np.sum(v * np.exp(1j * self.inc2 * n)))
+
     def corr_at(self, s, base):
         """Tone correlations over one symbol at absolute fractional pos base."""
         pos = base + np.arange(self.M) * self.step
@@ -81,17 +106,24 @@ class CoherentModel:
         pos, freq = EL + 1.0, 0.0
         Y1o, Y2o = [], []
         n = len(s)
+        at, bt = self.alpha_t, self.beta_t
         while pos + self.sps + EL + 2.0 < n:
-            Y1, Y2 = self.corr_at(s, pos)
+            if len(Y1o) == self.settle_syms and self.gain_sched != 1.0:
+                at = self.alpha_t * self.gain_sched
+                bt = self.beta_t * self.gain_sched
+            if self.raw_decision:
+                Y1, Y2 = self.corr_at_raw(s, pos)
+            else:
+                Y1, Y2 = self.corr_at(s, pos)
             Y1e, Y2e = self.corr_at(s, pos - EL)
             Y1l, Y2l = self.corr_at(s, pos + EL)
             t1 = abs(Y1)**2 > abs(Y2)**2
             ya = Y1 if t1 else Y2
             dy = (Y1l - Y1e) if t1 else (Y2l - Y2e)
             err = (ya.real*dy.real + ya.imag*dy.imag) / (abs(ya)**2 + 1e-9)
-            freq += self.beta_t * err
+            freq += bt * err
             freq = min(max(freq, -0.05), 0.05)
-            adj = self.alpha_t * err + freq
+            adj = at * err + freq
             adj = min(max(adj, -2.0), 2.0)
             Y1o.append(Y1)
             Y2o.append(Y2)
@@ -99,7 +131,7 @@ class CoherentModel:
         return np.array(Y1o), np.array(Y2o)
 
     @staticmethod
-    def combine(Y1, Y2):
+    def combine(Y1, Y2, settle=None, sched=1.0):
         """Decision-switched Costas (Hodgart) + Massey 2T combine + differential
         boxplus. Returns both parity streams dec0, dec1."""
         nsym = len(Y1)
@@ -108,6 +140,8 @@ class CoherentModel:
         pll_a, pll_b = 0.01, 2e-4
         theta, freq = 0.0, 0.0
         for k in range(nsym):
+            if settle is not None and k == settle:
+                pll_a *= sched; pll_b *= sched
             rot = np.cos(theta) - 1j*np.sin(theta)
             y1, y2 = Y1[k]*rot, Y2[k]*rot
             X[k], Yv[k] = y1.imag, y2.imag
@@ -299,3 +333,61 @@ if __name__ == "__main__":
     for i, (k, mt, by) in enumerate(frames):
         head = " ".join(f"{b:02X}" for b in by[:16])
         print(f"  frame {i+1:2d} @sym {k:6d} metric {mt:4d}  {head}")
+
+
+# ============================================================ MLSE receiver
+# Session 3-4 redesign: coherent 2T matched-filter bank + 4-state MLSE with
+# per-survivor phase. Constants DERIVED from measured phase-step tables
+# (see demod_phase0 README): unification gamma = 172.15 deg (= pi minus one
+# sample of tone phase at the pos grid), bank signs (+,-,-,+), state sign
+# flips when the new bit is 0. Measured: 100.000% clean detection;
+# ~1.1-1.5 dB total implementation loss vs coherent MSK theory at
+# Eb/N0 6..10 dB with genie timing (old combine: ~3e-2 floor).
+GAMMA_UNIFY_DEG = 172.15
+
+def vbank_unified(Y1, Y2):
+    """Coherent 2T MF bank on unified arms. Rows: V11, V00, V10, V01."""
+    n = len(Y1)
+    Q = Y2 * np.exp(1j*np.radians(GAMMA_UNIFY_DEG)) \
+           * np.where(np.arange(n) % 2 == 0, 1.0, -1.0)
+    return np.stack([Y1[:-1] + Y1[1:],
+                     Q[:-1]  - Q[1:],
+                     Y1[:-1] - Q[1:],
+                     Q[:-1]  + Y1[1:]])
+
+_MLSE_PAIR = {(1,1):0, (0,0):1, (1,0):2, (0,1):3}
+
+def mlse4_psp(V, g_phase=0.05, th_init=(0.0, np.pi/4, np.pi/2, 3*np.pi/4)):
+    """4-state MSK MLSE, per-survivor phase, soft output (ACS margins).
+    State = (axis sign, previous bit). Same ACS+traceback pattern as the
+    K=7 viterbi_tailbiting, four states, free-running."""
+    nw = V.shape[1]; NS = 4
+    cur = np.zeros(NS); th = np.array(th_init, dtype=float)
+    pred = np.zeros((nw, NS), dtype=np.int8)
+    marg = np.zeros((nw, NS))
+    for t in range(nw):
+        nxt = np.empty(NS); nth = np.empty(NS)
+        npd = np.zeros(NS, dtype=np.int8); nmg = np.zeros(NS)
+        for st2 in range(NS):
+            s2 = 1.0 if (st2 >> 1) == 0 else -1.0
+            bnew = st2 & 1
+            s = s2 if bnew == 1 else -s2      # flip when new bit is 0
+            cands = []
+            for pb in (0, 1):
+                stp = ((0 if s > 0 else 1) << 1) | pb
+                v = V[_MLSE_PAIR[(pb, bnew)], t] * np.exp(-1j*th[stp])
+                cands.append((cur[stp] + s*v.real, stp, v))
+            (m0,p0,v0),(m1,p1,v1) = cands
+            if m0 >= m1: w,pw,vw,l = m0,p0,v0,m1
+            else:        w,pw,vw,l = m1,p1,v1,m0
+            nxt[st2] = w; npd[st2] = pw; nmg[st2] = w - l
+            nth[st2] = th[pw] + g_phase*(np.angle(s*vw) if abs(vw) > 0 else 0.0)
+        cur = nxt - nxt.max(); th = nth
+        pred[t] = npd; marg[t] = nmg
+    soft = np.zeros(nw)
+    st = int(np.argmax(cur))
+    for t in range(nw - 1, -1, -1):
+        bnew = st & 1
+        soft[t] = marg[t, st] if bnew == 1 else -marg[t, st]
+        st = int(pred[t, st])
+    return soft
