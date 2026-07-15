@@ -225,3 +225,126 @@ BER(clean) floor collapses toward theory, slip probability improves
 (better observables feed the TED), C++ TX interop preserved (RX-side
 change only), byte-identical decode on the clean canonical stimulus.
 Then quantize (<=0.2 dB budget), then VHDL.
+
+## Session 2, part 3: detection redesign underway (2026-07-15)
+
+Design method: empirical, from the modulated signal itself (convention-safe).
+
+PROVEN on clean signal:
+  - Eye-closure mechanism confirmed precisely: equal-bit 2T windows put all
+    energy in one tone arm (orthogonal, |Z|=72k); TRANSITION windows split
+    it (42.5k/42.5k) and the old combine partially cancels -> the weak tail
+    (80% of weak symbols are transitions).
+  - The rail statistics S=Z1+Z2, D=Z1-Z2 (algebraically the half-sine
+    weighted matched filters) have an OPEN eye: min/med 0.84, zero weak.
+  - Angle bookkeeping decoded from raw scatter vs known bits: each tone
+    arm's LO advances with its own tone, so the STRONG statistic's angle is
+    frozen within same-bit runs and steps ~pi net per '0' bit. The
+    information is in ANGLE DIFFERENCES; every axis-tracker architecture
+    was structurally wrong (three were built and rejected en route:
+    single tracker, quadrature-offset tracker, dual per-rail trackers --
+    all defeated by the pi/2-per-symbol weighting slide and the
+    data-dependent accumulated phase).
+  - combine_v3 (max-select of S/D per window + differential phase
+    U_k conj(U_{k-1})): eye min/med 0.49, ZERO weak symbols. Naive
+    Re() decision reaches 76% bit match -- mapping incomplete because
+    transition windows contribute half-angle steps.
+
+NEXT (single well-defined task): derive the exact delta-phase -> bit
+decision rule from the scatter table (candidates: 2-window-spaced
+differential U_{k+1} conj(U_{k-1}); or quantized delta-angle alphabet
+{0, +-pi/2, pi} with per-type bit meaning). Then: clean 100% match ->
+noise BER at 12 dB (floor must collapse toward theory) -> full sweep vs
+baseline_float.csv -> C++ TX interop check on the canonical stimulus ->
+then TED co-design on the same statistics, quantization, VHDL.
+
+## Session 3 (2026-07-16): detector derivation -- structure found, MLSE next
+
+Method continued: measure, never assume. Key artifacts of the day:
+
+MEASURED (definitive, spreads of 0.06 deg): the matched-arm phase-step
+table by bit pair and window parity. Same-bit boundaries: exactly 0.
+Transitions: +/-172.2 deg at even k, -/+7.7 deg at odd k, where
+7.8 deg = 2*pi*13550/625000 = ONE SAMPLE of tone phase (the pos-grid
+offset made visible). This table IS the arm-unification law:
+  Q_k = Y2_k * exp(j*172.15deg) * (-1)^k
+puts both tone arms on a single phase reference.
+
+combine_v5 (2T MF bank on unified arms, signs (-1,+1,+1), noncoherent
+magnitude scoring): 100.000% clean bit match, eye min/med 0.80, zero weak
+symbols. THE EYE-CLOSURE PROBLEM IS SOLVED STRUCTURALLY.
+
+combine_v6 (decision-directed axis tracker): rejected -- fights the pi
+data flips. combine_v7 (squaring/double-angle EMA axis): correct axis
+(99.4% clean), noise BER ~2.7e-2 -- no better than v5.
+
+ROOT CAUSE of the remaining noise wall, understood and quantified:
+per-window pair decisions have hypothesis distance T (adjacent pairs
+share a symbol) -- a structural ~6 dB margin giveaway. Margin-T
+prediction at 12 dB ~1e-2 matches measurement. MSK's full distance
+(the MSK = BPSK result) requires SEQUENCE detection.
+
+NEXT (well-defined): combine_v8 = 4-state MLSE (Viterbi) over the
+unified coherent V-bank. MSK phase trellis: 4 states, branch metrics =
+Re(V_hyp * e^-j*axis) with the squaring-loop axis, traceback ~16-32
+symbols. All ingredients exist and are hardware-natural (the fabric
+already has a 64-state Viterbi in the FEC; a 4-state one is trivial).
+Gate: clean 100%, then 12 dB BER must approach theory-with-interpolator-
+loss (~1e-4-ish), then full sweep vs baseline, then interop, then TED
+co-design, quantization, VHDL.
+
+## Session 3, part 2: MLSE derivation completed on paper, 94% in code
+
+Answered en route: why not reuse the FEC Viterbi? The 67x32 interleaver
+sits between modulation and code, so a joint super-trellis is impossible
+by design (that would be turbo equalization). But the ENGINE is reused:
+the 4-state MLSE is the same ACS+traceback pattern as viterbi_tailbiting
+with different parameters, free-running, soft output (max-log margins).
+
+DERIVED EXACTLY from the measured step table (unified variables):
+  - phase step is pi iff the NEW bit is 0; 0 otherwise. Trellis state
+    flip rule: s' = s if b_new==1 else -s. (The flip-on-change variant
+    was tested and is WRONG: 67%.)
+  - coherent bank signs for the trellis: V11 = Y1k+Y1k+1,
+    V00 = Qk - Qk+1, V10 = Y1k - Qk+1, V01 = Qk + Y1k+1  [signs +,-,-,+].
+    Note v5's magnitude bank tolerated a wrong V10 sign silently; the
+    coherent trellis cannot -- magnitudes forgive, projections do not.
+
+STATUS: pointer-correct 4-state MLSE (mlse4) reaches 94.05% clean with
+exhaustively fitted signs. Remaining ~6% clean deficit is attributed to
+the squaring-loop axis reference (EMA transient and/or half-pi ambiguity
+mid-stream), not the trellis. First broken traceback (state
+reconstruction instead of stored predecessors) caught by clean gate at
+50% -- the gates work.
+
+NEXT session, in order:
+  1. Fix the axis reference: candidates -- per-survivor phase (classic
+     MLSE-with-phase, elegant: each trellis path carries its own axis),
+     or preamble-seeded axis with slow update, or block phase estimate.
+  2. Gate: 100.000% clean. Then noise gauntlet at 12/10/8/6 dB --
+     success = approach theory + interpolator loss (~1e-4 at 12 dB).
+  3. Full multi-seed sweep vs baseline_float.csv; interop on the
+     C++-modulated canonical file; TED co-design on the V-bank
+     observables; quantization; VHDL.
+
+## Session 4 (2026-07-16): THE FLOOR IS DEAD
+
+mlse4_psp (4-state MLSE, per-survivor phase, derived constants) on the
+unified coherent V-bank, genie timing:
+    clean gate: 100.000%
+    Eb/N0 12: BER 0 (>= ~47k bits)   [old floor 3.1e-2]
+    Eb/N0 10: 8.5e-5   8: 1.3e-3   6: 8.7e-3
+    => total implementation loss ~1.1-1.5 dB vs coherent MSK theory.
+Components shipped in opv_demod_model.py: vbank_unified(), mlse4_psp().
+Answer recorded: two Viterbis in series is the correct architecture
+(4-state undoes the modulation memory, K=7 undoes the code memory; the
+interleaver between them forbids merging and enables both).
+
+REMAINING GATES before VHDL:
+  1. Full-chain FER: mlse soft -> resolve/frame path -> byte-correct
+     frames; interop on the C++-modulated canonical chan5 stimulus.
+  2. Multi-seed sweep (ebn0_multiseed with --mlse) vs baseline_float.csv.
+  3. TED co-design on V-bank observables (replace genie timing; the bank
+     gives better timing observables than the old dominant-tone TED).
+  4. Axis/PSP acquisition characterization within the preamble budget.
+  5. Fixed-point quantization (<=0.2 dB), then msk_mlse4.vhd et al.
