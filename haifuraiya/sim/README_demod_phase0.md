@@ -152,3 +152,76 @@ Consequences:
      statistic -- decode quality fed back from the A53, dual-hypothesis
      frame_sync with deferred selection, or an equivalent. This is now a
      requirement, discovered before any VHDL was written.
+
+## Session 2 log (2026-07-15): baseline established, loss hunt underway
+
+BASELINE (ebn0_multiseed.py, 10 seeds x 8 frames, decode-verified resolve,
+provenance-logged; her run, baseline_float.csv):
+  - Model and C++ track within a few frames at EVERY point (transliteration
+    control green across the whole curve). The curve therefore characterizes
+    the reference itself, at channel rate, for the first time.
+  - BER(clean) floor ~3e-2, level-INDEPENDENT from 16 down to 12 dB.
+  - slipP 0.2..0.5 in the good region; 1.0 at and below 8 dB.
+  - FER cliff ~9-10 dB vs the ~4.5 dB mission target: ~5 dB to recover.
+
+FINDING (isolated, bankable): the Catmull-Rom interpolating correlator
+loses ~3.6 dB of detection SNR vs a raw integer-sample correlator on the
+same signal+noise (9.06 vs 12.62 dB coherent; ideal 13.01; M-independent).
+The robust native 40sps path uses integer windows -- consistent.
+
+EXPERIMENTS JUDGED AND REJECTED (flags remain in the model, default off):
+  1. raw_decision (raw-window decision correlations, interpolated TED):
+     slips WORSENED (plant/controller mismatch: decision timing quantized
+     to integers while the TED regulates fractional position). Lesson: the
+     decision correlator and TED must be redesigned TOGETHER. This remains
+     the leading fix direction -- and the hardware-natural one -- but as a
+     joint design, not a knob.
+  2. gain_sched (post-lock loop gain reduction): everything worsened.
+     Lesson (confirmed by genie decomposition): the decision-switched
+     Costas performs systematic per-symbol demodulation work (locking
+     theta=0 yields 50% BER); slowing it removes necessary tracking.
+
+OPEN: ownership of the 3e-2 BER(clean) floor. Genie timing does NOT
+remove it (timing jitter exonerated). Naive genie phase is invalid
+(see above). NEXT INSTRUMENT: data-aided genie phase -- compute the true
+per-symbol phase trajectory from the known transmitted bits and substitute
+it for the Costas; the residual BER then cleanly splits detection loss
+from phase-tracking loss. First experiment of the next session.
+
+## Session 2, part 2: FLOOR ATTRIBUTED (2026-07-15)
+
+Complete attribution chain for the ~3e-2 BER(clean) floor, each step
+measured at 12 dB:
+  - genie timing (fixed true grid):        floor unchanged -> timing OUT
+  - clean-replay genie phase (the clean
+    run's recorded Costas trajectory
+    substituted on the noisy run):         floor unchanged -> phase OUT
+  - decision-variable SNR (enc is linear
+    in Y, so noise-only pipeline gives
+    the exact noise part):                 13.9 dB, only 1.1 dB structural
+                                           loss -> average SNR OUT
+  - clean-signal |enc| eye distribution:   continuous weak tail; 3.6% of
+                                           symbols below 0.25x median eye,
+                                           min/median 0.0007
+CONCLUSION: the floor is DATA-PATTERN-DEPENDENT EYE CLOSURE in the
+single-T tone-correlator + Massey combine approximation of the MSK
+matched receiver. ~3-4% of bit-transition patterns yield a nearly closed
+eye on a CLEAN signal; noise flips those for free. The 3.6 dB correlator
+SNR loss (session 2 part 1) is real but secondary.
+
+Also measured en route: on a clean signal the Costas theta is
+quasi-static (0.04 deg/symbol mean motion) -- it is a slow phase
+reference, not a per-symbol tracker; the earlier theta=0 catastrophe was
+about the converged offset value, not tracking dynamics.
+
+## The solve target (next design work)
+
+A correct 2T matched detection path: proper de Buda/Massey MSK reception
+(2T-spaced matched correlations / half-sine weighted I-Q rails in the
+offset-QPSK view), designed JOINTLY with a TED that shares its
+observables -- per the experiment-1 lesson that the decision path and
+timing loop must move together. Success criteria on the harness:
+BER(clean) floor collapses toward theory, slip probability improves
+(better observables feed the TED), C++ TX interop preserved (RX-side
+change only), byte-identical decode on the clean canonical stimulus.
+Then quantize (<=0.2 dB budget), then VHDL.
