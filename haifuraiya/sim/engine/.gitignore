@@ -1,0 +1,9 @@
+xsim.dir/
+*.log
+*.jou
+*.pb
+*.wdb
+*.str
+.Xil/
+engine_dump.txt
+mac_trace.txt
