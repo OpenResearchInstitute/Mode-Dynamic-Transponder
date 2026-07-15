@@ -391,3 +391,56 @@ def mlse4_psp(V, g_phase=0.05, th_init=(0.0, np.pi/4, np.pi/2, 3*np.pi/4)):
         soft[t] = marg[t, st] if bnew == 1 else -marg[t, st]
         st = int(pred[t, st])
     return soft
+
+
+def track_mlse(s, alpha_t=0.06, beta_t=0.0025, el=0.5, sps_nom=None):
+    """Timing loop with V-bank winner early-late TED (session 5).
+    Same 3x correlation cost and PI structure as the legacy loop; the
+    error signal is pattern-independent (the V-bank winner always holds
+    full 2T energy). Gates passed: interop 10/10; 8 dB 18/18 (legacy TED
+    2/18); mission threshold ~4.5 dB held at the frame level."""
+    m = CoherentModel(sps_nom if sps_nom else 625000.0/54200.0)
+    g = np.exp(1j*np.radians(GAMMA_UNIFY_DEG))
+    EL = el
+    pos, freq = EL + 1.0, 0.0
+    Y1o, Y2o = [], []
+    prev = None
+    n = len(s); k = 0
+    while pos + m.sps + EL + 2.0 < n:
+        y1e, y2e = m.corr_at(s, pos - EL)
+        y1c, y2c = m.corr_at(s, pos)
+        y1l, y2l = m.corr_at(s, pos + EL)
+        Y1o.append(y1c); Y2o.append(y2c)
+        if prev is not None:
+            (p1e,p2e,p1c,p2c,p1l,p2l,kp) = prev
+            qp = g*(1.0 if kp % 2 == 0 else -1.0)
+            qc = g*(1.0 if k % 2 == 0 else -1.0)
+            def _bank(a1p, a2p, a1c, a2c):
+                Qp, Qc = a2p*qp, a2c*qc
+                return np.abs(np.array([a1p+a1c, Qp-Qc, a1p-Qc, Qp+a1c]))
+            Ae = _bank(p1e,p2e,y1e,y2e)
+            Ac = _bank(p1c,p2c,y1c,y2c)
+            Al = _bank(p1l,p2l,y1l,y2l)
+            w = int(np.argmax(Ac))
+            err = (Al[w] - Ae[w]) / (Ac[w] + 1e-9)
+            freq = min(max(freq + beta_t*err, -0.05), 0.05)
+            adj  = min(max(alpha_t*err + freq, -2.0), 2.0)
+        else:
+            adj = 0.0
+        prev = (y1e,y2e,y1c,y2c,y1l,y2l,k)
+        pos += m.sps + adj
+        k += 1
+    return np.array(Y1o), np.array(Y2o)
+
+def demod_mlse(x):
+    """Full new-receiver chain: track_mlse -> vbank_unified -> mlse4_psp
+    -> extract_frames (both polarities, best wins)."""
+    Y1, Y2 = track_mlse(x)
+    soft = mlse4_psp(vbank_unified(Y1, Y2))
+    best = (None, -1)
+    for pol in (1.0, -1.0):
+        fr = extract_frames(pol*soft)
+        gd = sum(1 for _, mt, by in fr if by is not None)
+        if gd > best[1]:
+            best = (fr, gd)
+    return best[0]

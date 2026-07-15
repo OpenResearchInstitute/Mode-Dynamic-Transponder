@@ -379,3 +379,31 @@ Candidates: early-late on |V_winner|, or ML gradient on the coherent
 projection. Gates: slip-free at 8 dB over the sweep, acquisition within
 the preamble, then the full multi-seed sweep (exact-CPM modulator) vs a
 re-run baseline, then quantization, then VHDL.
+
+## Session 5 (2026-07-16): THE DRAGON IS DOWN
+
+TED co-design (V-bank winner early-late, same 3x-correlation cost and PI
+plumbing as the old loop, error = (|Vw(late)|-|Vw(early)|)/|Vw(on)|):
+  GATE 1 interop (canonical C++ chan5): 10/10 byte-identical. GO.
+  GATE 2 8 dB full chain: 18/18 (old TED: 2/18). Slips eliminated.
+  THRESHOLD HUNT (3 seeds x 6 frames, full chain):
+      6.0 dB 17/18 | 5.0 16/18 | 4.5 16/18 | 4.0 10/18 | 3.5 6/18
+  => mission target (~4.5 dB) MET. Cliff at ~4 dB = the K=7 code's own
+  threshold: the demodulator is no longer the chain's limiting element.
+  Old receiver cliff: ~9-10 dB. Recovered: ~5 dB, as quantified by the
+  day-1 baseline.
+
+Chain (all model, all proven): track_mlse (V-bank EL TED) -> vbank_unified
+-> mlse4_psp -> extract/frame path -> K=7. Interop with untouched C++
+modulator preserved at every gate.
+
+REMAINING before fabric (bookkeeping, not design):
+  1. Full multi-seed statistical sweep for the record (10 seeds, exact-CPM
+     modulator, re-run baseline for apples-to-apples), acquisition-time
+     characterization vs the preamble budget, metrics-jitter tuning
+     (interop metrics 35-76 vs 7-36 with old TED: slight timing jitter,
+     alpha/beta/EL tuning pass).
+  2. track_mlse shipped into opv_demod_model.py as the default tracker.
+  3. Fixed-point quantization (<=0.2 dB budget), node by node.
+  4. VHDL: msk_mlse4.vhd + vbank + TED, dump-compare per block against
+     the fixed-point model; frame sync and K=7 fabric blocks unchanged.
