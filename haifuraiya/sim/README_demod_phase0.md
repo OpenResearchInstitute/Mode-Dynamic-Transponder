@@ -458,3 +458,62 @@ Shipped: track_fp, vbank_fp, mlse4_fp, demod_mlse_fp; harness --fp.
 REMAINING quantization node: corr_at internals (Catmull-Rom coeffs exact
 in Q2.14, interp samples 18b, twiddles Q1.15, integer accumulator, pos as
 int + Q16 fraction) -- to be fixed as the first VHDL block's spec.
+
+## Session 6, part 2: fixed-point RECORD RUN (hers, mlse_fp_sweep.csv)
+
+  12/10/8/6 dB: 80/80 at every point -- identical to float.
+  5.0: 71/80 (float 78) | 4.5: 55/80 (float 59) | 4.0: 52 (49) | 3.5: 42 (19)
+  FER slope near threshold ~19 frames per 0.5 dB => quantization damage
+  ~0.1 dB. BUDGET (0.2 dB): MET. Below the cliff the fixed-point variant
+  runs slightly hot-gain and ahead; operating region unchanged.
+
+PHASE 0 QUANTIZATION: COMPLETE except corr_at internals, which are
+deliberately reserved -- their fixed-point spec IS the first VHDL block's
+spec (msk_correlator: Catmull-Rom Q2.14, samples 18b, twiddles Q1.15,
+integer accumulator, pos as int + Q16 fraction).
+
+## VHDL phase: block order and bench doctrine
+  1. msk_correlator.vhd  (+ fix corr_at internals in model simultaneously;
+     dump-compare bench: same int16 stimulus file into both, Y streams
+     diffed integer-for-integer)
+  2. vbank_ted.vhd       (V-bank former + TED + PI; reuses nco/sin_cos_lut
+     pattern from pluto_msk; bench diffs err/adj/pos trajectories)
+  3. msk_mlse4.vhd       (4-state ACS + PSP + traceback; sibling of the
+     K=7 soft Viterbi; bench diffs soft output int16-for-int16)
+  4. integration with frame_sync_detector_soft (unchanged, proven) and the
+     existing decode path; chain bench = canonical chan5 stimulus, frames
+     byte-identical to cxx_frames.bin.
+Every block: model dumps its node trajectories; xsim TB compares
+integer-for-integer; no block advances with a nonzero diff.
+
+## Session 7 (2026-07-15): FIRST FABRIC BLOCK VERIFIED
+
+Architecture decision by measurement: raw integer windows BEAT the
+interpolated correlator end-to-end (36/36 @ 6 dB, 35/36 @ 4.5 vs 30/36)
+once the TED spacing matched (EL = 2 whole samples), and the unification
+constant collapsed to a SIGN FLIP (raw step table: 0 / ~180 exactly; the
+old 172.15 deg was the interpolation grid artifact). Fabric-simplest ==
+best-performing. Full-integer symbol engine (32-bit NCO, Q1.15 LUT,
+integer MACs, shift gains) gated 24/24, 24/24, 22/24, interop 10/10.
+
+msk_symbol_engine.vhd (correlator + V-bank TED + PI): BIT-EXACT against
+the integer model over 5202 symbols of the canonical stimulus, verified
+in xsim on keroppi. See vhdl_engine/README.md for the shakedown ledger.
+
+NEXT BLOCKS: msk_mlse4.vhd (4-state ACS + PSP + traceback -- structural
+sibling of the existing K=7 soft Viterbi), then integration with
+frame_sync_detector_soft (unchanged) and the decode path; chain bench =
+canonical stimulus in, frames byte-identical to cxx_frames.bin out.
+
+## Session 7, part 2: SECOND FABRIC BLOCK VERIFIED
+
+msk_mlse4.vhd (4-state MLSE, per-survivor phase, streaming traceback 64,
+zero divides): BIT-EXACT over all 5138 decisions against the integer
+model, input chained from msk_symbol_engine's verified output. Six-entry
+shakedown ledger (see vhdl_mlse4/README.md); zero algorithm errors.
+The receiver's full samples->soft-bits path now exists in verified VHDL.
+
+REMAINING: integration bench (sim/chain/): canonical chan5 stimulus ->
+engine -> mlse4 -> frame_sync_detector_soft (existing, proven) -> K=7
+decode -> frames byte-identical to cxx_frames.bin. Then synthesis, then
+the ZCU102, then over-the-air against Locutus/Dialogus.
