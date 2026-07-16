@@ -59,6 +59,7 @@ begin
       clk => clk, rst => rst,
       y_valid => y_valid,
       y1_re => y1_re, y1_im => y1_im, y2_re => y2_re, y2_im => y2_im,
+      busy => open,
       soft_valid => soft_valid, soft_idx => soft_idx, soft_out => soft_out,
       dbg_best => dbg_best,
       dbg_th0 => dbg_th0, dbg_th1 => dbg_th1,

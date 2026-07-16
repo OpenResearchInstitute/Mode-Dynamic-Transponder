@@ -32,7 +32,7 @@ use std.textio.all;
 
 entity msk_mlse4 is
   generic (
-    G_LUT_FILE : string  := "lut16.txt";
+    G_LUT_FILE : string  := "lut16q.txt";
     G_TB_D     : integer := 64            -- traceback depth
   );
   port (
@@ -65,24 +65,58 @@ end entity;
 
 architecture rtl of msk_mlse4 is
 
-  type lut_t is array (0 to 65535) of signed(15 downto 0);
-  impure function load_lut(fname : string; col : integer) return lut_t is
+
+  -- quarter-wave sin/cos: 16385-entry table (0..16384 = 0..90 deg),
+  -- reconstruction proven bit-exact against the full table over all
+  -- 65536 phases (see demod_phase0 README, session 8). BRAM ~57 -> ~15.
+  type qlut_t is array (0 to 16384) of signed(15 downto 0);
+
+  impure function load_qlut(fname : string; col : integer) return qlut_t is
     file f       : text open read_mode is fname;
     variable l   : line;
     variable c,s : integer;
-    variable r   : lut_t;
+    variable r   : qlut_t;
   begin
-    for i in 0 to 65535 loop
+    for i in 0 to 16384 loop
       readline(f, l); read(l, c); read(l, s);
-      -- offset-encoded file (value + 32768): no negative literals
+      -- offset-encoded (+32768): textio-immune
       if col = 0 then r(i) := to_signed(c - 32768, 16);
       else            r(i) := to_signed(s - 32768, 16);
       end if;
     end loop;
     return r;
   end function;
-  constant LUT_C : lut_t := load_lut(G_LUT_FILE, 0);
-  constant LUT_S : lut_t := load_lut(G_LUT_FILE, 1);
+
+  constant QLC : qlut_t := load_qlut(G_LUT_FILE, 0);
+  constant QLS : qlut_t := load_qlut(G_LUT_FILE, 1);
+
+  function lut_cos(ph : integer) return signed is
+    variable quad : integer;
+    variable q    : integer;
+  begin
+    quad := (ph / 16384) mod 4;
+    q    := ph mod 16384;
+    case quad is
+      when 0      => return  QLC(q);
+      when 1      => return -QLC(16384 - q);
+      when 2      => return -QLC(q);
+      when others => return  QLC(16384 - q);
+    end case;
+  end function;
+
+  function lut_sin(ph : integer) return signed is
+    variable quad : integer;
+    variable q    : integer;
+  begin
+    quad := (ph / 16384) mod 4;
+    q    := ph mod 16384;
+    case quad is
+      when 0      => return  QLS(q);
+      when 1      => return  QLS(16384 - q);
+      when 2      => return -QLS(q);
+      when others => return -QLS(16384 - q);
+    end case;
+  end function;
 
   -- pair hypothesis index: 0=(1,1) 1=(0,0) 2=(1,0) 3=(0,1)
   -- V-bank per trellis step (25-bit complex x 4)
@@ -230,11 +264,11 @@ begin
               end if;
               vr0 := vre(pairsel); vi0 := vim(pairsel);
               if pb = 0 then
-                c := LUT_C(to_integer(theta(stp0)));
-                sn := LUT_S(to_integer(theta(stp0)));
+                c := lut_cos(to_integer(theta(stp0)));
+                sn := lut_sin(to_integer(theta(stp0)));
               else
-                c := LUT_C(to_integer(theta(stp1)));
-                sn := LUT_S(to_integer(theta(stp1)));
+                c := lut_cos(to_integer(theta(stp1)));
+                sn := lut_sin(to_integer(theta(stp1)));
               end if;
               pr := resize(vr0*c, 42) + resize(vi0*sn, 42);
               pi := resize(vi0*c, 42) - resize(vr0*sn, 42);

@@ -103,6 +103,7 @@ begin
       clk => clk, rst => rst,
       y_valid => m_valid,
       y1_re => m_y1r, y1_im => m_y1i, y2_re => m_y2r, y2_im => m_y2i,
+      busy => open,
       soft_valid => soft_valid, soft_idx => soft_idx, soft_out => soft_out,
       dbg_best => dbg_best,
       dbg_th0 => th0, dbg_th1 => th1, dbg_th2 => th2, dbg_th3 => th3,

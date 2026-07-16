@@ -1,0 +1,10 @@
+xsim.dir/
+*.log
+*.jou
+*.pb
+*.wdb
+*.str
+.Xil/
+demod_soft.txt
+engine_trace.txt
+ring_trace.txt
