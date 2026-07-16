@@ -141,13 +141,11 @@ architecture rtl of haifuraiya_rx_top is
 
     -- Two distinct widths -- conflating them was the SAMPLE_W bug.
     constant CHAN_I_W       : natural := 16;  -- channelizer I capture width (full m_axis_chans I)
-    constant DEMOD_SAMPLE_W : natural := 12;  -- demod sample width (PROVEN tuning; do NOT set to 16)
-    -- Top bit of the 12-bit slice handed to the demod = the Kd / input-level knob.
-    --   15 -> chan_i_reg(15 downto 4) : top 12 bits, no clipping (safe default)
-    --   13 -> chan_i_reg(13 downto 2) : +12 dB into the loop, clips above 2^13
-    -- Confirm by measuring the channel-0 I amplitude with the real 20 Msps stimulus.
-
-    constant RX_SLICE_HI : natural := 15;   -- 16-bit gi/gq, take the true top 12 bits [15:4]
+    -- DEMOD_SAMPLE_W (12) and RX_SLICE_HI retired with the Costas demod:
+    -- the 12-bit slice-as-Kd plan was 9361/Pluto heritage. The MLSE demod
+    -- takes the full 16-bit normalized samples; the input-level knob is
+    -- now the normalizer gain_target (LEVEL_PLAN rms-9000 operating
+    -- point). Seam decision ratified 2026-07-16 (rx_top_patch_notes.md).
 
     signal reset_h      : std_logic;         -- active-high reset for the modem blocks
     signal demod_init_h : std_logic;
@@ -165,15 +163,14 @@ architecture rtl of haifuraiya_rx_top is
     signal rx_svalid  : std_logic := '0';
 
     -- intermediate signals for complex modulation
-    signal rx_i_to_demod : std_logic_vector(DEMOD_SAMPLE_W-1 downto 0);
-    signal rx_q_to_demod : std_logic_vector(DEMOD_SAMPLE_W-1 downto 0);
+    signal rx_i_to_demod : std_logic_vector(15 downto 0);
+    signal rx_q_to_demod : std_logic_vector(15 downto 0);
 
     -- demod outputs
     signal rx_data      : std_logic;
     signal rx_data_soft : signed(15 downto 0);
     signal rx_data_soft_corr : signed(15 downto 0);
     signal rx_dvalid    : std_logic;
-    signal lock_f1, lock_f2 : std_logic;
     signal rx_bit_corr  : std_logic;
     signal demod_lock   : std_logic;
     
@@ -301,58 +298,28 @@ begin
     --rx_q_to_demod <= std_logic_vector(gq(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1))
     --                 when COMPLEX_INPUT else (others => '0');
 
-    rx_i_to_demod <= std_logic_vector(gq(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1));
-    rx_q_to_demod <= std_logic_vector(gi(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1))
+    -- full-width normalized samples; the deliberate I/Q swap that made
+    -- the chain lock is PRESERVED (gq -> I, gi -> Q)
+    rx_i_to_demod <= std_logic_vector(gq);
+    rx_q_to_demod <= std_logic_vector(gi)
                  when COMPLEX_INPUT else (others => '0');
 
     ----------------------------------------------------------------------------
-    -- MSK demodulator (complex). Loopback/decoder-lbk tied off.
+    -- MSK demodulator: MLSE receiver (msk_symbol_engine + msk_mlse4 behind
+    -- a streaming ring buffer). Replaces the dual-Costas msk_demodulator.
+    -- No NCO freq words, no loop-filter tuning: the receiver has no Costas
+    -- loops. Soft output is already in fsync polarity (positive = confident
+    -- '0'), same convention the old demod fed u_fsync; RX_INVERT semantics
+    -- unchanged. Verified: sim/demod (10/10 frames, metrics all zero,
+    -- 2026-07-16).
     ----------------------------------------------------------------------------
-    u_demod : entity work.msk_demodulator
-        generic map (
-            SAMPLE_W => DEMOD_SAMPLE_W,
-            -- clk here is the 100 MHz fabric clock, NOT the sample rate; channel samples
-            -- arrive on rx_svalid (~625 ksps). Gate the carrier NCO per sample so it does
-            -- not free-run at the fabric rate. (Pluto/LibreSDR run clk == fs and leave this
-            -- at its default False.)
-            SAMPLE_GATED_NCO => true
-        )
+    u_demod : entity work.msk_demodulator_mlse
         port map (
             clk  => aclk,
-            init => demod_init_h,      -- was reset_h
+            init => demod_init_h,
 
-
-            rx_freq_word_f1 => rx_freq_word_f1,
-            rx_freq_word_f2 => rx_freq_word_f2,
-            discard_rxnco => rx_sample_discard, -- was (others => '0')
-
-
-            lpf_p_gain  => lpf_p_gain,
-            lpf_i_gain  => lpf_i_gain,
-            lpf_p_shift => lpf_p_shift,
-            lpf_i_shift => lpf_i_shift,
-            lpf_alpha   => lpf_alpha,
-            lpf_freeze  => lpf_freeze,        -- was '0'
-            lpf_zero    => lpf_zero,          -- was '0'
-
-
-            --lpf_accum_f1 => open,
-            --lpf_accum_f2 => open,
-            f1_nco_adjust => f1_nco_adjust,     -- was open
-            f2_nco_adjust => f2_nco_adjust,     -- was open
-
-
-            --f1_error => open,
-            --f2_error => open,
-
-            rx_dec_lbk_ena  => '0',
-            rx_dec_lbk_tclk => '0',
-            rx_dec_lbk_f1   => (others => '0'),
-            rx_dec_lbk_f2   => (others => '0'),
-
-            rx_enable     => rx_enable,         -- was '1'
-            rx_svalid  => rx_svalid,
-            --rx_samples => chan_i_reg(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1),
+            rx_enable    => rx_enable,
+            rx_svalid    => rx_svalid,
             rx_i_samples => rx_i_to_demod,
             rx_q_samples => rx_q_to_demod,
 
@@ -360,38 +327,33 @@ begin
             rx_data_soft => rx_data_soft,
             rx_dvalid    => rx_dvalid,
 
-            symbol_lock_count     => symbol_lock_count,
-            symbol_lock_threshold => symbol_lock_threshold,
+            demod_lock   => demod_lock,
 
-            cst_lock_f1 => lock_f1,
-            cst_lock_f2 => lock_f2,
-            --cst_lock_time_f1 => open,
-            --cst_lock_time_f2 => open,
-            --cst_unlock_f1 => open,
-            --cst_unlock_f2 => open,
+            ovfl_mlse    => open,   -- sticky diagnostics: route to demod
+            ring_lag     => open,   -- regs status when the map is reworked
 
-            --dbg_acc_i_f1       => open,
-            --dbg_acc_q_f1       => open,
-            --dbg_acc_iq_delta_f1 => open,
-
-
-            dbg_acc_iq_delta_f1 => dbg_cst_iq_delta, --remapped
-            dbg_acc_i_f1        => dbg_cst_acc_i, --remapped
-            dbg_acc_q_f1        => dbg_cst_acc_q, --remapped
-            f1_error            => dbg_f1_err, --remapped
-            f2_error            => dbg_f2_err, --remapped
-            lpf_accum_f1        => dbg_lpf_acc_f1, --remapped
-            lpf_accum_f2        => dbg_lpf_acc_f2, --remapped
-            cst_lock_time_f1    => dbg_cst_locktime_f1, --remapped
-            cst_lock_time_f2    => dbg_cst_locktime_f2, --remapped
-            cst_unlock_f1       => dbg_cst_unlock_f1, --remapped
-            cst_unlock_f2       => dbg_cst_unlock_f2 --remapped
+            dbg_pos      => open,
+            dbg_sym      => open,
+            dbg_th0      => open
         );
 
     rx_bit_corr <= rx_data when RX_INVERT = '0' else not rx_data;
-    demod_lock  <= lock_f1 and lock_f2;
-    cst_lock_f1 <= lock_f1;
-    cst_lock_f2 <= lock_f2;
+    -- demod_lock now comes directly from the MLSE demod (acquisition
+    -- complete). Legacy per-tone lock ports mirror it; Costas telemetry
+    -- ports tie to zero (Costas retired; MLSE taps are sim-probeable).
+    cst_lock_f1 <= demod_lock;
+    cst_lock_f2 <= demod_lock;
+    dbg_cst_iq_delta    <= (others => '0');
+    dbg_cst_acc_i       <= (others => '0');
+    dbg_cst_acc_q       <= (others => '0');
+    dbg_f1_err          <= (others => '0');
+    dbg_f2_err          <= (others => '0');
+    dbg_lpf_acc_f1      <= (others => '0');
+    dbg_lpf_acc_f2      <= (others => '0');
+    dbg_cst_locktime_f1 <= (others => '0');
+    dbg_cst_locktime_f2 <= (others => '0');
+    dbg_cst_unlock_f1   <= '0';
+    dbg_cst_unlock_f2   <= '0';
 
     -- debug tap out (aligned: chan_i_reg/chan_q_reg and rx_svalid update on the same edge)
     dbg_tgt_i     <= chan_i_reg;
