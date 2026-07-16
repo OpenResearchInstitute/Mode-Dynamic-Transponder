@@ -517,3 +517,32 @@ REMAINING: integration bench (sim/chain/): canonical chan5 stimulus ->
 engine -> mlse4 -> frame_sync_detector_soft (existing, proven) -> K=7
 decode -> frames byte-identical to cxx_frames.bin. Then synthesis, then
 the ZCU102, then over-the-air against Locutus/Dialogus.
+
+## PHASE 0: COMPLETE (2026-07-15)
+
+Final gate, first-run pass: the chained RTL receiver (msk_symbol_engine
+-> msk_mlse4) on the canonical C++-modulated channelizer stimulus:
+10/10 frames byte-identical to the reference decode, all metrics zero,
+23881 fabric soft decisions without a single defect.
+
+The verified chain of claims, each with its measurement in this repo:
+  1. New receiver architecture beats the C++ reference by ~5.8 dB
+     (mlse_sweep_v2.csv vs baseline_v2.csv, 10 seeds, provenance-stamped)
+     and meets the ~4.5 dB mission threshold.
+  2. Fixed-point translation costs ~0.1 dB (mlse_fp_sweep.csv).
+  3. RTL is bit-exact against the fixed-point model
+     (5202 symbols, engine; 5138 decisions, mlse4).
+  4. The composed RTL chain decodes the reference transmission
+     byte-identically with zero-defect soft decisions (this gate).
+
+Combined VHDL shakedown, both blocks + chain: 10 ledger entries,
+ZERO receiver-design errors, zero weeks lost, one working day from
+first line of VHDL to Phase 0 complete. Three prior demodulators died
+in fabric on this project; the fourth was forbidden to enter fabric
+without an oracle, and it walked through.
+
+Remaining phases (carpentry, not doubt): synthesis and timing closure;
+integration with channelizer / ring buffer / normalizer and the proven
+frame sync + K=7 fabric blocks; ZCU102 bring-up; over the air against
+Locutus/Dialogus. Open quality item: PSP theta attractor (~more frames
+at 4.5 dB available; tuning pass, model-side first, same doctrine).
