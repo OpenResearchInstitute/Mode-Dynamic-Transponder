@@ -36,3 +36,15 @@
 
 4. TIMING NOTE: engine OOC margin is +0.587 ns; after in-context P&R
    re-check WNS. Next cut (S_WIN_SETUP) is scoped if needed.
+
+## SEAM DECISIONS RATIFIED (W5NYV, 2026-07-16)
+1. Sample width 16 CONFIRMED: 12 was the 9361/Pluto heritage; the 9002
+   path takes full width. Closed by configuration, not logic.
+2. demod_lock proposal ACCEPTED: lock = acquisition complete
+   (sym_index > G_LOCK_SYM); symbols good -> frame sync proceeds.
+3. Timing constant: ours stands (755720).
+4. 2^24 sample wrap (~26.8 s): WILL be exceeded per transmission in the
+   field. SCOPED ITEM, documented, proceed for bring-up; incremental
+   phase tracking before field deployment.
+Normalizer behavior confirmed by designer: SQUELCHING (not freeze/hunt).
+Scale-up note: channel 5 first; all 64 channels after it works.
