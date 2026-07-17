@@ -1,0 +1,6 @@
+*_sim_project/
+synth_full_project/
+reports/
+pre_synth_stage.tcl
+opv_chan_stim*.txt
+f1_error.txt
