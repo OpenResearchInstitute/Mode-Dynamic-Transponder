@@ -32,7 +32,15 @@ from opv_encode_model import encode_frame, make_burst
 PAT = np.array([1.0 if ((0x02B8DB >> (23 - i)) & 1) == 0 else -1.0
                 for i in range(24)])
 
-def mlse_trial(x, payloads):
+def mlse_trial(x, payloads, fp=False):
+    if fp:
+        from opv_demod_model import demod_mlse_fp
+        frames = demod_mlse_fp(x) or []
+        ok = sum(1 for _, mt, by in frames
+                 if by is not None and any(np.array_equal(by, p) for p in payloads))
+        pos = [p_ for p_, _, _ in frames]
+        slipped = bool(np.any(np.diff(pos) != FRAME_SYMBOLS)) if len(pos) > 1 else False
+        return ok, len(payloads), slipped
     Y1, Y2 = track_mlse(x)
     soft = mlse4_psp(vbank_unified(Y1, Y2))
     best = (None, -1)
@@ -111,7 +119,7 @@ def run(args):
         print(f"# cxx binary: {cxx}  md5 {md5}")
     print(f"# frames/trial {args.frames}, seeds/point {args.seeds}, "
           f"amp {args.amp}, model resolve: decode-verified, "
-          f"receiver: {'MLSE (V-bank TED + 4-state PSP)' if args.mlse else ('RAW-WINDOW exp1' if args.raw else 'legacy combine (baseline)')}")
+          f"receiver: {('MLSE FIXED-POINT' if args.fp else 'MLSE (V-bank TED + 4-state PSP)') if args.mlse else ('RAW-WINDOW exp1' if args.raw else 'legacy combine (baseline)')}")
     hdr = (f"{'Eb/N0':>6} {'BER(mean)':>10} {'BER(clean)':>10} "
            f"{'FER model':>10} {'slipP':>6}")
     if cxx:
@@ -133,7 +141,7 @@ def run(args):
             x = (np.clip(np.round(x.real), -32768, 32767)
                  + 1j * np.clip(np.round(x.imag), -32768, 32767))
             if args.mlse:
-                ok, tot_, sl = mlse_trial(x, payloads)
+                ok, tot_, sl = mlse_trial(x, payloads, fp=args.fp)
                 mok += ok; mtot += args.frames; slips += int(sl)
             else:
                 r = model_trial(x, payloads, raw=args.raw)
@@ -186,4 +194,5 @@ if __name__ == "__main__":
     ap.add_argument("--csv", default=None)
     ap.add_argument("--raw", action="store_true", help="raw-window decision correlator (experiment 1)")
     ap.add_argument("--mlse", action="store_true", help="NEW receiver: V-bank TED + 4-state MLSE-PSP")
+    ap.add_argument("--fp", action="store_true", help="fixed-point variant of the new receiver")
     run(ap.parse_args())
