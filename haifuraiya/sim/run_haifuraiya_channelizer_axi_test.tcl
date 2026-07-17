@@ -82,7 +82,7 @@ safe_add_files sources_1 {
     ../rtl/rx/msk_symbol_engine.vhd
     ../rtl/rx/msk_mlse4.vhd
     ../rtl/rx/msk_demodulator_mlse.vhd
-    ../third_party/pluto_msk/src/frame_sync_detector_soft.vhd
+    ../rtl/rx/frame_sync_detector_soft.vhd
     ../rtl/rx/haifuraiya_demod_regs.vhd
     ../rtl/rx/channel_normalizer.vhd
     ../rtl/rx/haifuraiya_rx_top.vhd
