@@ -207,11 +207,11 @@ architecture rtl of haifuraiya_demod_regs is
     signal reg_sym_lock_count     : std_logic_vector(9 downto 0)   := "0010000000"; -- 128
     signal reg_sym_lock_threshold : std_logic_vector(15 downto 0)  := x"0008";      -- 8
     signal reg_gain_manual        : std_logic_vector(15 downto 0)  := x"0400";      -- 1024
-    signal reg_fs_hunt_thresh     : std_logic_vector(31 downto 0) := x"0001C138";   -- 115000
-    signal reg_fs_verify_thresh   : std_logic_vector(31 downto 0) := x"000109A0";   -- 68000
-    signal reg_quant_thr_1        : std_logic_vector(15 downto 0) := x"01F4";       -- 500
-    signal reg_quant_thr_2        : std_logic_vector(15 downto 0) := x"0578";       -- 1400
-    signal reg_quant_thr_3        : std_logic_vector(15 downto 0) := x"0AF8";       -- 2800
+    signal reg_fs_hunt_thresh     : std_logic_vector(31 downto 0)  := x"00000055";   -- 85 percent (4.2 sigma)
+    signal reg_fs_verify_thresh   : std_logic_vector(31 downto 0)  := x"00000046";   -- 70 percent (3.4 sigma)
+    signal reg_quant_thr_1        : std_logic_vector(15 downto 0) := x"134E";       -- 4942
+    signal reg_quant_thr_2        : std_logic_vector(15 downto 0) := x"269C";       -- 9884
+    signal reg_quant_thr_3        : std_logic_vector(15 downto 0) := x"39EA";       -- 14826
 
     -- NEW: demod control-plane storage
     signal reg_demod_init         : std_logic                    := '0';
@@ -344,12 +344,28 @@ begin
                 reg_lpf_i_shift        <= x"1D";
                 reg_sym_lock_count     <= "0010000000";
                 reg_sym_lock_threshold <= x"0008";
-                reg_gain_manual        <= x"0C00";
-                reg_fs_hunt_thresh     <= x"00009470";
-                reg_fs_verify_thresh   <= x"00005DC0";   -- 24000
-                reg_quant_thr_1        <= x"01F4";       -- 500
-                reg_quant_thr_2        <= x"0578";       -- 1400
-                reg_quant_thr_3        <= x"0AF8";       -- 2800
+                -- THE RESET BRANCH IS THE TRUTH. The declaration initializers
+                -- above are what a reader sees; these are what the hardware does.
+                -- They MUST agree, or a value nobody writes explicitly becomes
+                -- invisible. That happened: gain_manual read 0x0400 (unity) at
+                -- its declaration and loaded 0x0C00 (3.0x) here. Nothing wrote
+                -- 0x030, so rx_top multiplied every channel sample by 3 before
+                -- the [15:4] slice, pinning rx_data_soft at the +/-32767 rail
+                -- and turning the 3-bit soft path into a hard-decision path.
+                --
+                -- UNITY is the only safe default for a gain. The per-channel
+                -- normalizer sets the level now.
+                reg_gain_manual        <= x"0400";       -- 1024 = 1.000 Q6.10
+                reg_fs_hunt_thresh     <= x"00000055";   -- 85 percent (4.2 sigma)
+                reg_fs_verify_thresh   <= x"00000046";   -- 70 percent (3.4 sigma)
+                -- soft-bit quantizer edges: golden rule thr_k = mean|soft|*k/3.5
+                -- (opv_demod.hpp FrameDecoder). Sim mean|soft| = 17297 @ 8 dB with
+                -- the normalizer active (rail 32768) -> 1:2:3 = 4942/9884/14826.
+                -- (Old 500/1400/2800 = stale pre-normalizer ~3340-rail scale, which
+                -- saturates 95% of symbols to the 0/7 rails at this soft level.)
+                reg_quant_thr_1        <= x"134E";       -- 4942
+                reg_quant_thr_2        <= x"269C";       -- 9884
+                reg_quant_thr_3        <= x"39EA";       -- 14826
                 -- NEW: demod control plane resets
                 reg_demod_init         <= '0';
                 reg_lpf_freeze         <= '0';
