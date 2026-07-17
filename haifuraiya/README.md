@@ -4,6 +4,12 @@ The ground-station channelizer for the ORI Opulent Voice FDMA transponder.
 A polyphase filter bank that splits a 10 MSps complex input into 64 channels
 at 625 kSps each, running on the Xilinx ZCU102 with an ADRV9002 RF front end.
 
+Includes a high-performance OPV demodulator and frame sync detector. The 
+frame sync detector finds and removes the frame sync word and then delivers 
+the payload (soft symbols) to the processing side over DMA AXI stream burst. 
+This is an MLSE receiver which measured ~5.8 dB better than the reference 
+software modem (see sim/rx_link_budget.py and the plan-of-attack Phase 4 PL).
+
 For an introduction to what a polyphase channelizer is, see the top-level
 repository [`README.md`](../README.md). For design history, lessons
 learned, and the phase-by-phase status of the project, see
@@ -46,19 +52,7 @@ source ~/petalinux/2022.2/settings.sh
 
 It's complicated. Read this before you run any `git submodule` command.
 
-**Never run a blanket recursive update.** Both of these walk into `pluto_msk`
-and drag in its own grandchildren — nested `hdl` and `firmware/linux`, multi-GB
-ADI trees that nothing in this repo uses:
-
-```bash
-git clone --recurse-submodules ...        # DON'T
-git submodule update --init --recursive   # DON'T - no path means the whole tree
-```
-
-The init below is **scoped**: every command names the exact path(s) it is
-allowed to touch. Copy each as a **single line**. There are deliberately no
-`\` line-continuations here, because a half-pasted continuation is exactly how
-you end up running the unscoped command above by accident. Ask us how we know.
+**Avoid running a blanket recursive update for now.** 
 
 ```bash
 # 1. Clone without submodules
@@ -69,40 +63,14 @@ cd Mode-Dynamic-Transponder
 #    power_detector and lowpass_ema are parallel top-level submodules; neither nests the other.
 git submodule update --init haifuraiya/third_party/power_detector haifuraiya/third_party/lowpass_ema
 
-# 3. pluto_msk itself, NON-recursively (must NOT pull its hdl/firmware grandchildren).
-git submodule update --init haifuraiya/third_party/pluto_msk
-
-# 4. Then ONLY the demod-chain leaves inside pluto_msk.
-git -C haifuraiya/third_party/pluto_msk submodule update --init nco pi_controller msk_demodulator
-
-# 5. HARDWARE / XSA + PetaLinux build ONLY - ADI repos, large. Skip these for sim-only work.
+# 3. HARDWARE / XSA + PetaLinux build ONLY - ADI repos, large. Skip these for sim-only work.
 git submodule update --init haifuraiya/third_party/hdl haifuraiya/third_party/meta-adi
-```
-
-**After init, the work branches are detached.** `git submodule update` checks
-out the pinned *commit*, not a branch - so `pluto_msk` and `msk_demodulator`
-land in detached HEAD (at `198531a` and `14cc404`). If you are going to commit
-changes inside them, reattach first or your commits orphan:
-
-```bash
-git -C haifuraiya/third_party/pluto_msk checkout haifuraiya-complex-demod
-git -C haifuraiya/third_party/pluto_msk/msk_demodulator checkout decouple-carrier-loops
-```
-
-**Verify nothing leaked.** A correct checkout leaves the heavy grandchildren
-uninitialized, so these two checks print nothing. If either prints `LEAK`, a
-recursive update escaped its scope - `cd ..`, delete the clone, and start over:
-
-```bash
-test -e haifuraiya/third_party/pluto_msk/hdl/.git && echo "LEAK: pluto_msk/hdl initialized"
-test -e haifuraiya/third_party/pluto_msk/firmware/linux/.git && echo "LEAK: pluto_msk/firmware/linux initialized"
 ```
 
 | Submodule | Source | Purpose |
 |---|---|---|
 | `power_detector` | OpenResearchInstitute/power_detector | RF power detection inside the channelizer. **Sim.** |
 | `lowpass_ema` | OpenResearchInstitute/lowpass_ema | EMA filter primitive used by the channelizer. **Sim.** |
-| `pluto_msk` | OpenResearchInstitute/pluto_msk @ `haifuraiya-complex-demod` | OPV MSK demod + frame-sync VHDL. Init only `nco`, `pi_controller`, `msk_demodulator` (demod is on `decouple-carrier-loops`); leave `hdl`, `firmware/*`, `msk_modulator`, `prbs` uninitialized. **Sim.** |
 | `hdl` | analogdevicesinc/hdl @ `hdl_2022_r2` | ADI ADRV9002 reference Vivado project - where the XSA is built. **Hardware only.** |
 | `meta-adi` | analogdevicesinc/meta-adi @ `2022_R2` | ADI Yocto layer (kernel drivers, device tree). **Hardware only.** |
 
@@ -135,8 +103,11 @@ source /tools/Xilinx/Vivado/2022.2/settings64.sh
 source ~/petalinux/2022.2/settings.sh
 
 # Construct stimulus file for simulation (if desired)
-cd /docs
-python3 opv_chan_stim_gen.py --fc 0 --frames 5 --out ../haifuraiya/sim/opv_chan_stim_dc.txt
+cd haifuraiya/sim
+python3 opv_stim.py --out opv_chan_stim.txt --ebn0 9 --fs 20e6 --fc 781250   --carrier-offset 10 --amp 9000 --frames 6 --seed 1 --preamble
+
+# Return to top level directory if work was done in simulation
+cd Mode-Dynamic-Transponder
 
 # Set up the paths
 make haifuraiya-configure

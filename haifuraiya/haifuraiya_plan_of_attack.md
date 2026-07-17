@@ -32,15 +32,20 @@ Quick orientation when you come back to this doc weeks later:
 | ✅ | **Vivado integrated-build timing closure** | **CLOSED 2026-05-27 via the quarter-MAC split ("Cast HASTE", commit `6ffc273`). The -188 ps WNS path was a 12-DSP cascade in `fir_branch_parallel.vhd` spilling across DSP columns (forcing ~600 ps fabric CARRY8 hops). Fix: partition each branch MAC into four registered 6-tap quarter-MACs (`mac_quarter` regs + `p_combine_halves`) so each cascade fits a single DSP column. Branch latency 3→4 cycles; MAC result bit-identical (xsim: tones in bins 4/16/28/40, 59.8 dB adjacent rejection, 0 dropped). Result: `clk_pl_0` WNS -0.188 → **+0.341 ns**; overall design WNS **+0.010 ns**, all constraints met. No more `bad_timing` rename. (The +0.010 global path lives off `clk_pl_0` — see Open Quest #25.)** |
 | ✅ | **Dropped frames eliminated — pipelined R2SDF FFT (hardware-confirmed 2026-06-03)** | **Replaced the dual-`fft_n_pt` round-robin + drop path with a single pipelined R2SDF FFT — drop-free by *construction* (no arbiter to lose a race). Bit-exact at every level (core == golden == `fft_n_pt`; new channelizer == old; AXI Tests 1–9 PASS in xsim) and synthesized clean (`clk_pl_0` WNS **+0.938 ns**, 0 failing). **Hardware: 123,535,702 frames, dropped total = 0** (old core would have shed ~600–1,100). See Trophy Case #9. Lone failing timing path is the known `proto_hdr` SSI crossing (Open Quest #25), not the channelizer.** |
 | ⏳ | Yocto Linux on ZCU102 PS | **Superseded by PetaLinux Tools 2022.2** — strategic shift documented in Phase 2. AMD has deprecated PetaLinux for 2024.1+ but it's the canonical happy path for the hdl_2022_r2 stack era. |
+
+| ✅ | **Phase 4 PL: OPV MLSE receiver -- model campaign** | **The Case of the Missing 5.5 dB: SOLVED. New receiver architecture (raw integer windows, coherent V-bank TED, 4-state MLSE w/ per-survivor phase) beats the C++ reference by ~5.8 dB at matched FER; ~4.5 dB (coded-axis) floor. 10-seed record sweeps in `sim/*.csv`, provenance-stamped. Fixed-point translation costs ~0.1 dB.** |
+| ✅ | **Phase 4 PL: MLSE receiver in RTL, bit-exact** | **`msk_symbol_engine` + `msk_mlse4` + `msk_demodulator_mlse` (rtl/rx/): bit-exact vs the integer model (5202 symbols / 5138 decisions / 23881 streamed soft decisions), BRAM ROMs, timing closed 100 MHz OOC. 11 shakedown ledger entries, ZERO receiver-design errors. One working day from first VHDL line to verified chain.** |
+| ✅ | **Phase 4 PL: rx_top swapped to MLSE** | **Costas demod + 20-port tuning forest retired from `haifuraiya_rx_top`; 16-bit full-width feed (LEVEL_PLAN rms 9000 via `NORM_TARGET`); single `demod_lock` from acquisition-complete. Legacy lock/telemetry entity ports honestly tied. Seam decisions ratified + banked (2026-07-16).** |
+| ✅ | **Phase 4 PL: FULL SYSTEM verified in sim** | **opv_stim (ADC-rate, honest Eb/N0 noise) -> channelizer -> halfband -> normalizer -> MLSE -> frame_sync_detector_soft -> 3-bit AXIS: at info-9 dB (= record 80/80 point) **6/6 frames byte-clean on BOTH routes** (raw-soft model path AND 3-bit fsync path). "HELLO WORLD FROM OPULENT VOICE - 73 DE W5NYV" through the whole fabric. TB zero-tail + target-sample counter restored.** |
+| ✅ | **Eb/N0 conventions reconciled** | **Sweep harness axis = CODED bit; opv_stim = INFO bit; delta 3.01 dB @ R=1/2. PROJECT CONVENTION: info-bit. Records relabeled in analysis (not re-run); all differences (incl. the 5.8 dB) convention-invariant. C/N stated in the 156.25 kHz channel. `sim/rx_link_budget.py`: staircase, translator (matches opv_stim to 0.01 dB), theory curves, 7-figure embedded tutorial, honest money figure.** |
+| ✅ | **Full receive chain synthesized standalone** | **`sim/synth_full.tcl`: whole rx chain, one design, aclk @ 100 MHz: WNS +0.499, TNS 0, 0/397,292 failing. 42% LUT, 6.8% BRAM (62 = the two demod sine ROMs), 63% DSP (demod contributes 22). Critical path = engine TED decide chain (known; next cut scoped).** |
+| ✅ | **pluto_msk dependency severed** | **`frame_sync_detector_soft.vhd` promoted to `rtl/rx/` (provenance: pluto_msk branch `haifuraiya-normalized-fsync`); cxx-faithful Costas rework preserved on `cxx-faithful-demod` (was uncommitted in a detached-HEAD nested submodule -- rescued). component.xml v0.4 coreRev 3: Costas out, MLSE trio + normalizer mux + fsync + `rtl/coeffs/lut16q_hex.txt` in.** |
 | ⏳ | Phase 5+: production credentials | meta-adi-xilinx hardcodes root password `analog`. Plan: override via meta-ori bbappend with authorized_keys + `PermitRootLogin without-password`, disable debug-tweaks. ADI's own README at `third_party/meta-adi/meta-adi-xilinx/README.md:146` documents the override mechanism. |
-| 🎯 | **Next session focus** | **(a) Patch `liboriinit` `run-calibrations` to skip disabled channels (RX2/TX2 in 1T1R), so the LO-Change Procedure can complete and produce real ADC samples at W2 frequencies. (b) Verify real samples through `dma_listen` after calibration completes. (c) ✅ DONE — FIR MAC timing closed via the quarter-MAC split (commit `6ffc273`); integrated XSA rebuilt clean and booted on the green clone. (d) LVDS HDL port — rebuild the channelizer + ADRV9002 SSI interface for LVDS 2-Lane DDR to support the 20 Msps / 10 MHz BW production profile (covers Haifuraiya's full 64-channel 10 MHz uplink span). The Production-target profile is already generated and validated through TES (`tes_0231_Haifuraiya_FDD_LVDS_20Msps_10MHz.json`). LVDS pin-mapping idiom is known from the LibreSDR `pluto_msk` port. |
+| 🎯 | **Next session focus** | **(a) Land regressions D (system bench identity 6/6 + synth_full WNS family) → pull pluto_msk submodule (E). (b) Sweep tail: petalinux pair, patch archive → docs/patches/, old/ adjudication; push. (c) `make haifuraiya-xsa-integrated` with the v0.4/coreRev-3 manifest (expect IP upgrade prompt + checksum warning, both benign) → PetaLinux → board. (d) opv-decode -3 native on the A53; then Eb/N0 ladder on hardware. (e) liboriinit 1T1R calibration patch still owed from Phase 4 Ground.** |
 | ❓ | HD.CLK_SRC OOC clock prop | Unresolved; cosmetic for now |
 
-If you only have 5 minutes when returning to this doc, read this section,
-then jump to **Phase 3** (channelizer integration, just closed) and
-**Open Quests** (decisions you owe yourself).
-**Phase 1 done. Phase 2a done. Phase 2b done. Phase 3 done — integrated-build timing now CLOSED (quarter-MAC "HASTE", `clk_pl_0` +0.341 ns; clean XSA rebuilt + rebooted on the green clone). Phase 4 Ground in progress: chip-side configuration unblocked (profile generation + load + LO retune all working). Real ADC samples still blocked on a small `liboriinit` patch (run-calibrations needs 1T1R awareness). LVDS HDL port is the next architectural milestone for production-rate operation.**
-
+If you only have 5 minutes when returning to this doc, read this section, then jump to Phase 4 PL (the demodulator campaign, just closed) and Open Quests (decisions you owe yourself).
+**Phase 1 done. Phase 2a done. Phase 2b done. Phase 3 done. Phase 4 PL done** — MLSE receiver: ~5.8 dB over the C++ reference, bit-exact in RTL, full-system sim decodes 6/6 through noise at the record operating point, whole rx chain closes 100 MHz standalone (+0.499 ns). pluto_msk dependency severed; component.xml migrated (v0.4, coreRev 3). Phase 4 Ground: chip config unblocked; real ADC samples still owed the liboriinit 1T1R patch; LVDS HDL port pending for production rate. Next: make haifuraiya-xsa-integrated with the new manifest → PetaLinux → board → opv-decode -3 on the A53 → Eb/N0 ladder on hardware.
 ---
 
 ## 🗺️ The Big Picture
@@ -96,7 +101,7 @@ ADRV9002 TX
 
 The two heavy DSP pieces (channelizer + DVB-S2 encoder) are *done*. What
 remains is integration glue, drivers, and software. **Phase 1 closed today:
-Haifuraiya is now IP-XACT packaged, BD-validated, and drag-droppable into any
+Haifuraiya is IP-XACT packaged, BD-validated, and drag-droppable into any
 ZCU102 block design.**
 
 ---
@@ -109,7 +114,7 @@ ZCU102 block design.**
 |---|---|---|---|---|
 | Haifuraiya channelizer | PL IP (IP-XACT v0.1, BD-smoke-tested) | this session | 1346 DSP / 116K LUT / 0 BRAM @ 100 MHz | ORI internal (CERN-OHL-S-2.0 standard) |
 | `dvb_fpga` DVB-S2 encoder | PL IP | `github.com/OpenResearchInstitute/dvb_fpga` | ~6.5K LUT / 64 DSP / 20 BRAM @ 300 MHz | CERN-OHL-W-2 |
-| `pluto_msk` OPV TX+RX modem | PL IP | ORI / LibreSDR build | ~48K LUT total (TX+RX+infra), ~10K LUT for RX only (estimate) | CERN-OHL-S-2.0 |
+| `rtl/rx` OPV MLSE receiver (demod + frame sync) | PL, in-tree (not separately packaged; ships inside haifuraiya_rx_axi v0.4) | Phase 4 PL campaign | ~16K LUT / 22 DSP / 62 BRAM36 (the two sine ROMs) @ 100 MHz, WNS +0.5 standalone | CERN-OHL-S-2.0 |
 | `opv-cxx-demod` | PS software | C++, working stack | per-stream small on A53 | (verify license) |
 
 ### What we need
@@ -122,9 +127,9 @@ ZCU102 block design.**
 | ~~Block-design smoke test~~ ✅ DONE | Vivado | ~~1 session~~ | 1 |
 | ADRV9002 reference design integration | Vivado + Linux driver | ~~hours-weeks (depends on starting state)~~ ✅ DONE | 2 |
 | ~~Yocto~~ **PetaLinux Tools 2022.2** Linux on ZCU102 PS | Build system + recipes | ~~unknown~~ ✅ DONE (boots to login, ADRV9002 enumerates) | 2 |
-| First captured sample stream from ADRV9002 (libiio) | PS userspace | 1 session | 2 |
-| First-light block design | Vivado | hours | 3 |
-| opv-cxx-demod ↔ AXIS DMA glue | C++ + Linux DMA driver | 1-2 sessions | 4 |
+| First captured sample stream from ADRV9002 (libiio) ✅ DONE | PS userspace | 1 session | 2 |
+| First-light block design ✅ DONE | Vivado | hours | 3 |
+| opv-cxx-demod ↔ AXIS DMA glue ✅ DONE | C++ + Linux DMA driver | 1-2 sessions | 4 |
 | Kabura-ya GSE MUX | C++ on PS | 1-3 sessions | 5 |
 | Manifest PDU generator | C++ on PS | 1 session | 5 |
 | dvb_fpga ZCU102 port | Vivado board files | hours | 5 |
@@ -133,8 +138,8 @@ ZCU102 block design.**
 | Status | Item | Notes |
 |:-:|---|---|
 | done | Seam-B validated (sim) | frame_sync_detector_soft -> opv-decode -3. Decoder equivalence proven numerically (opv-decode -3 == ov_frame_decoder_soft, all 2144 positions). Standalone-TB 11-symbol offset traced to TB demod-phase approximation, not RTL. Full msk_top + pinned submodules build clean under ghdl. Artifacts in docs/seam-sim/. |
-| next | Channelizer -> demod hookup | New wrapper above haifuraiya_channelizer_axi: m_axis_chans (complex I/Q, TDEST) -> demux one channel -> msk_demodulator -> frame_sync_detector_soft -> AXIS/DMA -> opv-decode -3. Submodule deps: msk_demodulator + nco + pi_controller. Retune NCO/Costas for channel rate (~625 ksps, SPS ~11.53). See CHANNELIZER_DEMOD_CONTRACT.md. |
-| watch | Fractional SPS at channel rate | SPS ~11.53 is non-integer; confirm demod symbol timing handles it (or pick a friendlier build rate). |
+| done | Channelizer -> demod hookup | New wrapper above haifuraiya_channelizer_axi: m_axis_chans (complex I/Q, TDEST) -> demux one channel -> msk_demodulator -> frame_sync_detector_soft -> AXIS/DMA -> opv-decode -3. Submodule deps: msk_demodulator + nco + pi_controller. Retune NCO/Costas for channel rate (~625 ksps, SPS ~11.53). See CHANNELIZER_DEMOD_CONTRACT.md. |
+| done | Fractional SPS at channel rate | SPS ~11.53 is non-integer; confirm demod symbol timing handles it (or pick a friendlier build rate). |
 
 **All Phase 1 work items are complete. Phase 2 is the next quest.**
 
@@ -378,6 +383,17 @@ collaborator packaging an ORI IP should read this section first.*
   state at the last save, not the runtime state. Save checkpoints after
   major milestones (cell instantiation, wiring complete) so partial state is
   inspectable when something fails.
+
+### Two version numbers, two meanings (2026-07-17)
+`spirit:version` is the INTERFACE contract -- it is part of the VLNV
+that `system_bd.tcl` instantiates (`...:haifuraiya_rx_axi:0.4`);
+change it only when ports/parameters change, else the BD orphans.
+`xilinx:coreRevision` is the PACKAGING counter -- roll it for any
+file-list or implementation change (we did 2→3 for the MLSE manifest).
+Hand-editing component.xml invalidates the packagingInfo checksums;
+Vivado warns ("modified outside the IP packager") and proceeds --
+expected, benign, recomputed on next repackage. Same lesson family as
+info-vs-coded Eb/N0: NAME THE AXIS.
 
 ### Workflow recipe (for the next ORI IP)
 
@@ -977,6 +993,51 @@ One OPV stream recovered end-to-end. Baseline latency and BER numbers.
 Live Bouro dashboard showing channelizer + demod state.
 
 ---
+
+## 🐉 Phase 4 PL: The Demodulator Campaign (2026-06/07)
+
+*Three demodulators died in fabric on this project. The fourth was
+forbidden to enter fabric without a bit-exact oracle, and it walked
+through.*
+
+**Doctrine that won:** model-first (no VHDL without a Python oracle);
+dump-compare gates (no block advances with a nonzero diff); bench
+before synth; terminal-verified numbers only (a fabricated synthesis
+figure was caught by paste-the-terminal discipline -- and was hiding a
+real timing failure); measure, don't assume.
+
+**The arc:** float model beats C++ reference by ~5.8 dB (record
+sweeps) → fixed-point costs ~0.1 dB → RTL bit-exact at three tiers
+(blocks, chain, streamed wrapper w/ ring buffer + stall) → rx_top
+surgery → full-system sim decodes 6/6 through honest noise at the
+record operating point → whole chain synthesizes at 100 MHz with
+margin. Slip decomposition of the records (`fer_model` ≈ `slip_p`):
+**when sync holds, the FEC decodes** -- decoder essentially ideal;
+low-SNR frontier is acquisition.
+
+**Trophy Case additions:**
+- 10/10 frames byte-identical, ALL METRICS ZERO, first run of the
+  composed RTL chain (chain bench, 2026-07-15).
+- Ring-buffer stale-snapshot bug (pos_q16 as flow control) convicted
+  same-day by three stacked instruments: soft diff → engine trace →
+  ring trace (`addr 18: served (0,0)`). No waveforms opened.
+- 6/6 + 6/6 both routes at info-9, metrics [181,109,120,47,50,163].
+
+**Open Quests added/updated:**
+- ACQUISITION HARDENING: PSP theta attractor -- worth real frames
+  below ~8 dB info; measure against `slip_p`.
+- QUANTIZER CALIBRATION: fsync bins (uniform ladder 4942/9884/14826,
+  verified in-system) should be set from the measured 6 dB soft
+  distribution at rms-9000; match opv-decode -3 bin law.
+- 2^24 SAMPLE WRAP (~26.8 s @ 625k): exceeded per field transmission;
+  incremental phase tracking before field deployment (ratified scoped
+  item).
+- 64-CHANNEL SCALE-UP: 64 demod copies exceed DSP budget; ~1840
+  clk/sym/channel headroom says TIME-MULTIPLEX one engine+MLSE across
+  channels. Design conversation post bring-up.
+- DEEP FER POINTS (1e-6): ~3-5M frames/point = ~40 h REAL-TIME on the
+  ZCU102 (25 frames/s). Simulation carries the curve to ~1e-2/1e-3;
+  hardware soaks carry it deep. A bring-up motivation, not a sim task.
 
 ## Phase 5 Pre-Requisite: Scaling Worksheet for going from 1 to 64 channels
 

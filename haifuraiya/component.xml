@@ -2283,35 +2283,27 @@
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
+        <spirit:name>rtl/channelizer/channel_normalizer_mux.vhd</spirit:name>
+        <spirit:fileType>vhdlSource</spirit:fileType>
+      </spirit:file>
+      <spirit:file>
         <spirit:name>rtl/axi/haifuraiya_channelizer_axi.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
-        <spirit:name>third_party/pluto_msk/nco/src/sin_cos_lut.vhd</spirit:name>
+        <spirit:name>rtl/rx/msk_symbol_engine.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
-        <spirit:name>third_party/pluto_msk/nco/src/nco.vhd</spirit:name>
+        <spirit:name>rtl/rx/msk_mlse4.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
-        <spirit:name>third_party/pluto_msk/pi_controller/src/pi_controller.vhd</spirit:name>
+        <spirit:name>rtl/rx/msk_demodulator_mlse.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
-        <spirit:name>third_party/pluto_msk/msk_demodulator/src/costas_lock_detect.vhd</spirit:name>
-        <spirit:fileType>vhdlSource</spirit:fileType>
-      </spirit:file>
-      <spirit:file>
-        <spirit:name>third_party/pluto_msk/msk_demodulator/src/costas_loop.vhd</spirit:name>
-        <spirit:fileType>vhdlSource</spirit:fileType>
-      </spirit:file>
-      <spirit:file>
-        <spirit:name>third_party/pluto_msk/msk_demodulator/src/msk_demodulator.vhd</spirit:name>
-        <spirit:fileType>vhdlSource</spirit:fileType>
-      </spirit:file>
-      <spirit:file>
-        <spirit:name>third_party/pluto_msk/src/frame_sync_detector_soft.vhd</spirit:name>
+        <spirit:name>rtl/rx/frame_sync_detector_soft.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
@@ -2391,35 +2383,27 @@
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
+        <spirit:name>rtl/channelizer/channel_normalizer_mux.vhd</spirit:name>
+        <spirit:fileType>vhdlSource</spirit:fileType>
+      </spirit:file>
+      <spirit:file>
         <spirit:name>rtl/axi/haifuraiya_channelizer_axi.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
-        <spirit:name>third_party/pluto_msk/nco/src/sin_cos_lut.vhd</spirit:name>
+        <spirit:name>rtl/rx/msk_symbol_engine.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
-        <spirit:name>third_party/pluto_msk/nco/src/nco.vhd</spirit:name>
+        <spirit:name>rtl/rx/msk_mlse4.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
-        <spirit:name>third_party/pluto_msk/pi_controller/src/pi_controller.vhd</spirit:name>
+        <spirit:name>rtl/rx/msk_demodulator_mlse.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
-        <spirit:name>third_party/pluto_msk/msk_demodulator/src/costas_lock_detect.vhd</spirit:name>
-        <spirit:fileType>vhdlSource</spirit:fileType>
-      </spirit:file>
-      <spirit:file>
-        <spirit:name>third_party/pluto_msk/msk_demodulator/src/costas_loop.vhd</spirit:name>
-        <spirit:fileType>vhdlSource</spirit:fileType>
-      </spirit:file>
-      <spirit:file>
-        <spirit:name>third_party/pluto_msk/msk_demodulator/src/msk_demodulator.vhd</spirit:name>
-        <spirit:fileType>vhdlSource</spirit:fileType>
-      </spirit:file>
-      <spirit:file>
-        <spirit:name>third_party/pluto_msk/src/frame_sync_detector_soft.vhd</spirit:name>
+        <spirit:name>rtl/rx/frame_sync_detector_soft.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
@@ -2436,6 +2420,10 @@
       </spirit:file>
       <spirit:file>
         <spirit:name>rtl/coeffs/haifuraiya_coeffs.hex</spirit:name>
+        <spirit:fileType>unknown</spirit:fileType>
+      </spirit:file>
+      <spirit:file>
+        <spirit:name>rtl/coeffs/lut16q_hex.txt</spirit:name>
         <spirit:fileType>unknown</spirit:fileType>
       </spirit:file>
     </spirit:fileSet>
@@ -2526,7 +2514,7 @@
       <xilinx:definitionSource>package_project</xilinx:definitionSource>
       <xilinx:vendorDisplayName>Open Research Institute</xilinx:vendorDisplayName>
       <xilinx:vendorURL>https://www.openresearch.institute/</xilinx:vendorURL>
-      <xilinx:coreRevision>2</xilinx:coreRevision>
+      <xilinx:coreRevision>3</xilinx:coreRevision>
       <xilinx:coreCreationDateTime>2026-05-29T03:56:04Z</xilinx:coreCreationDateTime>
     </xilinx:coreExtensions>
     <xilinx:packagingInfo>

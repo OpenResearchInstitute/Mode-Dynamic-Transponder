@@ -2,7 +2,7 @@
 # run_sync_normalized.tcl
 #
 # Proves the frame-sync threshold change in
-#   third_party/pluto_msk/src/frame_sync_detector_soft.vhd
+#   ../rtl/rx/frame_sync_detector_soft.vhd
 #
 #   OLD:        corr >= FS_HUNT_THRESH          an absolute count
 #   NEW:  100 * corr >= FS_HUNT_PCT * energy    a fraction of the energy

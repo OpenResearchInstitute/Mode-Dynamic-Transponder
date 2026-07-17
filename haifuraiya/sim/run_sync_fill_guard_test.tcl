@@ -58,7 +58,7 @@ proc safe_add_files {fileset file_list {library "work"}} {
 # so the test exercises the real RTL, not a copy.
 puts "\nAdding synthesizable RTL..."
 safe_add_files sources_1 {
-    ../third_party/pluto_msk/src/frame_sync_detector_soft.vhd
+    ../rtl/rx/frame_sync_detector_soft.vhd
 }
 
 # --- Testbench ---
