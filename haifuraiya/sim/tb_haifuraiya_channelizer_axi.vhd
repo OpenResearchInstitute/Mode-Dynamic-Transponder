@@ -222,6 +222,7 @@ architecture sim of tb_haifuraiya_channelizer_axi is
 
     -- integration counters (visible at end-of-sim)
     signal n_target_samps : integer := 0;  -- samples handed to the demod
+                                           -- (counted by p_count_target)
     signal n_soft_beats   : integer := 0;  -- soft bits emitted
     signal n_soft_frames  : integer := 0;  -- frame_sync frames
     signal n_soft_raw     : natural := 0;
@@ -308,6 +309,17 @@ u_rx : entity work.haifuraiya_rx_axi
         dbg_tgt_i => chan_i_reg, dbg_tgt_q => chan_q_reg, dbg_tgt_valid => rx_svalid,
         dbg_soft_corr => dbg_soft_corr_s, dbg_sym_valid => dbg_sym_valid_s
     );
+
+    -- count samples actually handed to the demod (restores the lost
+    -- incrementer behind the "DEMOD PATH: target samples" report)
+    p_count_target : process(aclk)
+    begin
+        if rising_edge(aclk) then
+            if rx_svalid = '1' then
+                n_target_samps <= n_target_samps + 1;
+            end if;
+        end if;
+    end process;
 
 
 
@@ -1208,9 +1220,27 @@ while not endfile(fin) loop
         wait until rising_edge(aclk);
     end loop;
 end loop;
+-- ZERO TAIL: the MLSE holds its last 64 decisions in the traceback and
+-- emits them only as further symbols arrive. In the field the channel
+-- never stops (silence is still noise samples); the bench must imitate
+-- that or the burst's final ~65 soft bits are never emitted and the
+-- last frame is lost to truncation. ~30000 ADC samples ~= 940 channel
+-- samples ~= 81 symbols: traceback depth + margin.
+for zi in 1 to 30000 loop
+    s_axis_data_tdata <= (others => '0');
+    s_axis_data_tvalid <= '1';
+    loop
+        wait until rising_edge(aclk);
+        exit when s_axis_data_tready = '1';
+    end loop;
+    s_axis_data_tvalid <= '0';
+    for k in 1 to SMP_PERIOD-1 loop
+        wait until rising_edge(aclk);
+    end loop;
+end loop;
 s_axis_data_tvalid <= '0';
 report "MILESTONE 4: injection complete, fed " & integer'image(n_fed) &
-       " samples" severity note;
+       " samples (+30000 zero-tail)" severity note;
 
 
 

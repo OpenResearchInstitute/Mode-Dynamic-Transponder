@@ -73,12 +73,15 @@ safe_add_files sources_1 {
     ../rtl/resampler/channel_eq.vhd
     ../rtl/channelizer/channel_normalizer_mux.vhd
     ../rtl/axi/haifuraiya_channelizer_axi.vhd
-    ../third_party/pluto_msk/nco/src/sin_cos_lut.vhd
-    ../third_party/pluto_msk/nco/src/nco.vhd
-    ../third_party/pluto_msk/pi_controller/src/pi_controller.vhd
-    ../third_party/pluto_msk/msk_demodulator/src/costas_lock_detect.vhd
-    ../third_party/pluto_msk/msk_demodulator/src/costas_loop.vhd
-    ../third_party/pluto_msk/msk_demodulator/src/msk_demodulator.vhd
+#    ../third_party/pluto_msk/nco/src/sin_cos_lut.vhd
+#    ../third_party/pluto_msk/nco/src/nco.vhd
+#    ../third_party/pluto_msk/pi_controller/src/pi_controller.vhd
+#    ../third_party/pluto_msk/msk_demodulator/src/costas_lock_detect.vhd
+#    ../third_party/pluto_msk/msk_demodulator/src/costas_loop.vhd
+#    ../third_party/pluto_msk/msk_demodulator/src/msk_demodulator.vhd
+    ../rtl/rx/msk_symbol_engine.vhd
+    ../rtl/rx/msk_mlse4.vhd
+    ../rtl/rx/msk_demodulator_mlse.vhd
     ../third_party/pluto_msk/src/frame_sync_detector_soft.vhd
     ../rtl/rx/haifuraiya_demod_regs.vhd
     ../rtl/rx/channel_normalizer.vhd
@@ -120,6 +123,9 @@ set xsim_dir [file join $project_dir ${project_name}.sim sim_1 behav xsim]
 file mkdir $xsim_dir
 file copy -force $stim_file $xsim_dir
 puts "  OK staged [file tail $stim_file] -> $xsim_dir"
+set lut_file [file join [file dirname [info script]] "lut16q_hex.txt"]
+file copy -force $lut_file $xsim_dir
+puts "  OK staged [file tail $lut_file] -> $xsim_dir"
 
 puts "\nLaunching simulation..."
 launch_simulation
@@ -136,21 +142,6 @@ puts "========================================"
 ################################################################################
 # Waveform layout -- collapsible groups in SIGNAL-FLOW order:
 #
-#   TB_Control                bench progress / counters
-#   Control_Plane_Channelizer AXI-Lite enable of the channelizer
-#   Control_Plane_Demod       AXI-Lite init bracket of the demod
-#   Channelizer_Input         s_axis burst going in
-#   Channel_Numbering         *** the k -> (N-k) relabel fix -- watch this ***
-#   Channelizer_Output        the AXI burst coming out (TDEST + TLAST)
-#   Demod_Input               the one channel demux'd to the demod
-#   Demod_Carrier_CORDIC      carrier recovery (CORDIC phase discriminator)
-#   Demod Carrier Recovery
-#   Demod_SymbolLock          per-tone symbol lock (real, process-driven)
-#   Demod_Telemetry_rewire    old stubbed ports -- alive after you rewire them
-#   Bit_Decisions             soft/hard bits out of the demod
-#   Frame_Sync                sync-word correlation + frame lock
-#
-# Hierarchy: u_rx = rx_axi, u_rx/u_rx = rx_top, u_rx/u_rx/u_chan = channelizer_axi.
 ################################################################################
 
 set TB   /tb_haifuraiya_channelizer_axi
@@ -224,7 +215,6 @@ add_wave_group {Demod_Input}
 add_wave -into {Demod_Input}                 $RX/rx_svalid
 add_wave -into {Demod_Input} -radix hex      $RX/chan_i_reg
 add_wave -into {Demod_Input} -radix hex      $RX/chan_q_reg
-add_wave -into {Demod_Input} -radix unsigned $DEM/discard_rxnco
 
 
 
@@ -331,34 +321,50 @@ add_wave -into {Normalizer_Seam}                 $CHAN/norm_last
 add_wave -into {Normalizer_Seam} -radix dec      $CHAN/norm_i
 add_wave -into {Normalizer_Seam} -radix dec      $CHAN/norm_q
 
-# --- Demod carrier recovery -- dual Costas loops (per-tone PI, restored) ------
-add_wave_group {Demod_Carrier}
-add_wave -into {Demod_Carrier} -radix dec $DEM/f1_nco_adjust  ;# f1 carrier freq correction (settles at lock)
-add_wave -into {Demod_Carrier} -radix dec $DEM/lpf_accum_f1   ;# f1 carrier phase integrator
-add_wave -into {Demod_Carrier} -radix dec $DEM/f1_error       ;# f1 loop error (shrinks at lock)
-add_wave -into {Demod_Carrier} -radix dec $DEM/f2_nco_adjust  ;# f2 carrier freq correction
-add_wave -into {Demod_Carrier} -radix dec $DEM/lpf_accum_f2   ;# f2 carrier phase integrator
 
-# --- Demod symbol TIMING -- fractional NCO + discriminants (the new path) -----
-add_wave_group {Demod_Timing}
-add_wave -into {Demod_Timing}                 $DEM/tclk       ;# symbol strobe into integrate-and-dump
-add_wave -into {Demod_Timing}                 $DEM/tclk_nco   ;# fractional-NCO strobe (SYM_SPS_FP path)
-add_wave -into {Demod_Timing} -radix unsigned $DEM/sym_ph     ;# symbol-phase accumulator (16.16)
-add_wave -into {Demod_Timing}                 $DEM/dclk       ;# symbol-clock discriminant (sign)
-add_wave -into {Demod_Timing} -radix dec      $DEM/dclk_slv   ;# signed timing discriminant (future TED source)
-add_wave -into {Demod_Timing}                 $DEM/cclk       ;# carrier/data discriminant (sign)
-add_wave -into {Demod_Timing} -radix dec      $DEM/data_sum   ;# f1-f2 integrated -> soft, pre-differential
+################################################################################
+# waves_mlse_demod.tcl -- wave groups for msk_demodulator_mlse
+# Source after:  set FS $RX/u_fsync
+# Signal flow: ring write -> engine (timing loop) -> mlse4 (trellis) -> shim
+################################################################################
 
-# --- Demod symbol lock -- BOTH tones now observable -------------------------
-add_wave_group {Demod_SymbolLock}
-add_wave -into {Demod_SymbolLock}            $DEM/cst_lock_f1
-add_wave -into {Demod_SymbolLock}            $DEM/cst_lock_f2
-add_wave -into {Demod_SymbolLock} -radix dec $DEM/dbg_acc_iq_delta_f1 ;# f1 LOCK METRIC (aif1-aqf1)
-add_wave -into {Demod_SymbolLock} -radix dec $DEM/f2_error            ;# f2 LOCK METRIC (aif2-aqf2)
-add_wave -into {Demod_SymbolLock} -radix dec $DEM/dbg_acc_i_f1        ;# f1 in-phase energy
-add_wave -into {Demod_SymbolLock} -radix dec $DEM/dbg_acc_q_f1        ;# f1 quadrature energy
-add_wave -into {Demod_SymbolLock} -radix dec $DEM/f2_nco_adjust       ;# f2 in-phase energy
-add_wave -into {Demod_SymbolLock} -radix dec $DEM/lpf_accum_f2        ;# f2 quadrature energy
+# --- sample ring / pacing ----------------------------------------------------
+#   hold high most of the time is CORRECT: the engine is sample-rate-bound
+#   and waits for writes. ring_lag or ovfl_mlse going high is a bug.
+add_wave_group {MLSE_Ring}
+add_wave -into {MLSE_Ring}                 $DEM/rx_svalid
+add_wave -into {MLSE_Ring} -radix unsigned $DEM/wr_n
+add_wave -into {MLSE_Ring}                 $DEM/hold
+add_wave -into {MLSE_Ring}                 $DEM/ring_lag
+add_wave -into {MLSE_Ring}                 $DEM/ovfl_mlse
+
+# --- symbol engine: the timing loop ------------------------------------------
+#   pos advances ~755720 (Q16) per symbol; sym_index counts symbols;
+#   e_valid pulses once per symbol.
+add_wave_group {MLSE_Engine}
+add_wave -into {MLSE_Engine} -radix unsigned $DEM/engine/pos
+add_wave -into {MLSE_Engine} -radix unsigned $DEM/engine/k
+add_wave -into {MLSE_Engine} -radix dec      $DEM/engine/freq
+add_wave -into {MLSE_Engine}                 $DEM/e_valid
+add_wave -into {MLSE_Engine} -radix dec      $DEM/e_y1r
+add_wave -into {MLSE_Engine} -radix dec      $DEM/e_y2r
+
+# --- MLSE: per-survivor phase (the four thetas should cluster at lock) -------
+add_wave_group {MLSE_Trellis}
+add_wave -into {MLSE_Trellis} -radix unsigned $DEM/th0
+add_wave -into {MLSE_Trellis} -radix unsigned $DEM/th1
+add_wave -into {MLSE_Trellis} -radix unsigned $DEM/th2
+add_wave -into {MLSE_Trellis} -radix unsigned $DEM/th3
+add_wave -into {MLSE_Trellis} -radix unsigned $DEM/dbg_best
+add_wave -into {MLSE_Trellis}                 $DEM/m_busy
+
+# --- bit decisions (same group name/role as before) --------------------------
+add_wave_group {Bit_Decisions}
+add_wave -into {Bit_Decisions}            $DEM/rx_data
+add_wave -into {Bit_Decisions} -radix dec $DEM/rx_data_soft
+add_wave -into {Bit_Decisions}            $DEM/rx_dvalid
+add_wave -into {Bit_Decisions}            $DEM/demod_lock
+
 
 # --- bit decisions -- the ACTUAL demod output (is it emitting symbols?) ------
 #   rx_dvalid should pulse at the symbol rate once the FSM reaches S_RUN;

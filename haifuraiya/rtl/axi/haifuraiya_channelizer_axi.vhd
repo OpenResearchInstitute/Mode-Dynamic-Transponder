@@ -219,6 +219,37 @@ architecture rtl of haifuraiya_channelizer_axi is
     signal eq_chan  : unsigned(5 downto 0);
     signal eq_re, eq_im : signed(DATA_WIDTH - 1 downto 0);
 
+    ---------------------------------------------------------------------------
+    -- Per-channel feed-forward normalizer, INSERTED IN BYPASS.
+    --
+    -- Seam: after u_eq, before the AXIS master. The 64 power detectors keep
+    -- tapping the UN-normalized eq_re/eq_im. Sense before, correct after: the
+    -- gain is computed from a measurement taken upstream of the gain, so
+    -- nothing the gain does can change the measurement. Moving this block to
+    -- where the OUTPUT_SHIFT requantize lives would put the detectors
+    -- downstream of the gain and make it a hidden feedback loop.
+    --
+    -- gain_mode = '0' with gain_manual = 0x0400 (unity, Q6.10) is a bit-exact
+    -- identity, so m_axis_chans is BYTE-FOR-BYTE unchanged. The block carries
+    -- in_chan and in_last through itself, so no separate delay chain is needed.
+    --
+    -- TODO (next step): gain_mode, gain_target and squelch_thr become AXI-Lite
+    -- registers, and `power` gets wired to stat_channel_power(eq_chan) through
+    -- a 64:1 mux. Until then they are constants and the block is invisible.
+    ---------------------------------------------------------------------------
+    -- Flip NORM_AUTO to '1' to enable normalization. It is the ONLY change needed;
+    -- everything else is already wired.
+    constant NORM_AUTO    : std_logic := '1';
+    constant NORM_UNITY   : std_logic_vector(15 downto 0) := x"0400";     -- 1.000 Q6.10
+    constant NORM_TARGET  : std_logic_vector(15 downto 0) := std_logic_vector(to_unsigned(9000, 16));
+    constant NORM_SQUELCH : std_logic_vector(30 downto 0) := std_logic_vector(to_unsigned(65536, 31));
+
+    signal norm_valid : std_logic;
+    signal norm_chan  : unsigned(5 downto 0);
+    signal norm_last  : std_logic;
+    signal norm_i, norm_q : signed(DATA_WIDTH - 1 downto 0);
+    signal norm_power : std_logic_vector(POWER_WIDTH - 1 downto 0);
+
     -- chan_last delayed to align with the EQ output (1 dispatch + 3 EQ cycles)
     signal chan_last_d : std_logic_vector(3 downto 0) := (others => '0');
 
@@ -354,13 +385,16 @@ begin
     if rising_edge(aclk) then
         if core_reset = '1' then
             chan_valid_r   <= '0';
-            chan_idx_int_r <= (others => '0');
+            chan_idx_int_r <= (others => '0');           -- reset value: just zero
         else
             chan_valid_r   <= chan_valid;
-            chan_idx_int_r <= chan_idx_int;
+            chan_idx_int_r <= std_logic_vector(to_unsigned(   -- <-- relabel HERE
+                (N_CHANNELS - to_integer(unsigned(chan_idx_int))) mod N_CHANNELS,
+                chan_idx_int_r'length));
         end if;
     end if;
 end process p_dispatch_align;
+
 
     ---------------------------------------------------------------------------
     -- Per-channel EQ: flatten the halfband edge-droop. Sits on the chan_re_q/
@@ -395,6 +429,45 @@ end process p_dispatch_align;
     end process p_chan_last_delay;
 
     ---------------------------------------------------------------------------
+    -- Power mux: 64:1, 31 bits wide.
+    --
+    -- stat_channel_power is the flat 64 x 31 bit vector the power detectors
+    -- write and axi_lite_regs publishes as CHANNEL_POWER[0..63] (what Bouro
+    -- reads). It is measured on the UN-normalized eq_re/eq_im, upstream of the
+    -- gain. Sense before, correct after.
+    --
+    -- Alignment: channel k's detector updates on pd_data_ena(k), i.e. on k's own
+    -- beat. So at beat k the value read here is k's power as of its PREVIOUS
+    -- beat -- one channel-sample stale. The detector is an EMA over thousands of
+    -- samples (tau = 2^18/ctrl_alpha2), so one sample of lag is nothing.
+    ---------------------------------------------------------------------------
+    p_power_mux : process(stat_channel_power, eq_chan)
+        variable k : integer range 0 to N_CHANNELS - 1;
+    begin
+        k := to_integer(eq_chan);
+        norm_power <= stat_channel_power((k+1)*POWER_WIDTH - 1 downto k*POWER_WIDTH);
+    end process p_power_mux;
+
+    ---------------------------------------------------------------------------
+    -- Normalizer.
+    ---------------------------------------------------------------------------
+    u_norm : entity work.channel_normalizer_mux
+        generic map (DATA_W => DATA_WIDTH, CHAN_W => 6, GAIN_W => 16,
+                     GAIN_FRAC => 10, POWER_W => 31, MANT_FRAC => 6, ROM_FRAC => 15)
+        port map (
+            clk => aclk, rst => core_reset,
+            in_valid => eq_valid, in_chan => eq_chan, in_last => chan_last_d(3),
+            in_i => eq_re, in_q => eq_im,
+            power => norm_power,
+            gain_mode   => NORM_AUTO,      -- '0' = bypass, '1' = normalize
+            gain_target => NORM_TARGET,
+            squelch_thr => NORM_SQUELCH,
+            gain_manual => NORM_UNITY,     -- unity: bit-exact identity
+            out_valid => norm_valid, out_chan => norm_chan, out_last => norm_last,
+            out_i => norm_i, out_q => norm_q,
+            gain_current => open, gain_sat => open);
+
+    ---------------------------------------------------------------------------
     -- Output AXIS adapter
     -- The channelizer's channel_valid/idx/last already produces a clean
     -- one-channel-per-clock stream. We just rename to AXIS conventions.
@@ -413,10 +486,10 @@ end process p_dispatch_align;
             else
                 -- chan_re_q / chan_im_q updated this cycle from data that
                 -- arrived as chan_valid='1' one cycle ago.
-                m_axis_chans_tvalid <= eq_valid;
-                m_axis_chans_tdata  <= std_logic_vector(eq_im) & std_logic_vector(eq_re);
-                m_axis_chans_tdest  <= "00" & std_logic_vector(eq_chan);
-                m_axis_chans_tlast  <= chan_last_d(3);
+                m_axis_chans_tvalid <= norm_valid;
+                m_axis_chans_tdata  <= std_logic_vector(norm_q) & std_logic_vector(norm_i);
+                m_axis_chans_tdest  <= "00" & std_logic_vector(norm_chan);
+                m_axis_chans_tlast  <= norm_last;
             end if;
         end if;
     end process p_axis_out;

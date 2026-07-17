@@ -546,3 +546,162 @@ integration with channelizer / ring buffer / normalizer and the proven
 frame sync + K=7 fabric blocks; ZCU102 bring-up; over the air against
 Locutus/Dialogus. Open quality item: PSP theta attractor (~more frames
 at 4.5 dB available; tuning pass, model-side first, same doctrine).
+
+## Session 8 (2026-07-16): SYNTHESIS CLOSED -- both blocks timed at 100 MHz
+
+Morning regression doctrine held throughout: every structural change
+gated by bench re-runs (bit-exact preserved at every step).
+
+Changes, each measured:
+  1. Quarter-wave LUT: reconstruction proven exact over all 65536 phases
+     in python BEFORE any VHDL (incl. the 90-degree edge -> 16385
+     entries). Table 4x smaller.
+  2. Synthesizable ROM init: integer textio read -> hex-packed hread
+     (UG901 idiom). One 32-bit word/line, cos(31:16) & sin(15:0).
+  3. Async ROM functions inferred as replicated LUT forests (6 copies in
+     mlse4, ~24k LUTs) -> synchronous ROM reads. First cut had a
+     one-cycle pipeline skew -- caught by the step trace AT STEP 0
+     (state 0 wearing state 3's theta). Fix: read the ROM in the
+     address phase of the main process.
+  4. rom_style attribute on a CONSTANT is silently ignored (8-5733);
+     QROM as a never-written SIGNAL makes BRAM mapping deterministic.
+  5. Signed integer mod/div inferred a divider -> explicit decode.
+  6. mlse4 WNS -3.417 at 100 MHz: S_ACS_B ran multiply AND
+     compare/select in one clock. Pipelined into COMPUTE (B1) and
+     DECIDE (B2); values unchanged, benches GO.
+
+FINAL STATE (OOC, xczu9eg, 100 MHz), terminal-verified values only:
+  msk_mlse4:         WNS +2.056, TNS 0, 0 failing endpoints, 31 BRAM36
+                     (Vivado shared one dual-ported ROM array across
+                     both read ports rather than duplicating), bench GO.
+  msk_symbol_engine: first synth FAILED 100 MHz (WNS -3.773, 80
+                     endpoints; critical path ycur -> pos, 63 logic
+                     levels, 39 CARRY8 -- the whole TED in one clock,
+                     exactly as pre-registered). S_TED split into
+                     COMPUTE (banks -> 12 registered magnitudes) and
+                     DECIDE (argmax/err/PI/pos). Bench GO preserved.
+                     FINAL, terminal-verified: WNS +0.587, TNS 0,
+                     0 failing endpoints, 31 BRAM36, 10 DSP.
+                     Watch item: +0.587 is thin; if in-context P&R
+                     erodes it, the next cut (S_WIN_SETUP position
+                     arithmetic) is already scoped.
+Both blocks bit-exact, BRAM-mapped, and timing-closed at 100 MHz (engine +0.587, mlse4 +2.056; both TNS 0). SYNTHESIS ENCOUNTER CLOSED, all figures terminal-verified. CORRECTION NOTE:
+a prior draft of this entry contained mlse4 figures (+0.897 ns, 64 BRAM)
+not traceable to any terminal output; replaced with verified values.
+Provenance discipline applies to the log itself.
+
+NEXT: interface notes (ring buffer / normalizer / frame-sync seams),
+msk_demodulator.vhd wrapper, tb_chain evolves into its bench.
+
+## msk_demodulator_mlse: INTEGRATION GATE PASSED (2026-07-16 13:36)
+
+Wrapper (ring + engine + mlse4 + shim) streamed the canonical file at
+4x real cadence (stall path exercised continuously):
+  10/10 frames byte-identical, metrics ALL ZERO (= chain bench exactly)
+  23881 decisions (tail boundary now matches chain)
+  ring audit 600/600 correct; engine trajectory 5202/5202 vs golden
+  sticky flags low; demod_lock asserted
+
+Ledger #11 (wrapper, caught same day): hold guard gated on pos_q16,
+which was a ONE-SYMBOL-STALE debug snapshot (captured in S_TED_A) --
+the stale release let the engine read unwritten ring slots (zeros) from
+symbol 1 onward. Named by three instruments in sequence: soft diff
+(different sequences) -> engine trace (pos right, Y wrong) -> ring
+trace (addr 18-22 served (0,0)). Fix: pos_q16 tracks the live register;
+at the y_valid sampling instant live pos equals the old snapshot, so
+all bench dumps unchanged (regression confirmed). MORAL: a debug output
+is not a control input until its update semantics say so.
+
+Receiver totals: 11 ledger entries, still ZERO receiver-design errors.
+NEXT: rx_top surgery (rx_top_patch_notes.md), runner migration
+(runner_patch_notes.md), full-system bench with opv_stim.
+
+## FULL SYSTEM VERIFIED IN SIMULATION (2026-07-16 16:13)
+
+First complete launch of haifuraiya_rx with the MLSE receiver installed
+(after two runner fixes: staging order, stale wave probe). Clean
+stimulus, 4 frames + preamble, channel 5, 10 Hz CFO, amp 9000:
+
+  opv_stim -> channelizer -> halfband -> normalizer -> MLSE demod
+    -> frame_sync_detector_soft -> 3-bit AXIS -> decode
+
+  ROUTE B (demod raw softs, model frame path):
+    3 frames, metrics [0,0,0]:
+    "HELLO WORLD FROM OPULENT VOICE - 73 DE W5NYV"
+  ROUTE A (fsync 3-bit output, frame-aligned decode):
+    same 3 payloads, metrics [7,0,0] (lock-edge quantization,
+    corrected by FEC; fsync quantizer tuning item stands for
+    threshold-SNR work)
+
+  Frame accounting is HEALTHY: preamble + lock latency (demod_lock at
+  1200 syms + fsync sync confirmation) consume ~2 frame times; 3 of 4
+  data frames recovered on a cold start. Field ops always begin with
+  preamble; steady-state loses nothing.
+
+  Demod demodulated 10775 symbols (~the entire burst).
+  Known cleanup: TB "target samples" counter probes a retired signal
+  (reads 0; harmless); f1_error.txt capture taps a tied-off port.
+
+ITEM 2 (integration) VERIFIED IN SIMULATION. Remaining: Eb/N0 ladder
+(8 -> 6 -> 5 dB, the system-level FER instrument), full-design
+synthesis, ZCU102, OTA.
+
+## SYSTEM-AT-RECORD-POINT VERIFIED + Eb/N0 CONVENTION RECONCILED (2026-07-17)
+
+Finding: two Eb/N0 conventions were loose in the project. The model
+sweep harness's axis is per CODED bit (its docstring says "channel
+bit"); opv_stim's --ebn0 is per INFO bit. Delta = 3.01 dB at R=1/2.
+PROJECT CONVENTION HENCEFORTH: INFO-BIT Eb/N0 (record CSVs relabeled
+in analysis, not re-run; all differences, incl. the 5.8 dB recovery,
+are convention-invariant).
+
+Decisive experiment: full-system bench at info-9 (= the record's
+"6 dB" 80/80 point), NORM_TARGET=9000, 6 frames + preamble, seed 1:
+  ROUTE B: 5/5 extracted frames BYTE-CLEAN, metrics [181,109,120,47,50]
+  ROUTE A (fsync 3-bit): 5/5 clean, metrics [173,100,105,36,43]
+  (6th frame lost to bench end-of-file trellis truncation, known)
+THE FABRIC SITS ON ITS OWN RECORD CURVE. Prior night's info-6 run
+(= coded 3, BELOW the record floor) showed slip-dominated partial
+decode -- also on the curve. No system defect.
+
+Record-CSV slip decomposition (fer_model ~= slip_p at all struggling
+points): decode-only failures ~0 -- WHEN SYNC HOLDS, THE FEC DECODES.
+Low-SNR frontier = acquisition (theta attractor roadmap item), not
+decoding. Soft-clamp railing (99%+) noted as NOT currently costing
+frames; quantizer-bin tuning deferred until threshold-SNR work.
+
+New instruments this session: rx_link_budget.py (sim/): staircase,
+convention translator (verified against opv_stim printouts to 0.01 dB),
+theory curves, record loader, 7-figure embedded tutorial, honest money
+figure. system_fer.csv begun: (info 9.0: 5/5), (info 6.0: partial,
+below floor).
+
+## FULL RECEIVE CHAIN: SYNTHESIZED, TIMED, FITS (2026-07-17 13:09)
+
+synth_full.tcl (project mode, xczu9eg, aclk constrained 100 MHz),
+entire rx chain in one design -- channelizer + halfband + normalizer
+stack + MLSE demod + frame_sync_detector_soft + AXI layers:
+
+  WNS +0.499 ns, TNS 0, 0 failing endpoints (of 397,292)
+  CLB LUTs 115,922 (42.3%) | BRAM36 62 (6.8%, = the two demod sine
+  ROMs exactly; channelizer coeffs are package constants) |
+  DSP48E2 1,593 (63.2%; demod contributes 22)
+
+  Critical path (MET, +0.499): engine S_TED_B decide chain
+  (ac_r -> argmax/err/PI -> pos), 42 levels -- the known thin path;
+  next cut (winner-select / position-update split) scoped if
+  implementation pressure demands.
+
+  Scale-up note for the 64-channel plan: 64 demod copies would exceed
+  DSP budget; the arithmetic has ~1840 clk/sym/channel of headroom at
+  100 MHz -- time-multiplexed sharing is the architecture. Post
+  bring-up design conversation.
+
+Same session: TB patches verified (6/6 frames both routes at info-9,
+metrics [181,109,120,47,50,163]/[173,100,105,36,43,152]; target-sample
+counter restored: 175,935); opv_stim C/N printout now per convention
+(cross-checks translator to 0.01 dB). system_fer.csv info-9 row: 6/6.
+
+REMAINING to hardware: integrated-build migration (syn/ source list +
+TCL.PRE hex hook), make haifuraiya-xsa-integrated (~5 h), PetaLinux
+boot, opv-decode -3 on the A53, antennas.

@@ -32,7 +32,7 @@ use std.textio.all;
 
 entity msk_mlse4 is
   generic (
-    G_LUT_FILE : string  := "lut16q.txt";
+    G_LUT_FILE : string  := "lut16q_hex.txt";
     G_TB_D     : integer := 64            -- traceback depth
   );
   port (
@@ -45,6 +45,7 @@ entity msk_mlse4 is
     y2_re     : in  signed(23 downto 0);
     y2_im     : in  signed(23 downto 0);
     -- soft output (one per trellis step, delayed by G_TB_D)
+    busy       : out std_logic;   -- '1' while processing a symbol
     soft_valid : out std_logic;
     soft_idx   : out unsigned(23 downto 0);   -- trellis step index t
     soft_out   : out signed(15 downto 0);
@@ -66,57 +67,57 @@ end entity;
 architecture rtl of msk_mlse4 is
 
 
-  -- quarter-wave sin/cos: 16385-entry table (0..16384 = 0..90 deg),
-  -- reconstruction proven bit-exact against the full table over all
-  -- 65536 phases (see demod_phase0 README, session 8). BRAM ~57 -> ~15.
-  type qlut_t is array (0 to 16384) of signed(15 downto 0);
+  -- quarter-wave sin/cos ROM, hex-packed (UG901 synthesizable idiom):
+  -- one 32-bit word per line, cos(31:16) & sin(15:0), two's complement.
+  -- Reconstruction proven bit-exact over all 65536 phases (session 8).
+  type qlut_t is array (0 to 16384) of std_logic_vector(31 downto 0);
 
-  impure function load_qlut(fname : string; col : integer) return qlut_t is
-    file f       : text open read_mode is fname;
-    variable l   : line;
-    variable c,s : integer;
-    variable r   : qlut_t;
+  impure function load_qlut(fname : string) return qlut_t is
+    file f     : text open read_mode is fname;
+    variable l : line;
+    variable v : std_logic_vector(31 downto 0);
+    variable r : qlut_t;
   begin
     for i in 0 to 16384 loop
-      readline(f, l); read(l, c); read(l, s);
-      -- offset-encoded (+32768): textio-immune
-      if col = 0 then r(i) := to_signed(c - 32768, 16);
-      else            r(i) := to_signed(s - 32768, 16);
-      end if;
+      readline(f, l);
+      hread(l, v);
+      r(i) := v;
     end loop;
     return r;
   end function;
 
-  constant QLC : qlut_t := load_qlut(G_LUT_FILE, 0);
-  constant QLS : qlut_t := load_qlut(G_LUT_FILE, 1);
+  -- QROM as a SIGNAL (never written): rom_style attributes on constants
+  -- are ignored by synthesis (warning 8-5733); on signals they are honored
+  -- and BRAM mapping becomes deterministic instead of lucky.
+  signal QROM : qlut_t := load_qlut(G_LUT_FILE);
+  attribute rom_style : string;
+  attribute rom_style of QROM : signal is "block";
 
-  function lut_cos(ph : integer) return signed is
-    variable quad : integer;
-    variable q    : integer;
-  begin
-    quad := (ph / 16384) mod 4;
-    q    := ph mod 16384;
-    case quad is
-      when 0      => return  QLC(q);
-      when 1      => return -QLC(16384 - q);
-      when 2      => return -QLC(q);
-      when others => return  QLC(16384 - q);
-    end case;
-  end function;
+  -- dual synchronous ROM ports (one per predecessor branch)
+  signal rom_q0, rom_q1 : std_logic_vector(31 downto 0)
+                        := (others => '0');
+  signal c0n, s0n, c1n, s1n   : std_logic := '0';
 
-  function lut_sin(ph : integer) return signed is
-    variable quad : integer;
-    variable q    : integer;
+  procedure fold_phase(ph            : in  unsigned(15 downto 0);
+                       variable addr : out unsigned(14 downto 0);
+                       variable cneg : out std_logic;
+                       variable sneg : out std_logic) is
+    variable q : unsigned(13 downto 0);
   begin
-    quad := (ph / 16384) mod 4;
-    q    := ph mod 16384;
-    case quad is
-      when 0      => return  QLS(q);
-      when 1      => return  QLS(16384 - q);
-      when 2      => return -QLS(q);
-      when others => return -QLS(16384 - q);
+    q := ph(13 downto 0);
+    case to_integer(ph(15 downto 14)) is
+      when 0 =>
+        addr := resize(q, 15);                     cneg := '0'; sneg := '0';
+      when 1 =>
+        addr := to_unsigned(16384, 15) - resize(q, 15);
+        cneg := '1'; sneg := '0';
+      when 2 =>
+        addr := resize(q, 15);                     cneg := '1'; sneg := '1';
+      when others =>
+        addr := to_unsigned(16384, 15) - resize(q, 15);
+        cneg := '0'; sneg := '1';
     end case;
-  end function;
+  end procedure;
 
   -- pair hypothesis index: 0=(1,1) 1=(0,0) 2=(1,0) 3=(0,1)
   -- V-bank per trellis step (25-bit complex x 4)
@@ -140,7 +141,8 @@ architecture rtl of msk_mlse4 is
   signal kpar      : std_logic := '0';   -- parity of the PREVIOUS symbol
   signal t_step    : unsigned(23 downto 0) := (others => '0');
 
-  type state_t is (S_IDLE, S_BANK, S_ACS, S_NORM, S_TB, S_EMIT);
+  type state_t is (S_IDLE, S_BANK, S_ACS_A, S_ACS_B1, S_ACS_B2, S_NORM,
+                   S_TB, S_EMIT);
   signal state : state_t := S_IDLE;
 
   -- ACS iteration
@@ -152,6 +154,10 @@ architecture rtl of msk_mlse4 is
   signal nmarg   : std_logic_vector(63 downto 0);  -- 16b x 4
 
   -- traceback iteration
+  -- ACS pipeline registers (compute phase -> decide phase)
+  signal bm0_r, bm1_r         : signed(27 downto 0);
+  signal p0r, p0i, p1r, p1i   : signed(26 downto 0);
+
   signal tb_i     : integer range 0 to 255 := 0;
   signal tb_st    : integer range 0 to 3 := 0;
   signal tb_best0 : integer range 0 to 3 := 0;   -- argmax at TB start
@@ -163,6 +169,7 @@ architecture rtl of msk_mlse4 is
 begin
 
   dbg_step_valid <= spv;
+  busy <= '0' when state = S_IDLE else '1';
   dbg_m0 <= metric(0); dbg_m1 <= metric(1);
   dbg_m2 <= metric(2); dbg_m3 <= metric(3);
 
@@ -171,6 +178,8 @@ begin
   dbg_th2 <= theta(2); dbg_th3 <= theta(3);
 
   process(clk)
+    variable vaddr : unsigned(14 downto 0);
+    variable vcneg, vsneg : std_logic;
     variable qc_re, qc_im, qp_re, qp_im : signed(24 downto 0);
     variable sax, sp, bnew : integer;
     variable stp0, stp1   : integer;
@@ -245,17 +254,31 @@ begin
 
           when S_BANK =>
             acs_st <= 0;
-            state  <= S_ACS;
+            state  <= S_ACS_A;
 
-          when S_ACS =>
-            -- one destination state per clock: two predecessor branches
-            bnew := acs_st mod 2;
-            if (acs_st / 2) = 0 then sax := 1; else sax := -1; end if;
+          when S_ACS_A =>
+            -- address phase: fold both predecessor thetas, issue ROM reads
+            -- explicit decode of acs_st in 0..3 (no signed mod/rem)
+            if acs_st = 1 or acs_st = 3 then bnew := 1; else bnew := 0; end if;
+            if acs_st <= 1 then sax := 1; else sax := -1; end if;
             if bnew = 1 then sp := sax; else sp := -sax; end if;
             if sp > 0 then bset := 0; else bset := 2; end if;
-            stp0 := bset + 0;   -- pred with pb=0
-            stp1 := bset + 1;   -- pred with pb=1
-            -- pair index for (pb, bnew)
+            -- synchronous ROM reads in the address phase: data
+            -- registered on THIS edge, valid at S_ACS_B next edge
+            fold_phase(theta(bset + 0), vaddr, vcneg, vsneg);
+            rom_q0 <= QROM(to_integer(vaddr)); c0n <= vcneg; s0n <= vsneg;
+            fold_phase(theta(bset + 1), vaddr, vcneg, vsneg);
+            rom_q1 <= QROM(to_integer(vaddr)); c1n <= vcneg; s1n <= vsneg;
+            state <= S_ACS_B1;
+
+          when S_ACS_B1 =>
+            -- COMPUTE phase: rotations and both branch metrics, registered
+            if acs_st = 1 or acs_st = 3 then bnew := 1; else bnew := 0; end if;
+            if acs_st <= 1 then sax := 1; else sax := -1; end if;
+            if bnew = 1 then sp := sax; else sp := -sax; end if;
+            if sp > 0 then bset := 0; else bset := 2; end if;
+            stp0 := bset + 0;
+            stp1 := bset + 1;
             for pb in 0 to 1 loop
               if    pb = 1 and bnew = 1 then pairsel := 0;
               elsif pb = 0 and bnew = 0 then pairsel := 1;
@@ -264,31 +287,48 @@ begin
               end if;
               vr0 := vre(pairsel); vi0 := vim(pairsel);
               if pb = 0 then
-                c := lut_cos(to_integer(theta(stp0)));
-                sn := lut_sin(to_integer(theta(stp0)));
+                if c0n = '0' then c :=  signed(rom_q0(31 downto 16));
+                else              c := -signed(rom_q0(31 downto 16));
+                end if;
+                if s0n = '0' then sn :=  signed(rom_q0(15 downto 0));
+                else              sn := -signed(rom_q0(15 downto 0));
+                end if;
               else
-                c := lut_cos(to_integer(theta(stp1)));
-                sn := lut_sin(to_integer(theta(stp1)));
+                if c1n = '0' then c :=  signed(rom_q1(31 downto 16));
+                else              c := -signed(rom_q1(31 downto 16));
+                end if;
+                if s1n = '0' then sn :=  signed(rom_q1(15 downto 0));
+                else              sn := -signed(rom_q1(15 downto 0));
+                end if;
               end if;
               pr := resize(vr0*c, 42) + resize(vi0*sn, 42);
               pi := resize(vi0*c, 42) - resize(vr0*sn, 42);
               vr := resize(shift_right(pr, 15), 27);
               vi := resize(shift_right(pi, 15), 27);
               if pb = 0 then
-                bm0 := resize(metric(stp0), 28) + resize(sp*vr, 28);
+                bm0_r <= resize(metric(stp0), 28) + resize(sp*vr, 28);
+                p0r <= vr;  p0i <= vi;
               else
-                bm1 := resize(metric(stp1), 28) + resize(sp*vr, 28);
-              end if;
-              if (pb = 0) then wvr := vr; wvi := vi; end if;
-              -- keep pb=1 rotation for possible winner
-              if (pb = 1) then
-                if bm1 > bm0 then wvr := vr; wvi := vi; end if;
+                bm1_r <= resize(metric(stp1), 28) + resize(sp*vr, 28);
+                p1r <= vr;  p1i <= vi;
               end if;
             end loop;
-            if bm0 >= bm1 then
-              wmet := bm0; pw := stp0; lose := bm1;
+            state <= S_ACS_B2;
+
+          when S_ACS_B2 =>
+            -- DECIDE phase: compare, select, survivor updates
+            if acs_st = 1 or acs_st = 3 then bnew := 1; else bnew := 0; end if;
+            if acs_st <= 1 then sax := 1; else sax := -1; end if;
+            if bnew = 1 then sp := sax; else sp := -sax; end if;
+            if sp > 0 then bset := 0; else bset := 2; end if;
+            stp0 := bset + 0;
+            stp1 := bset + 1;
+            if bm0_r >= bm1_r then
+              wmet := bm0_r; pw := stp0; lose := bm1_r;
+              wvr := p0r;    wvi := p0i;
             else
-              wmet := bm1; pw := stp1; lose := bm0;
+              wmet := bm1_r; pw := stp1; lose := bm0_r;
+              wvr := p1r;    wvi := p1i;
             end if;
             nmet(acs_st) <= resize(wmet, 24);
             npred(2*acs_st+1 downto 2*acs_st)
@@ -299,8 +339,6 @@ begin
             nmarg(16*acs_st+15 downto 16*acs_st)
               <= std_logic_vector(resize(mg, 16));
             -- PSP theta update from the winning branch rotation
-            -- (conditional negation: sp*wvr would be a double-width
-            -- product -- the block-1 trap's sibling, as pre-registered)
             if sp > 0 then
               ir := wvr;  ii := wvi;
             else
@@ -316,6 +354,7 @@ begin
               state <= S_NORM;
             else
               acs_st <= acs_st + 1;
+              state  <= S_ACS_A;
             end if;
 
           when S_NORM =>
