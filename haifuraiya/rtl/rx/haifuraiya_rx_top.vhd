@@ -97,6 +97,8 @@ entity haifuraiya_rx_top is
         cfo_ctrl          : in  std_logic_vector(31 downto 0);
         cfo_manual        : in  std_logic_vector(15 downto 0);
         cfo_applied       : out std_logic_vector(15 downto 0);
+        cfo_state         : out std_logic_vector(2 downto 0);
+        cfo_quality       : out std_logic_vector(15 downto 0);
         tim_alpha         : in  std_logic_vector(15 downto 0);
         tim_beta          : in  std_logic_vector(15 downto 0);
         sym_clk_offset    : out std_logic_vector(31 downto 0);
@@ -197,6 +199,10 @@ architecture rtl of haifuraiya_rx_top is
     signal cfo_word   : signed(15 downto 0);
     signal rot_valid  : std_logic;
     signal rot_i      : signed(15 downto 0);
+    signal afc_est_s  : signed(15 downto 0);
+    signal afc_st_u   : unsigned(2 downto 0);
+    signal afc_q_u    : unsigned(15 downto 0);
+    signal afc_lck    : std_logic;
     signal rot_q      : signed(15 downto 0);
     
     -- intermediate signal for the signed ports
@@ -222,6 +228,8 @@ begin
     tim_a_u        <= unsigned(tim_alpha);
     tim_b_u        <= unsigned(tim_beta);
     sym_clk_offset <= std_logic_vector(clk_off_s);
+    cfo_state      <= std_logic_vector(afc_st_u);
+    cfo_quality    <= std_logic_vector(afc_q_u);
     sl_thl_u     <= unsigned(sl_pct_lock);
     sl_thu_u     <= unsigned(sl_pct_unlock);
     sl_wl2_u     <= unsigned(sl_window_log2);
@@ -351,7 +359,7 @@ begin
     -- until step 2 lands the AFC estimator (which will drive this mux).
     ----------------------------------------------------------------------------
     cfo_word <= signed(cfo_manual) when cfo_ctrl(0) = '0'
-                else (others => '0');   -- step 2: AFC estimate here
+                else afc_est_s;         -- step 2 LANDED: the AFC drives auto
     cfo_applied <= std_logic_vector(cfo_word);
 
     u_cfo : entity work.cfo_rotator
@@ -397,6 +405,12 @@ begin
 
             demod_lock   => demod_lock,
 
+            afc_alpha_trk    => unsigned(cfo_ctrl(15 downto 8)),
+            afc_alpha_acq    => unsigned(cfo_ctrl(23 downto 16)),
+            afc_est_hz       => afc_est_s,
+            afc_state        => afc_st_u,
+            afc_quality      => afc_q_u,
+            afc_locked       => afc_lck,
             tim_alpha        => tim_a_u,
             tim_beta         => tim_b_u,
             sym_clk_offset   => clk_off_s,

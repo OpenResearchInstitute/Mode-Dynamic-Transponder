@@ -1156,7 +1156,7 @@ wait for 1 us;    -- let the design come back up
     --      6/6 (GREEN) -- correction path proven end to end.
     --   3. readback 0x0B4 (CFO_ESTIMATE) = applied word both times.
     axi_write_demod(16#0B8#, x"00060A01");   -- CFO_CTRL: acq_shift 6, trk_shift 10, auto
-    axi_write_demod(16#0BC#, x"00000000");   -- CFO_MANUAL: -5000 Hz is EC78 and 1388 is +5000
+    axi_write_demod(16#0BC#, x"00000000");   -- CFO_MANUAL: 0 Hz
     axi_write_demod(16#0C4#, x"00000148");   -- TIM_ALPHA = 328 Q16 (C++ 0.005)
     axi_write_demod(16#0C8#, x"000000A8");   -- TIM_BETA  = 168 Q24 (C++ 1e-5)
 
@@ -1322,6 +1322,15 @@ report "MILESTONE 4: injection complete, fed " & integer'image(n_fed) &
              integer'image(sl_wait/10) & "." & integer'image(sl_wait mod 10) & " ms");
     end if;
     axi_read_demod(16#0A0#, v_demod_ver);
+    axi_read_demod(16#0B0#, v_demod_ver);
+    report "AFC: CFO_STATE = " & integer'image(to_integer(unsigned(v_demod_ver(2 downto 0)))) &
+           " (0 IDLE/1 SEARCH/2 CORR/3 HELD/4 LOST)" severity note;
+    axi_read_demod(16#0B4#, v_demod_ver);
+    report "AFC: CFO_ESTIMATE (applied, Hz) = " &
+           integer'image(to_integer(signed(v_demod_ver(15 downto 0)))) severity note;
+    axi_read_demod(16#0C0#, v_demod_ver);
+    report "AFC: CFO_QUALITY = " &
+           integer'image(to_integer(unsigned(v_demod_ver(15 downto 0)))) severity note;
     axi_read_demod(16#0CC#, v_demod_ver);
     report "TL: SYM_CLK_OFFSET (Q24 smp/sym) = " &
            integer'image(to_integer(signed(v_demod_ver))) &

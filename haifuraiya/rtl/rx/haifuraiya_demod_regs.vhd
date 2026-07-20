@@ -194,6 +194,8 @@ entity haifuraiya_demod_regs is
         cfo_ctrl          : out std_logic_vector(31 downto 0);
         cfo_manual        : out std_logic_vector(15 downto 0);
         cfo_applied       : in  std_logic_vector(15 downto 0);
+        cfo_state         : in  std_logic_vector(2 downto 0);
+        cfo_quality       : in  std_logic_vector(15 downto 0);
         tim_alpha         : out std_logic_vector(15 downto 0);
         tim_beta          : out std_logic_vector(15 downto 0);
         sym_clk_offset    : in  std_logic_vector(31 downto 0)
@@ -286,7 +288,9 @@ architecture rtl of haifuraiya_demod_regs is
     constant ADDR_SYM_UNLOCK_THRESH: std_logic_vector(11 downto 0) := x"0A8";
     constant ADDR_SYM_LOCK_WINDOW  : std_logic_vector(11 downto 0) := x"0AC";
     -- map v6: CFO block (WP2_CFO_DESIGN.md section 5)
+    constant ADDR_CFO_STATE        : std_logic_vector(11 downto 0) := x"0B0";
     constant ADDR_CFO_ESTIMATE     : std_logic_vector(11 downto 0) := x"0B4";
+    constant ADDR_CFO_QUALITY      : std_logic_vector(11 downto 0) := x"0C0";
     constant ADDR_CFO_CTRL         : std_logic_vector(11 downto 0) := x"0B8";
     constant ADDR_CFO_MANUAL       : std_logic_vector(11 downto 0) := x"0BC";
     -- map v6: timing loop (C++ reference law; opv_demod.hpp:197-199)
@@ -613,6 +617,12 @@ begin
                             when ADDR_SYM_LOCK_WINDOW =>
                                 r_data_int <= (others => '0');
                                 r_data_int(3 downto 0) <= reg_sl_window_log2;
+                            when ADDR_CFO_STATE =>
+                                r_data_int <= (others => '0');
+                                r_data_int(2 downto 0) <= cfo_state;
+                            when ADDR_CFO_QUALITY =>
+                                r_data_int <= (others => '0');
+                                r_data_int(15 downto 0) <= cfo_quality;
                             when ADDR_CFO_ESTIMATE =>
                                 -- applied correction, Hz, sign-extended
                                 r_data_int <= (others => cfo_applied(15));

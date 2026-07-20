@@ -83,6 +83,7 @@ safe_add_files sources_1 {
     ../rtl/rx/msk_mlse4.vhd
     ../rtl/rx/sym_lock_detector.vhd
     ../rtl/rx/cfo_rotator.vhd
+    ../rtl/rx/cfo_afc.vhd
     ../rtl/rx/msk_demodulator_mlse.vhd
     ../rtl/rx/lut16q_pkg.vhd
     ../rtl/rx/frame_sync_detector_soft.vhd
@@ -391,6 +392,11 @@ add_wave -into {CFO}                 $CFO/out_valid
 add_wave -into {CFO} -radix unsigned $CFO/phase
 add_wave -into {CFO} -radix dec      $CFO/i_out
 add_wave -into {CFO} -radix dec      $CFO/q_out
+set AFC $RX/u_demod/u_afc
+add_wave -into {CFO} -radix dec      $AFC/est_hz
+add_wave -into {CFO} -radix unsigned $AFC/state_o
+add_wave -into {CFO} -radix unsigned $AFC/quality
+add_wave -into {CFO}                 $AFC/cfo_locked
 add_wave -into {Bit_Decisions}            $DEM/rx_dvalid
 add_wave -into {Bit_Decisions}            $DEM/demod_lock
 

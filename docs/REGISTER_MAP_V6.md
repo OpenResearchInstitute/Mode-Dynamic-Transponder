@@ -1,10 +1,5 @@
 # Haifuraiya Demodulator Register Map v6 — Normative Reference
 
-Status: DRAFT FOR REVIEW (W5NYV). Source of truth: `haifuraiya_demod_v6.rdl`
-(SystemRDL; PeakRDL-regblock-vhdl flow per the pluto_msk `rdl/` precedent).
-This document is the human companion; on any disagreement the .rdl wins,
-and both regenerate together.
-
 License: CERN-OHL-S v2. VERSION: 0x0006_0000.
 Demod AXI-Lite: base 0x84A8_0000 (system_bd.tcl:306, ad_cpu_interconnect
 0x44A80000 + ADI 0x4000_0000 translation), aperture 4 KB
@@ -47,13 +42,16 @@ lock detector's name, msk_demodulator_mlse.vhd G_LOCK_SYM.)
 | 0x0A8 | SYM_UNLOCK_THRESH | RW | 50 % (C++ UNLOCK_THRESH, verbatim) | symbol lock |
 | 0x0AC | SYM_LOCK_WINDOW | RW | window_log2=6 (64 sym) | symbol lock |
 | 0x0B0 | CFO_STATE | R | — | CFO acquisition |
+| 0x0B0 | CFO_STATE | R | 0 IDLE / 1 SEARCH / 2 CORRECTING / 3 HELD / 4 LOST (cfo_afc.vhd; LOST->SEARCH = the anti-wedge) | CFO |
 | 0x0B4 | CFO_ESTIMATE | R | Hz signed | CFO acquisition |
 | 0x0B8 | CFO_CTRL | RW | auto=1 | CFO acquisition |
 | 0x0BC | CFO_MANUAL | RW | 0 Hz | CFO acquisition |
 | 0x0C0 | CFO_QUALITY | R | 0.25 dB LSB | CFO acquisition |
+| 0x0B0 | CFO_STATE | R | 0 IDLE / 1 SEARCH / 2 CORRECTING / 3 HELD / 4 LOST (cfo_afc.vhd; LOST->SEARCH = the anti-wedge) | CFO |
 | 0x0B4 | CFO_ESTIMATE | R | applied CFO correction, Hz signed (manual word or, from WP2 step 2, the AFC estimate) | CFO |
 | 0x0B8 | CFO_CTRL | RW | 0x00060A01: b0 auto, [15:8] alpha_trk shift (10 = 2^-10 ~ C++ 0.001), [23:16] alpha_acq shift (6 = 16x, provisional) | CFO |
 | 0x0BC | CFO_MANUAL | RW | Hz signed 16; applied when auto=0. The falsifiability knob (red-first bench, design doc s.6) | CFO |
+| 0x0C0 | CFO_QUALITY | R | windowed dominant-tone gauge (|re|+|im| >> 4, 64-sym mean); locked ~6k-22k, dead air ~0, floor 512 | CFO |
 | 0x0C4 | TIM_ALPHA | RW | 0x0148 (0.005 Q16, C++ verbatim) | timing loop |
 | 0x0C8 | TIM_BETA | RW | 0x00A8 (1e-5 Q24, C++ verbatim) | timing loop |
 | 0x0CC | SYM_CLK_OFFSET | R | Q24 samples/symbol, signed | timing loop |

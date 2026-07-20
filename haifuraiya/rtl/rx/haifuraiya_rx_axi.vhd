@@ -166,6 +166,8 @@ architecture rtl of haifuraiya_rx_axi is
     signal cfg_cfo_ctrl         : std_logic_vector(31 downto 0);
     signal cfg_cfo_manual       : std_logic_vector(15 downto 0);
     signal sts_cfo_applied      : std_logic_vector(15 downto 0);
+    signal sts_cfo_state        : std_logic_vector(2 downto 0);
+    signal sts_cfo_quality      : std_logic_vector(15 downto 0);
     signal cfg_tim_alpha        : std_logic_vector(15 downto 0);
     signal cfg_tim_beta         : std_logic_vector(15 downto 0);
     signal sts_sym_clk_offset   : std_logic_vector(31 downto 0);
@@ -310,6 +312,8 @@ begin
             cfo_ctrl              => cfg_cfo_ctrl,
             cfo_manual            => cfg_cfo_manual,
             cfo_applied           => sts_cfo_applied,
+            cfo_state             => sts_cfo_state,
+            cfo_quality           => sts_cfo_quality,
             tim_alpha             => cfg_tim_alpha,
             tim_beta              => cfg_tim_beta,
             sym_clk_offset        => sts_sym_clk_offset
@@ -375,6 +379,8 @@ begin
             cfo_ctrl          => cfg_cfo_ctrl,
             cfo_manual        => cfg_cfo_manual,
             cfo_applied       => sts_cfo_applied,
+            cfo_state         => sts_cfo_state,
+            cfo_quality       => sts_cfo_quality,
             tim_alpha         => cfg_tim_alpha,
             tim_beta          => cfg_tim_beta,
             sym_clk_offset    => sts_sym_clk_offset,

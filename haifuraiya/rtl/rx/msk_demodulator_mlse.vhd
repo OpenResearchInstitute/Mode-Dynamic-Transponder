@@ -67,6 +67,14 @@ entity msk_demodulator_mlse is
     tim_alpha        : in  unsigned(15 downto 0);  -- Q16, default 328 = 0.005
     tim_beta         : in  unsigned(15 downto 0);  -- Q24, default 168 = 1e-5
     sym_clk_offset   : out signed(31 downto 0);    -- Q24 samples/symbol
+    -- AFC (WP2 step 2, cfo_afc.vhd): gears from CFO_CTRL, outputs to the
+    -- rotator mux and the CFO status registers (map v6 0x0B0/0x0B4/0x0C0)
+    afc_alpha_trk    : in  unsigned(7 downto 0);
+    afc_alpha_acq    : in  unsigned(7 downto 0);
+    afc_est_hz       : out signed(15 downto 0);
+    afc_state        : out unsigned(2 downto 0);
+    afc_quality      : out unsigned(15 downto 0);
+    afc_locked       : out std_logic;
     sl_pct_lock      : in  unsigned(7 downto 0);   -- percent, default 25 (C++)
     sl_pct_unlock    : in  unsigned(7 downto 0);   -- percent, default 50 (C++)
     sl_window_log2   : in  unsigned(3 downto 0);
@@ -103,6 +111,7 @@ architecture rtl of msk_demodulator_mlse is
 
   -- engine <-> mlse
   signal e_valid  : std_logic;
+  -- AFC estimator: consumes the same per-symbol y's the MLSE does
   signal e_y1r, e_y1i, e_y2r, e_y2i : signed(23 downto 0);
   signal e_sym    : unsigned(23 downto 0);
   signal e_pos    : unsigned(47 downto 0);
@@ -194,6 +203,22 @@ begin
       locked        => sl_locked,
       ratio_pct     => sl_ratio_pct,
       window_full   => sl_window_full );
+
+  u_afc : entity work.cfo_afc
+    port map (
+      clk        => clk,
+      rst        => init,
+      y_valid    => e_valid,
+      y1_re      => e_y1r, y1_im => e_y1i,
+      y2_re      => e_y2r, y2_im => e_y2i,
+      alpha_trk  => afc_alpha_trk,
+      alpha_acq  => afc_alpha_acq,
+      est_hz     => afc_est_hz,
+      state_o    => afc_state,
+      quality    => afc_quality,
+      cfo_locked => afc_locked
+    );
+
 
   ------------------------------------------------------------------
   -- output shim: polarity, hard bit, valid
