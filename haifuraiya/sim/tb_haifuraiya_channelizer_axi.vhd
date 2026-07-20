@@ -1155,8 +1155,8 @@ wait for 1 us;    -- let the design come back up
     --      axi_write_demod 0x0BC <= 0x00001388 (+5000): run MUST decode
     --      6/6 (GREEN) -- correction path proven end to end.
     --   3. readback 0x0B4 (CFO_ESTIMATE) = applied word both times.
-    axi_write_demod(16#0B8#, x"00060A00");   -- CFO_CTRL: acq_shift 6, trk_shift 10, auto
-    axi_write_demod(16#0BC#, x"0000EC78");   -- CFO_MANUAL: -5000 Hz 1388 is +5000
+    axi_write_demod(16#0B8#, x"00060A01");   -- CFO_CTRL: acq_shift 6, trk_shift 10, auto
+    axi_write_demod(16#0BC#, x"00000000");   -- CFO_MANUAL: -5000 Hz is EC78 and 1388 is +5000
     axi_write_demod(16#0C4#, x"00000148");   -- TIM_ALPHA = 328 Q16 (C++ 0.005)
     axi_write_demod(16#0C8#, x"000000A8");   -- TIM_BETA  = 168 Q24 (C++ 1e-5)
 

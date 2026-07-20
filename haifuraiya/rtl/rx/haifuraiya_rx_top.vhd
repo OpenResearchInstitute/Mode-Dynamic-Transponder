@@ -198,7 +198,6 @@ architecture rtl of haifuraiya_rx_top is
     signal rot_valid  : std_logic;
     signal rot_i      : signed(15 downto 0);
     signal rot_q      : signed(15 downto 0);
-    signal rot_q_in   : signed(15 downto 0);
     
     -- intermediate signal for the signed ports
     signal sig_fs_corr, sig_fs_corr_peak : signed(31 downto 0);
@@ -334,9 +333,20 @@ begin
 
     ----------------------------------------------------------------------------
     -- CFO correction rotator (WP2 step 1 -- WP2_CFO_DESIGN.md section 4/6).
-    -- Sits at the demod seam: the deliberate I/Q swap that made the chain
-    -- lock is PRESERVED at the ROTATOR INPUT (gq -> I, gi -> Q), so the
-    -- demod sees the identical convention, now derotated.
+    --
+    -- ORDERING IS THE SIGN CONVENTION (reorder ratified 2026-07-20):
+    -- the rotator operates FIRST, in the channelizer's true domain
+    -- (gi = I, gq = Q), where "remove +f" means exactly what the register
+    -- says -- same antenna-frame convention as the C++ set_freq_offset.
+    -- The deliberate I/Q swap that made the chain lock (gq -> demod I,
+    -- gi -> demod Q; z' = j*conj(z)) is applied AFTER correction, as the
+    -- last step before the demod. Conjugation negates frequency, so a
+    -- rotator placed after the swap needs a negated command (measured on
+    -- the red/green bench: +5000 post-swap doubled the error, -5000
+    -- cleaned it). Rotating before the swap keeps every sign natural and
+    -- no negation exists anywhere. Debt note: trace the swap to its true
+    -- origin (channelizer bin conjugation vs demod expectation).
+    --
     -- Applied word: CFO_MANUAL when CFO_CTRL.auto=0; zero when auto=1
     -- until step 2 lands the AFC estimator (which will drive this mux).
     ----------------------------------------------------------------------------
@@ -344,23 +354,23 @@ begin
                 else (others => '0');   -- step 2: AFC estimate here
     cfo_applied <= std_logic_vector(cfo_word);
 
-    rot_q_in <= gi when COMPLEX_INPUT else (others => '0');
-
     u_cfo : entity work.cfo_rotator
         port map (
             clk       => aclk,
             rst       => reset_h,
             en        => rx_svalid,
-            i_in      => gq,
-            q_in      => rot_q_in,
-            freq_hz   => cfo_word,
+            i_in      => gi,               -- TRUE domain: no swap yet
+            q_in      => gq,
+            freq_hz   => cfo_word,         -- natural sign, antenna frame
             out_valid => rot_valid,
             i_out     => rot_i,
             q_out     => rot_q
         );
 
-    rx_i_to_demod <= std_logic_vector(rot_i);
-    rx_q_to_demod <= std_logic_vector(rot_q);
+    -- the deliberate swap, applied to the CORRECTED samples
+    rx_i_to_demod <= std_logic_vector(rot_q);
+    rx_q_to_demod <= std_logic_vector(rot_i)
+                 when COMPLEX_INPUT else (others => '0');
 
     ----------------------------------------------------------------------------
     -- MSK demodulator: MLSE receiver (msk_symbol_engine + msk_mlse4 behind
