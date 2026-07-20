@@ -97,7 +97,7 @@ entity haifuraiya_demod_regs is
     generic (
         ADDR_WIDTH    : positive := 12;   -- 4 KB window
         VERSION_MAJOR : natural  := 0;
-        VERSION_MINOR : natural  := 5;    -- bumped: expanded demod control plane
+        VERSION_MINOR : natural  := 6;    -- bumped: expanded demod control plane
         VERSION_PATCH : natural  := 0
     );
     port (
@@ -179,7 +179,24 @@ entity haifuraiya_demod_regs is
         cst_unlock_f2     : in  std_logic;
         cst_acc_i_f1      : in  std_logic_vector(31 downto 0);
         cst_acc_q_f1      : in  std_logic_vector(31 downto 0);
-        cst_iq_delta_f1   : in  std_logic_vector(31 downto 0)
+        cst_iq_delta_f1   : in  std_logic_vector(31 downto 0);
+
+        ---------------------------------------------------------------------
+        -- map v6: symbol lock detector config (out) / status (in)
+        -- defaults are PROVISIONAL pending bench calibration SL-3
+        ---------------------------------------------------------------------
+        sl_pct_lock       : out std_logic_vector(7 downto 0);
+        sl_pct_unlock     : out std_logic_vector(7 downto 0);
+        sl_window_log2    : out std_logic_vector(3 downto 0);
+        sym_locked        : in  std_logic;
+        sl_ratio_pct      : in  std_logic_vector(7 downto 0);
+        sl_window_full    : in  std_logic;
+        cfo_ctrl          : out std_logic_vector(31 downto 0);
+        cfo_manual        : out std_logic_vector(15 downto 0);
+        cfo_applied       : in  std_logic_vector(15 downto 0);
+        tim_alpha         : out std_logic_vector(15 downto 0);
+        tim_beta          : out std_logic_vector(15 downto 0);
+        sym_clk_offset    : in  std_logic_vector(31 downto 0)
     );
 end entity haifuraiya_demod_regs;
 
@@ -210,6 +227,24 @@ architecture rtl of haifuraiya_demod_regs is
     signal reg_fs_hunt_thresh     : std_logic_vector(31 downto 0)  := x"00000055";   -- 85 percent (4.2 sigma)
     signal reg_fs_verify_thresh   : std_logic_vector(31 downto 0)  := x"00000046";   -- 70 percent (3.4 sigma)
     signal reg_quant_thr_1        : std_logic_vector(15 downto 0) := x"134E";       -- 4942
+    -- map v6 symbol lock detector config (provisional defaults; SL-3)
+    -- percent thresholds, defaults = the C++ reference constants verbatim
+    -- (opv_demod.hpp LOCK_THRESH 0.25 / UNLOCK_THRESH 0.50) -- dimensionless,
+    -- amplitude-invariant, no scale calibration required
+    signal reg_sl_pct_lock      : std_logic_vector(7 downto 0) := x"19";  -- 25
+    signal reg_sl_pct_unlock    : std_logic_vector(7 downto 0) := x"32";  -- 50
+    -- CFO_CTRL fields (packing ratified 2026-07-20): b0 auto (default 1),
+    -- [15:8] alpha_trk SHIFT (gain 2^-n; 10 -> 2^-10 = 0.000977, the
+    -- nearest power of two to the C++ afc_alpha 0.001 -- 2.3% low,
+    -- register-adjustable), [23:16] alpha_acq SHIFT (6 -> 16x track,
+    -- provisional per decision 2). Consumed by the step-2 AFC estimator.
+    signal reg_cfo_ctrl         : std_logic_vector(31 downto 0) := x"00060A01";
+    signal reg_cfo_manual       : std_logic_vector(15 downto 0) := x"0000";
+    -- timing-loop coefficients, defaults = C++ constants verbatim:
+    -- alpha 0.005 -> Q16 328 = 0x0148 ; beta 1e-5 -> Q24 168 = 0x00A8
+    signal reg_tim_alpha        : std_logic_vector(15 downto 0) := x"0148";
+    signal reg_tim_beta         : std_logic_vector(15 downto 0) := x"00A8";
+    signal reg_sl_window_log2   : std_logic_vector(3 downto 0)  := x"6";
     signal reg_quant_thr_2        : std_logic_vector(15 downto 0) := x"269C";       -- 9884
     signal reg_quant_thr_3        : std_logic_vector(15 downto 0) := x"39EA";       -- 14826
 
@@ -245,6 +280,19 @@ architecture rtl of haifuraiya_demod_regs is
     constant ADDR_QUANT_THR_3      : std_logic_vector(11 downto 0) := x"058";
     -- NEW: demod control
     constant ADDR_DEMOD_INIT       : std_logic_vector(11 downto 0) := x"05C";
+    -- map v6: symbol lock detector (sym_lock_detector.vhd)
+    constant ADDR_SYM_LOCK_STATUS  : std_logic_vector(11 downto 0) := x"0A0";
+    constant ADDR_SYM_LOCK_THRESH  : std_logic_vector(11 downto 0) := x"0A4";
+    constant ADDR_SYM_UNLOCK_THRESH: std_logic_vector(11 downto 0) := x"0A8";
+    constant ADDR_SYM_LOCK_WINDOW  : std_logic_vector(11 downto 0) := x"0AC";
+    -- map v6: CFO block (WP2_CFO_DESIGN.md section 5)
+    constant ADDR_CFO_ESTIMATE     : std_logic_vector(11 downto 0) := x"0B4";
+    constant ADDR_CFO_CTRL         : std_logic_vector(11 downto 0) := x"0B8";
+    constant ADDR_CFO_MANUAL       : std_logic_vector(11 downto 0) := x"0BC";
+    -- map v6: timing loop (C++ reference law; opv_demod.hpp:197-199)
+    constant ADDR_TIM_ALPHA        : std_logic_vector(11 downto 0) := x"0C4";
+    constant ADDR_TIM_BETA         : std_logic_vector(11 downto 0) := x"0C8";
+    constant ADDR_SYM_CLK_OFFSET   : std_logic_vector(11 downto 0) := x"0CC";
     constant ADDR_LOOP_CTRL        : std_logic_vector(11 downto 0) := x"060";
     constant ADDR_RX_SAMPLE_DISCARD: std_logic_vector(11 downto 0) := x"064";
     -- NEW: demod telemetry (read-only)
@@ -286,6 +334,14 @@ architecture rtl of haifuraiya_demod_regs is
     signal r_data_int     : std_logic_vector(31 downto 0) := (others => '0');
 
 begin
+
+    cfo_ctrl         <= reg_cfo_ctrl;
+    cfo_manual       <= reg_cfo_manual;
+    tim_alpha        <= reg_tim_alpha;
+    tim_beta         <= reg_tim_beta;
+    sl_pct_lock      <= reg_sl_pct_lock;
+    sl_pct_unlock    <= reg_sl_pct_unlock;
+    sl_window_log2   <= reg_sl_window_log2;
 
     ---------------------------------------------------------------------------
     -- Drive control outputs
@@ -363,7 +419,14 @@ begin
                 -- the normalizer active (rail 32768) -> 1:2:3 = 4942/9884/14826.
                 -- (Old 500/1400/2800 = stale pre-normalizer ~3340-rail scale, which
                 -- saturates 95% of symbols to the 0/7 rails at this soft level.)
-                reg_quant_thr_1        <= x"134E";       -- 4942
+                reg_quant_thr_1        <= x"134E";
+                reg_sl_pct_lock      <= x"19";
+                reg_sl_pct_unlock    <= x"32";
+                    reg_cfo_ctrl         <= x"00060A01";
+                    reg_cfo_manual       <= x"0000";
+                    reg_tim_alpha        <= x"0148";
+                    reg_tim_beta         <= x"00A8";
+                reg_sl_window_log2   <= x"6";       -- 4942
                 reg_quant_thr_2        <= x"269C";       -- 9884
                 reg_quant_thr_3        <= x"39EA";       -- 14826
                 -- NEW: demod control plane resets
@@ -411,6 +474,20 @@ begin
                                 reg_sym_lock_threshold <= s_axi_wdata(15 downto 0);
                             when ADDR_GAIN_MANUAL =>
                                 reg_gain_manual <= s_axi_wdata(15 downto 0);
+                            when ADDR_SYM_LOCK_THRESH =>
+                                reg_sl_pct_lock <= s_axi_wdata(7 downto 0);
+                            when ADDR_SYM_UNLOCK_THRESH =>
+                                reg_sl_pct_unlock <= s_axi_wdata(7 downto 0);
+                            when ADDR_SYM_LOCK_WINDOW =>
+                                reg_sl_window_log2 <= s_axi_wdata(3 downto 0);
+                            when ADDR_CFO_CTRL =>
+                                reg_cfo_ctrl <= s_axi_wdata;
+                            when ADDR_CFO_MANUAL =>
+                                reg_cfo_manual <= s_axi_wdata(15 downto 0);
+                            when ADDR_TIM_ALPHA =>
+                                reg_tim_alpha <= s_axi_wdata(15 downto 0);
+                            when ADDR_TIM_BETA =>
+                                reg_tim_beta <= s_axi_wdata(15 downto 0);
                             when ADDR_FS_HUNT_THRESH =>
                                 reg_fs_hunt_thresh <= s_axi_wdata(31 downto 0);
                             when ADDR_FS_VERIFY_THRESH =>
@@ -510,15 +587,49 @@ begin
                                 r_data_int(15 downto 0) <= reg_sym_lock_threshold;
                             when ADDR_STATUS =>
                                 r_data_int    <= (others => '0');
+                                -- v6 bit dictionary (REGISTER_MAP_V6.md):
+                                -- [0] fs_locked  [1] sym_locked (detector)
+                                -- [2] reserved (cfo_locked, WP2)  [3] in_init
                                 r_data_int(0) <= frame_sync_locked;
-                                r_data_int(1) <= cst_lock_f1;
-                                r_data_int(2) <= cst_lock_f2;
+                                r_data_int(1) <= sym_locked;
                             when ADDR_FRAMES_RX =>
                                 r_data_int <= frames_received;
                             when ADDR_GAIN_MANUAL =>
                                 r_data_int <= x"0000" & reg_gain_manual;
                             when ADDR_GAIN_CURRENT =>
                                 r_data_int <= x"0000" & gain_current;
+                            when ADDR_SYM_LOCK_STATUS =>
+                                -- [0]=locked [1]=window_full [15:8]=ratio_pct
+                                r_data_int <= (others => '0');
+                                r_data_int(0)  <= sym_locked;
+                                r_data_int(1)  <= sl_window_full;
+                                r_data_int(15 downto 8) <= sl_ratio_pct;
+                            when ADDR_SYM_LOCK_THRESH =>
+                                r_data_int <= (others => '0');
+                                r_data_int(7 downto 0) <= reg_sl_pct_lock;
+                            when ADDR_SYM_UNLOCK_THRESH =>
+                                r_data_int <= (others => '0');
+                                r_data_int(7 downto 0) <= reg_sl_pct_unlock;
+                            when ADDR_SYM_LOCK_WINDOW =>
+                                r_data_int <= (others => '0');
+                                r_data_int(3 downto 0) <= reg_sl_window_log2;
+                            when ADDR_CFO_ESTIMATE =>
+                                -- applied correction, Hz, sign-extended
+                                r_data_int <= (others => cfo_applied(15));
+                                r_data_int(15 downto 0) <= cfo_applied;
+                            when ADDR_CFO_CTRL =>
+                                r_data_int <= reg_cfo_ctrl;
+                            when ADDR_CFO_MANUAL =>
+                                r_data_int <= (others => reg_cfo_manual(15));
+                                r_data_int(15 downto 0) <= reg_cfo_manual;
+                            when ADDR_TIM_ALPHA =>
+                                r_data_int <= (others => '0');
+                                r_data_int(15 downto 0) <= reg_tim_alpha;
+                            when ADDR_TIM_BETA =>
+                                r_data_int <= (others => '0');
+                                r_data_int(15 downto 0) <= reg_tim_beta;
+                            when ADDR_SYM_CLK_OFFSET =>
+                                r_data_int <= sym_clk_offset;
                             when ADDR_FS_HUNT_THRESH =>
                                 r_data_int <= reg_fs_hunt_thresh;
                             when ADDR_FS_VERIFY_THRESH =>

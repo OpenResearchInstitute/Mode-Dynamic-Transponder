@@ -93,6 +93,18 @@ entity haifuraiya_rx_top is
         -- status / telemetry
         frame_sync_locked : out std_logic;
         frames_received   : out std_logic_vector(31 downto 0);
+        -- map v6 symbol lock detector: config in (from regs), status out
+        cfo_ctrl          : in  std_logic_vector(31 downto 0);
+        cfo_manual        : in  std_logic_vector(15 downto 0);
+        cfo_applied       : out std_logic_vector(15 downto 0);
+        tim_alpha         : in  std_logic_vector(15 downto 0);
+        tim_beta          : in  std_logic_vector(15 downto 0);
+        sym_clk_offset    : out std_logic_vector(31 downto 0);
+        sl_pct_lock       : in  std_logic_vector(7 downto 0);
+        sl_pct_unlock     : in  std_logic_vector(7 downto 0);
+        sl_window_log2    : in  std_logic_vector(3 downto 0);
+        sl_ratio_pct      : out std_logic_vector(7 downto 0);
+        sl_window_full    : out std_logic;
         cst_lock_f1       : out std_logic;
         cst_lock_f2       : out std_logic;
 
@@ -173,6 +185,20 @@ architecture rtl of haifuraiya_rx_top is
     signal rx_dvalid    : std_logic;
     signal rx_bit_corr  : std_logic;
     signal demod_lock   : std_logic;
+    -- map v6 symbol lock detector plumbing (type bridges for the ports)
+    signal sl_thl_u : unsigned(7 downto 0);
+    signal sl_thu_u : unsigned(7 downto 0);
+    signal sl_wl2_u : unsigned(3 downto 0);
+    signal sl_pct_u : unsigned(7 downto 0);
+    signal tim_a_u  : unsigned(15 downto 0);
+    signal tim_b_u  : unsigned(15 downto 0);
+    signal clk_off_s: signed(31 downto 0);
+    -- CFO correction (WP2 step 1: manual path; step 2 adds the AFC estimate)
+    signal cfo_word   : signed(15 downto 0);
+    signal rot_valid  : std_logic;
+    signal rot_i      : signed(15 downto 0);
+    signal rot_q      : signed(15 downto 0);
+    signal rot_q_in   : signed(15 downto 0);
     
     -- intermediate signal for the signed ports
     signal sig_fs_corr, sig_fs_corr_peak : signed(31 downto 0);
@@ -193,6 +219,14 @@ architecture rtl of haifuraiya_rx_top is
     signal gi, gq   : signed(15 downto 0);
 
 begin
+
+    tim_a_u        <= unsigned(tim_alpha);
+    tim_b_u        <= unsigned(tim_beta);
+    sym_clk_offset <= std_logic_vector(clk_off_s);
+    sl_thl_u     <= unsigned(sl_pct_lock);
+    sl_thu_u     <= unsigned(sl_pct_unlock);
+    sl_wl2_u     <= unsigned(sl_window_log2);
+    sl_ratio_pct <= std_logic_vector(sl_pct_u);
 
     reset_h <= not aresetn;
     demod_init_h <= reset_h or demod_init;
@@ -298,11 +332,35 @@ begin
     --rx_q_to_demod <= std_logic_vector(gq(RX_SLICE_HI downto RX_SLICE_HI - DEMOD_SAMPLE_W + 1))
     --                 when COMPLEX_INPUT else (others => '0');
 
-    -- full-width normalized samples; the deliberate I/Q swap that made
-    -- the chain lock is PRESERVED (gq -> I, gi -> Q)
-    rx_i_to_demod <= std_logic_vector(gq);
-    rx_q_to_demod <= std_logic_vector(gi)
-                 when COMPLEX_INPUT else (others => '0');
+    ----------------------------------------------------------------------------
+    -- CFO correction rotator (WP2 step 1 -- WP2_CFO_DESIGN.md section 4/6).
+    -- Sits at the demod seam: the deliberate I/Q swap that made the chain
+    -- lock is PRESERVED at the ROTATOR INPUT (gq -> I, gi -> Q), so the
+    -- demod sees the identical convention, now derotated.
+    -- Applied word: CFO_MANUAL when CFO_CTRL.auto=0; zero when auto=1
+    -- until step 2 lands the AFC estimator (which will drive this mux).
+    ----------------------------------------------------------------------------
+    cfo_word <= signed(cfo_manual) when cfo_ctrl(0) = '0'
+                else (others => '0');   -- step 2: AFC estimate here
+    cfo_applied <= std_logic_vector(cfo_word);
+
+    rot_q_in <= gi when COMPLEX_INPUT else (others => '0');
+
+    u_cfo : entity work.cfo_rotator
+        port map (
+            clk       => aclk,
+            rst       => reset_h,
+            en        => rx_svalid,
+            i_in      => gq,
+            q_in      => rot_q_in,
+            freq_hz   => cfo_word,
+            out_valid => rot_valid,
+            i_out     => rot_i,
+            q_out     => rot_q
+        );
+
+    rx_i_to_demod <= std_logic_vector(rot_i);
+    rx_q_to_demod <= std_logic_vector(rot_q);
 
     ----------------------------------------------------------------------------
     -- MSK demodulator: MLSE receiver (msk_symbol_engine + msk_mlse4 behind
@@ -319,7 +377,7 @@ begin
             init => demod_init_h,
 
             rx_enable    => rx_enable,
-            rx_svalid    => rx_svalid,
+            rx_svalid    => rot_valid,
             rx_i_samples => rx_i_to_demod,
             rx_q_samples => rx_q_to_demod,
 
@@ -328,6 +386,15 @@ begin
             rx_dvalid    => rx_dvalid,
 
             demod_lock   => demod_lock,
+
+            tim_alpha        => tim_a_u,
+            tim_beta         => tim_b_u,
+            sym_clk_offset   => clk_off_s,
+            sl_pct_lock      => sl_thl_u,
+            sl_pct_unlock    => sl_thu_u,
+            sl_window_log2   => sl_wl2_u,
+            sl_ratio_pct     => sl_pct_u,
+            sl_window_full   => sl_window_full,
 
             ovfl_mlse    => open,   -- sticky diagnostics: route to demod
             ring_lag     => open,   -- regs status when the map is reworked

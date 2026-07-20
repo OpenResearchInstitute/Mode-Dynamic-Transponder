@@ -45,10 +45,6 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity msk_demodulator_mlse is
-  generic (
-    G_LUT_FILE : string := "lut16q_hex.txt";
-    G_LOCK_SYM : integer := 1200        -- symbols to declared lock
-  );
   port (
     clk          : in  std_logic;       -- 100 MHz fabric clock
     init         : in  std_logic;       -- synchronous reset / restart
@@ -62,6 +58,20 @@ entity msk_demodulator_mlse is
     rx_data_soft : out signed(15 downto 0);
     rx_dvalid    : out std_logic;
 
+    -- symbol lock detector (sym_lock_detector.vhd): register-backed
+    -- configuration and live status, map v6 0x0A0-0x0AC.  demod_lock is
+    -- driven by the detector's measurement -- windowed mean |TED| with
+    -- hysteresis (C++ SymbolLockDetector contract) -- and UNCONDITIONALLY
+    -- gates frame-sync hunt downstream.  No bypass exists or may be added.
+    -- timing-loop coefficients + integrator status (map v6 0x0C4-0x0CC)
+    tim_alpha        : in  unsigned(15 downto 0);  -- Q16, default 328 = 0.005
+    tim_beta         : in  unsigned(15 downto 0);  -- Q24, default 168 = 1e-5
+    sym_clk_offset   : out signed(31 downto 0);    -- Q24 samples/symbol
+    sl_pct_lock      : in  unsigned(7 downto 0);   -- percent, default 25 (C++)
+    sl_pct_unlock    : in  unsigned(7 downto 0);   -- percent, default 50 (C++)
+    sl_window_log2   : in  unsigned(3 downto 0);
+    sl_ratio_pct     : out unsigned(7 downto 0);   -- live 100*S|L-E|/S(L+E)
+    sl_window_full   : out std_logic;
     demod_lock   : out std_logic;
 
     -- sticky diagnostics (cleared by init)
@@ -105,7 +115,11 @@ architecture rtl of msk_demodulator_mlse is
   signal th0, th1, th2, th3 : unsigned(15 downto 0);
   signal dbg_best   : unsigned(1 downto 0);
 
-  signal lock_r, ovfl_r, lag_r : std_logic := '0';
+  signal ovfl_r, lag_r : std_logic := '0';
+  signal sl_e_early : unsigned(15 downto 0);
+  signal sl_e_late  : unsigned(15 downto 0);
+  signal sl_e_err_v : std_logic;
+  signal sl_locked  : std_logic;
 
 begin
 
@@ -137,7 +151,6 @@ begin
   ------------------------------------------------------------------
   engine: entity work.msk_symbol_engine
     generic map (
-      G_LUT_FILE => G_LUT_FILE,
       G_NSAMP    => 16777200            -- effectively unbounded (see wrap note)
     )
     port map (
@@ -146,11 +159,13 @@ begin
       y_valid => e_valid,
       y1_re => e_y1r, y1_im => e_y1i, y2_re => e_y2r, y2_im => e_y2i,
       sym_index => e_sym, pos_q16 => e_pos,
+      e_early => sl_e_early, e_late => sl_e_late, e_err_valid => sl_e_err_v,
+      cfg_tim_alpha => tim_alpha, cfg_tim_beta => tim_beta,
+      sym_clk_offset => sym_clk_offset,
       dbg_mac => open, dbg_a1r => open,
       done => e_done );
 
   mlse: entity work.msk_mlse4
-    generic map ( G_LUT_FILE => G_LUT_FILE )
     port map (
       clk => clk, rst => init,
       y_valid => e_valid,
@@ -161,6 +176,24 @@ begin
       dbg_th0 => th0, dbg_th1 => th1, dbg_th2 => th2, dbg_th3 => th3,
       dbg_step_valid => open,
       dbg_m0 => open, dbg_m1 => open, dbg_m2 => open, dbg_m3 => open );
+
+  ------------------------------------------------------------------
+  -- symbol lock detector: the measurement that drives demod_lock
+  -- (replaces the retired G_LOCK_SYM elapsed-symbol latch)
+  ------------------------------------------------------------------
+  u_symlock: entity work.sym_lock_detector
+    port map (
+      clk           => clk,
+      init          => init,
+      e_valid       => sl_e_err_v,
+      e_early       => sl_e_early,
+      e_late        => sl_e_late,
+      pct_lock      => sl_pct_lock,
+      pct_unlock    => sl_pct_unlock,
+      window_log2   => sl_window_log2,
+      locked        => sl_locked,
+      ratio_pct     => sl_ratio_pct,
+      window_full   => sl_window_full );
 
   ------------------------------------------------------------------
   -- output shim: polarity, hard bit, valid
@@ -193,11 +226,8 @@ begin
   begin
     if rising_edge(clk) then
       if init = '1' then
-        lock_r <= '0'; ovfl_r <= '0'; lag_r <= '0';
+        ovfl_r <= '0'; lag_r <= '0';
       else
-        if to_integer(e_sym) > G_LOCK_SYM then
-          lock_r <= '1';
-        end if;
         if e_valid = '1' and m_busy = '1' then
           ovfl_r <= '1';
         end if;
@@ -208,7 +238,7 @@ begin
     end if;
   end process;
 
-  demod_lock <= lock_r;
+  demod_lock <= sl_locked;
   ovfl_mlse  <= ovfl_r;
   ring_lag   <= lag_r;
   dbg_pos    <= e_pos;

@@ -27,15 +27,13 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-use std.textio.all;
+use work.lut16q_pkg.all;
 
 entity msk_symbol_engine is
   generic (
-    G_LUT_FILE : string  := "lut16q_hex.txt";
     G_INC32    : integer := 93114891;    -- NCO increment: 13550/625000 * 2^32
     G_SPS_Q16  : integer := 755720;      -- symbol period in Q16 samples
     G_EL       : integer := 2;           -- early/late offset, whole samples
-    G_ACQ_SYMS : integer := 1000;        -- acquisition gear duration
     G_NSAMP    : integer := 60000        -- stimulus length (bench)
   );
   port (
@@ -58,36 +56,40 @@ entity msk_symbol_engine is
     pos_q16    : out unsigned(47 downto 0);   -- debug tap: position word
     dbg_mac    : out std_logic;                -- high during S_MAC
     dbg_a1r    : out signed(39 downto 0);      -- live accumulator
+    -- per-symbol EARLY/LATE magnitude export for the symbol lock
+    -- detector (normalized early-late gate; Mengali & D'Andrea 1997,
+    -- and bit-for-concept identical to the C++ reference TED
+    -- (el-ee)/(el+ee), opv_demod.hpp line ~365).  Both values carry the
+    -- SAME >> C_ERR_EXPORT_SHR scaling, which CANCELS in the detector's
+    -- ratio -- the lock decision is amplitude- and scaling-invariant.
+    e_early    : out unsigned(15 downto 0);
+    e_late     : out unsigned(15 downto 0);
+    e_err_valid: out std_logic;
+    -- timing-loop coefficients (register-backed, map v6 0x0C4/0x0C8) and
+    -- integrator status (0x0CC).  Loop law = C++ reference verbatim
+    -- (opv_demod.hpp:197-199,377-380):
+    --   ted            = (L-E)/(L+E)          normalized, Q15 here
+    --   adj [Q16 smp]  = ted*ALPHA + clk_off  ALPHA default 0.005 -> Q16 328
+    --   clk_off [Q24]  += ted*BETA            BETA  default 1e-5  -> Q24 168
+    --   clk_off clamp  = +/-0.1 sample        -> +/-1677722 Q24
+    -- SYM_CLK_OFFSET is the integrator: the estimated symbol-clock rate
+    -- error between transmitter baud and this receiver's sample clock,
+    -- Q24 fractional samples per symbol (ppm = val * 2^-24 / SPS * 1e6).
+    cfg_tim_alpha : in  unsigned(15 downto 0);
+    cfg_tim_beta  : in  unsigned(15 downto 0);
+    sym_clk_offset: out signed(31 downto 0);
     done       : out std_logic
   );
 end entity;
 
 architecture rtl of msk_symbol_engine is
 
+  -- export scaling for e_err (see port comment); mirrors the adj arm
+  constant C_ERR_EXPORT_SHR : natural := 4;
 
-  -- quarter-wave sin/cos ROM, hex-packed (UG901 synthesizable idiom):
-  -- one 32-bit word per line, cos(31:16) & sin(15:0), two's complement.
-  -- Reconstruction proven bit-exact over all 65536 phases (session 8).
-  type qlut_t is array (0 to 16384) of std_logic_vector(31 downto 0);
 
-  impure function load_qlut(fname : string) return qlut_t is
-    file f     : text open read_mode is fname;
-    variable l : line;
-    variable v : std_logic_vector(31 downto 0);
-    variable r : qlut_t;
-  begin
-    for i in 0 to 16384 loop
-      readline(f, l);
-      hread(l, v);
-      r(i) := v;
-    end loop;
-    return r;
-  end function;
-
-  -- QROM as a SIGNAL (never written): rom_style attributes on constants
-  -- are ignored by synthesis (warning 8-5733); on signals they are honored
-  -- and BRAM mapping becomes deterministic instead of lucky.
-  signal QROM : qlut_t := load_qlut(G_LUT_FILE);
+  -- quarter-wave sin/cos ROM from lut16q_pkg (constants; see pkg header)
+  signal QROM : qlut_t := LUT16Q_ROM;
   attribute rom_style : string;
   attribute rom_style of QROM : signal is "block";
 
@@ -119,12 +121,21 @@ architecture rtl of msk_symbol_engine is
   end procedure;
 
   type state_t is (S_WIN_SETUP, S_MAC_A, S_MAC_B, S_WIN_DONE,
-                   S_TED_A, S_TED_B, S_ADVANCE, S_DONE);
+                   S_TED_A, S_TED_B, S_TED_DIV, S_TED_C, S_ADVANCE, S_DONE);
   signal state : state_t := S_WIN_SETUP;
 
   -- position and loop state
   signal pos    : unsigned(47 downto 0) := to_unsigned(2, 32) & x"0000";
-  signal freq   : signed(31 downto 0) := (others => '0');
+  signal freq   : signed(31 downto 0) := (others => '0');  -- Q24 clk offset
+  -- serial divider for ted = (|L-E|<<15)/(L+E), exact Q15 (|num|<den always)
+  signal div_acc  : unsigned(46 downto 0) := (others => '0');
+  signal div_den  : unsigned(31 downto 0) := (others => '0');
+  signal div_q    : unsigned(15 downto 0) := (others => '0');
+  signal div_cnt  : unsigned(3 downto 0)  := (others => '0');
+  signal ted_neg  : std_logic := '0';
+  signal e_early_r : unsigned(15 downto 0) := (others => '0');
+  signal e_late_r  : unsigned(15 downto 0) := (others => '0');
+  signal e_err_v   : std_logic := '0';
   signal k      : unsigned(23 downto 0) := (others => '0');
 
   -- window sequencing: 0 = early, 1 = on-time, 2 = late
@@ -167,6 +178,12 @@ architecture rtl of msk_symbol_engine is
 
 begin
 
+  sym_clk_offset <= freq;
+  e_early     <= e_early_r;
+  e_late      <= e_late_r;
+  e_err_valid <= e_err_v;
+
+
   mem_addr  <= n_cur;
   dbg_mac   <= '1' when state = S_MAC_B else '0';
   dbg_a1r   <= a1r;
@@ -177,7 +194,7 @@ begin
   -- logic gates on this, and a stale value releases the engine into
   -- unwritten memory (the symbol-1 zeros bug, session 8). At the
   -- y_valid sampling instant, live pos equals the old snapshot exactly
-  -- (pos updates at the END of S_TED_B), so bench dumps are unchanged.
+  -- (pos updates at the end of the TED sequence, S_TED_C).
   pos_q16   <= pos;
 
   process(clk)
@@ -197,7 +214,7 @@ begin
     variable wbest      : integer;
     variable mbest      : signed(27 downto 0);
     variable err        : signed(31 downto 0);
-    variable errg       : signed(33 downto 0);
+    variable ted        : signed(16 downto 0);
     variable adj        : signed(31 downto 0);
     variable fnew       : signed(33 downto 0);
 
@@ -239,11 +256,18 @@ begin
         pos   <= to_unsigned(2, 32) & x"0000";
         -- (reset body continues below)
         freq  <= (others => '0');
+        div_acc <= (others => '0'); div_den <= (others => '0');
+        div_q <= (others => '0'); div_cnt <= (others => '0');
+        ted_neg <= '0';
+        e_early_r <= (others => '0');
+        e_late_r  <= (others => '0');
+        e_err_v   <= '0';
         k     <= (others => '0');
         widx  <= 0;
         prev_valid <= '0';
         done_i     <= '0';
       elsif hold = '0' then
+        e_err_v <= '0';                      -- one-cycle strobe default
         case state is
 
           when S_WIN_SETUP =>
@@ -354,28 +378,87 @@ begin
             state <= S_TED_B;
 
           when S_TED_B =>
-            -- DECIDE phase: winner, error, PI, position advance
-            adj := (others => '0');
+            -- DECIDE phase part 1: winner + E/L export + divider launch.
+            -- Old raw-error PI (gains ~67x/~1000x the C++ reference in
+            -- normalized terms; measured 2026-07-20) and the x4
+            -- acquisition gear are REMOVED: reference has neither.
             if have_bank = '1' then
               wbest := 0; mbest := ac_r(0);
               for i in 1 to 3 loop
                 if ac_r(i) > mbest then mbest := ac_r(i); wbest := i; end if;
               end loop;
               err := resize(al_r(wbest), 32) - resize(ae_r(wbest), 32);
-              if to_integer(k) < G_ACQ_SYMS then
-                errg := resize(shift_left(resize(err, 34), 2), 34);
+              -- registered early/late export (same shift both: cancels in ratio)
+              if shift_right(ae_r(wbest), C_ERR_EXPORT_SHR) > 65535 then
+                e_early_r <= (others => '1');
               else
-                errg := resize(err, 34);
+                e_early_r <= resize(unsigned(
+                    shift_right(ae_r(wbest), C_ERR_EXPORT_SHR)), 16);
               end if;
-              fnew := resize(freq, 34) + shift_right(errg, 9);
-              if fnew >  3277 then fnew := to_signed( 3277, 34); end if;
-              if fnew < -3277 then fnew := to_signed(-3277, 34); end if;
-              freq <= resize(fnew, 32);
-              adj  := resize(shift_right(errg, 4), 32)
-                      + resize(fnew, 32);
-              if adj >  131072 then adj := to_signed( 131072, 32); end if;
-              if adj < -131072 then adj := to_signed(-131072, 32); end if;
+              if shift_right(al_r(wbest), C_ERR_EXPORT_SHR) > 65535 then
+                e_late_r <= (others => '1');
+              else
+                e_late_r <= resize(unsigned(
+                    shift_right(al_r(wbest), C_ERR_EXPORT_SHR)), 16);
+              end if;
+              e_err_v <= '1';
+              -- divider setup: ted_q15 = (|L-E|<<15)/(L+E), sign separate
+              if err < 0 then
+                ted_neg <= '1';
+                div_acc <= resize(shift_left(resize(unsigned(-err), 47), 15), 47);
+              else
+                ted_neg <= '0';
+                div_acc <= resize(shift_left(resize(unsigned(err), 47), 15), 47);
+              end if;
+              div_den <= resize(unsigned(resize(al_r(wbest), 32))
+                       + unsigned(resize(ae_r(wbest), 32)), 32);
+              div_q   <= (others => '0');
+              div_cnt <= to_unsigned(15, 4);
+              state   <= S_TED_DIV;
+            else
+              -- no bank yet: advance position at nominal rate, no update
+              pos <= pos + to_unsigned(G_SPS_Q16, 48);
+              k   <= k + 1;
+              state <= S_WIN_SETUP;
             end if;
+
+          when S_TED_DIV =>
+            -- restoring divide, one quotient bit per clock, 16 clocks.
+            -- Exact: |L-E| <= (L+E) guarantees the Q15 quotient fits.
+            if shift_right(div_acc, to_integer(div_cnt))
+               >= resize(div_den, 47) then
+              div_acc <= div_acc - shift_left(resize(div_den, 47),
+                                              to_integer(div_cnt));
+              div_q(to_integer(div_cnt)) <= '1';
+            end if;
+            if div_cnt = 0 then
+              state <= S_TED_C;
+            else
+              div_cnt <= div_cnt - 1;
+            end if;
+
+          when S_TED_C =>
+            -- DECIDE phase part 2: apply the C++ loop law and advance.
+            -- saturate the E=0 corner (quotient 32768) into Q15
+            if div_q > 32767 then div_q <= to_unsigned(32767, 16); end if;
+            if ted_neg = '1' then
+              ted := -signed(resize(div_q, 17));
+              if div_q > 32767 then ted := to_signed(-32767, 17); end if;
+            else
+              ted :=  signed(resize(div_q, 17));
+              if div_q > 32767 then ted := to_signed( 32767, 17); end if;
+            end if;
+            -- integrator: clk_off_q24 += (ted*BETA_Q24)>>15, clamp +/-0.1 smp
+            fnew := resize(freq, 34)
+                  + resize(shift_right(ted * signed(resize(cfg_tim_beta, 17)), 15), 34);
+            if fnew >  1677722 then fnew := to_signed( 1677722, 34); end if;
+            if fnew < -1677722 then fnew := to_signed(-1677722, 34); end if;
+            freq <= resize(fnew, 32);
+            -- proportional + integrator, Q16 samples; RTL guard clamp kept
+            adj := resize(shift_right(ted * signed(resize(cfg_tim_alpha, 17)), 15), 32)
+                 + resize(shift_right(fnew, 8), 32);
+            if adj >  131072 then adj := to_signed( 131072, 32); end if;
+            if adj < -131072 then adj := to_signed(-131072, 32); end if;
             pos <= unsigned(signed(pos)
                    + to_signed(G_SPS_Q16, 48) + resize(adj, 48));
             k   <= k + 1;

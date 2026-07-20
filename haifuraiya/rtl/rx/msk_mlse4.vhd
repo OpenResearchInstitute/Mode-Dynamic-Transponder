@@ -28,11 +28,10 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-use std.textio.all;
+use work.lut16q_pkg.all;
 
 entity msk_mlse4 is
   generic (
-    G_LUT_FILE : string  := "lut16q_hex.txt";
     G_TB_D     : integer := 64            -- traceback depth
   );
   port (
@@ -67,29 +66,8 @@ end entity;
 architecture rtl of msk_mlse4 is
 
 
-  -- quarter-wave sin/cos ROM, hex-packed (UG901 synthesizable idiom):
-  -- one 32-bit word per line, cos(31:16) & sin(15:0), two's complement.
-  -- Reconstruction proven bit-exact over all 65536 phases (session 8).
-  type qlut_t is array (0 to 16384) of std_logic_vector(31 downto 0);
-
-  impure function load_qlut(fname : string) return qlut_t is
-    file f     : text open read_mode is fname;
-    variable l : line;
-    variable v : std_logic_vector(31 downto 0);
-    variable r : qlut_t;
-  begin
-    for i in 0 to 16384 loop
-      readline(f, l);
-      hread(l, v);
-      r(i) := v;
-    end loop;
-    return r;
-  end function;
-
-  -- QROM as a SIGNAL (never written): rom_style attributes on constants
-  -- are ignored by synthesis (warning 8-5733); on signals they are honored
-  -- and BRAM mapping becomes deterministic instead of lucky.
-  signal QROM : qlut_t := load_qlut(G_LUT_FILE);
+  -- quarter-wave sin/cos ROM from lut16q_pkg (constants; see pkg header)
+  signal QROM : qlut_t := LUT16Q_ROM;
   attribute rom_style : string;
   attribute rom_style of QROM : signal is "block";
 
@@ -333,7 +311,11 @@ begin
             nmet(acs_st) <= resize(wmet, 24);
             npred(2*acs_st+1 downto 2*acs_st)
               <= to_unsigned(pw, 2);
-            nbit(acs_st) <= '1' when bnew = 1 else '0';
+            if bnew = 1 then
+              nbit(acs_st) <= '1';
+            else
+              nbit(acs_st) <= '0';
+            end if;
             mg := wmet - lose;
             if mg > 32767 then mg := to_signed(32767, 28); end if;
             nmarg(16*acs_st+15 downto 16*acs_st)

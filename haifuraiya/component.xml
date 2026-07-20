@@ -2291,6 +2291,10 @@
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
+        <spirit:name>rtl/rx/lut16q_pkg.vhd</spirit:name>
+        <spirit:fileType>vhdlSource</spirit:fileType>
+      </spirit:file>
+      <spirit:file>
         <spirit:name>rtl/rx/msk_symbol_engine.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
@@ -2391,6 +2395,10 @@
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
       <spirit:file>
+        <spirit:name>rtl/rx/lut16q_pkg.vhd</spirit:name>
+        <spirit:fileType>vhdlSource</spirit:fileType>
+      </spirit:file>
+      <spirit:file>
         <spirit:name>rtl/rx/msk_symbol_engine.vhd</spirit:name>
         <spirit:fileType>vhdlSource</spirit:fileType>
       </spirit:file>
@@ -2420,10 +2428,6 @@
       </spirit:file>
       <spirit:file>
         <spirit:name>rtl/coeffs/haifuraiya_coeffs.hex</spirit:name>
-        <spirit:fileType>unknown</spirit:fileType>
-      </spirit:file>
-      <spirit:file>
-        <spirit:name>rtl/coeffs/lut16q_hex.txt</spirit:name>
         <spirit:fileType>unknown</spirit:fileType>
       </spirit:file>
     </spirit:fileSet>
@@ -2514,7 +2518,7 @@
       <xilinx:definitionSource>package_project</xilinx:definitionSource>
       <xilinx:vendorDisplayName>Open Research Institute</xilinx:vendorDisplayName>
       <xilinx:vendorURL>https://www.openresearch.institute/</xilinx:vendorURL>
-      <xilinx:coreRevision>3</xilinx:coreRevision>
+      <xilinx:coreRevision>6</xilinx:coreRevision>
       <xilinx:coreCreationDateTime>2026-05-29T03:56:04Z</xilinx:coreCreationDateTime>
     </xilinx:coreExtensions>
     <xilinx:packagingInfo>

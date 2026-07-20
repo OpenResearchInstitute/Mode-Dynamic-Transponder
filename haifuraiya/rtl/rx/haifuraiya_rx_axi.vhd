@@ -157,6 +157,18 @@ architecture rtl of haifuraiya_rx_axi is
 
     -- rx_top status-out -> demod_regs status-in
     signal sts_frame_sync_locked  : std_logic;
+    -- map v6 symbol lock detector plumbing
+    signal cfg_sl_pct_lock      : std_logic_vector(7 downto 0);
+    signal cfg_sl_pct_unlock    : std_logic_vector(7 downto 0);
+    signal cfg_sl_window_log2   : std_logic_vector(3 downto 0);
+    signal sts_sl_ratio_pct     : std_logic_vector(7 downto 0);
+    signal sts_sl_window_full   : std_logic;
+    signal cfg_cfo_ctrl         : std_logic_vector(31 downto 0);
+    signal cfg_cfo_manual       : std_logic_vector(15 downto 0);
+    signal sts_cfo_applied      : std_logic_vector(15 downto 0);
+    signal cfg_tim_alpha        : std_logic_vector(15 downto 0);
+    signal cfg_tim_beta         : std_logic_vector(15 downto 0);
+    signal sts_sym_clk_offset   : std_logic_vector(31 downto 0);
     signal sts_frames_received    : std_logic_vector(31 downto 0);
     signal sts_cst_lock_f1        : std_logic;
     signal sts_cst_lock_f2        : std_logic;
@@ -218,11 +230,12 @@ begin
     -- Demod control / status register file (AXI-Lite slave: s_axi_demod)
     ---------------------------------------------------------------------------
     u_regs : entity work.haifuraiya_demod_regs
+        -- Version generics deliberately NOT overridden: the regs entity's
+        -- defaults (haifuraiya_demod_regs.vhd line ~100) are the single
+        -- point of truth for the map version. (2026-07-20: an override
+        -- here silently masked the v6 bump -- two owners, one lie.)
         generic map (
-            ADDR_WIDTH    => C_S_AXI_DEMOD_ADDR_WIDTH,
-            VERSION_MAJOR => 0,
-            VERSION_MINOR => 5,
-            VERSION_PATCH => 0
+            ADDR_WIDTH    => C_S_AXI_DEMOD_ADDR_WIDTH
         )
         port map (
             aclk    => aclk,
@@ -286,7 +299,20 @@ begin
             cst_iq_delta_f1       => dbg_cst_iq_delta_s,
 
             gain_manual           => cfg_gain_manual,
-            gain_current          => sts_gain_current
+            gain_current          => sts_gain_current,
+
+            sl_pct_lock           => cfg_sl_pct_lock,
+            sl_pct_unlock         => cfg_sl_pct_unlock,
+            sl_window_log2        => cfg_sl_window_log2,
+            sym_locked            => sts_cst_lock_f1,  -- rx_top mirrors demod_lock here (cst_lock_f1 <= demod_lock)
+            sl_ratio_pct          => sts_sl_ratio_pct,
+            sl_window_full        => sts_sl_window_full,
+            cfo_ctrl              => cfg_cfo_ctrl,
+            cfo_manual            => cfg_cfo_manual,
+            cfo_applied           => sts_cfo_applied,
+            tim_alpha             => cfg_tim_alpha,
+            tim_beta              => cfg_tim_beta,
+            sym_clk_offset        => sts_sym_clk_offset
         );
 
     ---------------------------------------------------------------------------
@@ -346,6 +372,17 @@ begin
             frames_received   => sts_frames_received,
             cst_lock_f1       => sts_cst_lock_f1,
             cst_lock_f2       => sts_cst_lock_f2,
+            cfo_ctrl          => cfg_cfo_ctrl,
+            cfo_manual        => cfg_cfo_manual,
+            cfo_applied       => sts_cfo_applied,
+            tim_alpha         => cfg_tim_alpha,
+            tim_beta          => cfg_tim_beta,
+            sym_clk_offset    => sts_sym_clk_offset,
+            sl_pct_lock       => cfg_sl_pct_lock,
+            sl_pct_unlock     => cfg_sl_pct_unlock,
+            sl_window_log2    => cfg_sl_window_log2,
+            sl_ratio_pct      => sts_sl_ratio_pct,
+            sl_window_full    => sts_sl_window_full,
             fs_hunt_thresh    => cfg_fs_hunt_thresh,
             fs_verify_thresh  => cfg_fs_verify_thresh,
 
