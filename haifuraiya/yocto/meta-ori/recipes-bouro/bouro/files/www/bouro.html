@@ -604,10 +604,17 @@
         <!-- Demodulator & frame sync — demod regs at 0x84A80000 -->
         <div class="grid-2">
             <section class="card">
-                <h2><span class="pip"></span>Frame sync &amp; carrier lock</h2>
+                <h2><span class="pip"></span>Frame sync &amp; symbol lock</h2>
                 <div class="flag"><span class="flag-dot" id="flag-frame-sync"></span><span class="flag-label">frame sync locked</span></div>
-                <div class="flag"><span class="flag-dot" id="flag-cst-f1"></span><span class="flag-label">Costas lock f1</span></div>
-                <div class="flag"><span class="flag-dot" id="flag-cst-f2"></span><span class="flag-label">Costas lock f2</span></div>
+                <div class="flag"><span class="flag-dot" id="flag-sym-lock"></span><span class="flag-label">symbol lock (measured)</span></div>
+                <div class="metric">
+                    <span class="label">sym lock ratio (locked &lt; 25%, dead air ~100%)</span>
+                    <span class="value" id="sym-ratio-pct">&mdash;</span>
+                </div>
+                <div class="metric">
+                    <span class="label">sym clock offset (ppm, milli)</span>
+                    <span class="value" id="sym-clk-ppm">&mdash;</span>
+                </div>
                 <div style="margin-top:10px;">
                     <span id="demod-frame-rate" class="big-number">0</span><span class="big-number-suffix">frames since last cycle</span>
                 </div>
@@ -652,15 +659,15 @@
                 <span class="reg-name">demod_control</span>            <span class="reg-val" data-reg="demod_control">—</span>
                 <span class="reg-name">demod_status</span>             <span class="reg-val" data-reg="demod_status">—</span>
                 <span class="reg-name">demod_frames</span>             <span class="reg-val" data-reg="demod_frames">—</span>
-                <span class="reg-name">demod_freq_word_f1</span>       <span class="reg-val" data-reg="demod_freq_word_f1">—</span>
-                <span class="reg-name">demod_freq_word_f2</span>       <span class="reg-val" data-reg="demod_freq_word_f2">—</span>
-                <span class="reg-name">demod_lpf_p_gain</span>         <span class="reg-val" data-reg="demod_lpf_p_gain">—</span>
-                <span class="reg-name">demod_lpf_i_gain</span>         <span class="reg-val" data-reg="demod_lpf_i_gain">—</span>
-                <span class="reg-name">demod_lpf_alpha</span>          <span class="reg-val" data-reg="demod_lpf_alpha">—</span>
-                <span class="reg-name">demod_lpf_p_shift</span>        <span class="reg-val" data-reg="demod_lpf_p_shift">—</span>
-                <span class="reg-name">demod_lpf_i_shift</span>        <span class="reg-val" data-reg="demod_lpf_i_shift">—</span>
-                <span class="reg-name">demod_sym_lock_count</span>     <span class="reg-val" data-reg="demod_sym_lock_count">—</span>
-                <span class="reg-name">demod_sym_lock_threshold</span> <span class="reg-val" data-reg="demod_sym_lock_threshold">—</span>
+                <span class="reg-name">demod_sym_lock_status</span>    <span class="reg-val" data-reg="demod_sym_lock_status">—</span>
+                <span class="reg-name">demod_sym_lock_thresh</span>    <span class="reg-val" data-reg="demod_sym_lock_thresh">—</span>
+                <span class="reg-name">demod_sym_unlock_thresh</span>  <span class="reg-val" data-reg="demod_sym_unlock_thresh">—</span>
+                <span class="reg-name">demod_sym_lock_window</span>    <span class="reg-val" data-reg="demod_sym_lock_window">—</span>
+                <span class="reg-name">demod_tim_alpha</span>          <span class="reg-val" data-reg="demod_tim_alpha">—</span>
+                <span class="reg-name">demod_tim_beta</span>           <span class="reg-val" data-reg="demod_tim_beta">—</span>
+                <span class="reg-name">demod_sym_clk_offset</span>     <span class="reg-val" data-reg="demod_sym_clk_offset">—</span>
+                <span class="reg-name">demod_fs_hunt_thresh</span>     <span class="reg-val" data-reg="demod_fs_hunt_thresh">—</span>
+                <span class="reg-name">demod_fs_verify_thresh</span>   <span class="reg-val" data-reg="demod_fs_verify_thresh">—</span>
             </div>
         </details>
 
@@ -1024,11 +1031,33 @@
             case 'derived/demod/frame_sync_locked':
                 setFlag('flag-frame-sync', payload === '1' ? 'on' : 'err');
                 break;
-            case 'derived/demod/cst_lock_f1':
-                setFlag('flag-cst-f1', payload === '1' ? 'on' : 'off');
+            case 'derived/demod/sym_locked':
+                setFlag('flag-sym-lock', payload === '1' ? 'on' : 'err');
                 break;
-            case 'derived/demod/cst_lock_f2':
-                setFlag('flag-cst-f2', payload === '1' ? 'on' : 'off');
+            case 'derived/demod/sym_lock/ratio_pct':
+                setText('sym-ratio-pct', payload + ' %');
+                break;
+            case 'derived/demod/sym_clk_offset/ppm_milli':
+                setText('sym-clk-ppm', payload);
+                break;
+            case 'derived/demod/tuning/sym_lock_pct':
+                window._slp = payload;
+                setText('demod-sym-pcts', (window._slp||'?') + ' / ' + (window._sup||'?'));
+                break;
+            case 'derived/demod/tuning/sym_unlock_pct':
+                window._sup = payload;
+                setText('demod-sym-pcts', (window._slp||'?') + ' / ' + (window._sup||'?'));
+                break;
+            case 'derived/demod/tuning/sym_window_log2':
+                setText('demod-sym-win', payload);
+                break;
+            case 'derived/demod/tuning/tim_alpha_q16':
+                window._ta = payload;
+                setText('demod-tim-ab', (window._ta||'?') + ' / ' + (window._tb||'?'));
+                break;
+            case 'derived/demod/tuning/tim_beta_q24':
+                window._tb = payload;
+                setText('demod-tim-ab', (window._ta||'?') + ' / ' + (window._tb||'?'));
                 break;
             case 'derived/demod/frames_received':
                 setText('demod-frames-total', parseInt(payload, 10).toLocaleString());
@@ -1038,15 +1067,6 @@
                 break;
             case 'derived/demod/rx_invert':
                 setFlag('flag-rx-invert', payload === '1' ? 'on' : 'off');
-                break;
-            case 'derived/demod/freq_word_f1':
-                setText('demod-fw-f1', payload);
-                break;
-            case 'derived/demod/freq_word_f2':
-                setText('demod-fw-f2', payload);
-                break;
-            case 'derived/demod/sym_lock_threshold':
-                setText('demod-sym-thr', payload);
                 break;
 
             // ----- Power spectrum (the centerpiece) -----

@@ -34,12 +34,13 @@ set -u
 ADDR_BASE=0x84A70000             # Channelizer AXI-Lite base (from Phase 3 build)
 EXPECTED_VERSION=0x00010000      # v0.1.0 magic — refuse to start otherwise
 INTERVAL=1                       # seconds between cycles
-PUB_VERSION="0.1"
+PUB_VERSION="0.2"
 
 N_CHANNELS=64
 CHANNEL_BASE_OFFSET=0x100        # CHANNEL_POWER_N at 0x100 + 4*N
 
 DEMOD_BASE=0x84A80000            # Demod / frame-sync AXI-Lite base (rx_axi demod_regs)
+DEMOD_EXPECTED_VERSION=0x00060000  # map v6 -- consumers gate on this (REGISTER_MAP_V6.md)
 
 # State across cycles (wrap-aware delta computation for monotonic counters).
 # Empty on first cycle → first delta published as 0.
@@ -70,6 +71,16 @@ read_demod_hex() {
 # Convert "0xHHHHHHHH" hex string to unsigned decimal.
 hex_to_dec() {
     printf "%d" "$1"
+}
+
+# Convert "0xHHHHHHHH" to SIGNED 32-bit decimal (two's complement).
+hex_to_sdec() {
+    V=$(printf "%d" "$1")
+    if [ "$V" -ge 2147483648 ]; then
+        echo $((V - 4294967296))
+    else
+        echo "$V"
+    fi
 }
 
 # Publish raw register topic.
@@ -240,17 +251,31 @@ publish_channel_powers() {
 # section quietly skips, so the channelizer dashboard still works.
 
 publish_demod() {
-    # ---- DEMOD_STATUS (0x040)
+    # ---- DEMOD_VERSION (0x000) -- map v6 gate; publish signature like the
+    # channelizer's. Non-fatal on mismatch (dashboard shows WRONG).
+    VAL_HEX=$(read_demod_hex 0x00)
+    if [ -n "$VAL_HEX" ]; then
+        pub_register "demod_version" "$VAL_HEX"
+        if [ "$VAL_HEX" = "$DEMOD_EXPECTED_VERSION" ]; then
+            pub_derived "demod/signature" "OK"
+        else
+            pub_derived "demod/signature" "WRONG"
+        fi
+    fi
+
+    # ---- DEMOD_STATUS (0x040) -- v6 bit dictionary (REGISTER_MAP_V6.md):
+    #   bit 0 fs_locked, bit 1 sym_locked (real detector), bit 2 reserved
+    #   (cfo_locked, WP2), bit 3 in_init.
     VAL_HEX=$(read_demod_hex 0x40)
     if [ -n "$VAL_HEX" ]; then
         pub_register "demod_status" "$VAL_HEX"
         VAL_DEC=$(hex_to_dec "$VAL_HEX")
         pub_derived "demod/frame_sync_locked" "$((VAL_DEC & 1))"
-        pub_derived "demod/cst_lock_f1"       "$(((VAL_DEC >> 1) & 1))"
-        pub_derived "demod/cst_lock_f2"       "$(((VAL_DEC >> 2) & 1))"
+        pub_derived "demod/sym_locked"        "$(((VAL_DEC >> 1) & 1))"
+        pub_derived "demod/in_init"           "$(((VAL_DEC >> 3) & 1))"
     fi
 
-    # ---- FRAMES_RECEIVED (0x044) — monotonic 32-bit
+    # ---- FRAMES_RECEIVED (0x044) -- monotonic 32-bit
     VAL_HEX=$(read_demod_hex 0x44)
     if [ -n "$VAL_HEX" ]; then
         pub_register "demod_frames" "$VAL_HEX"
@@ -261,30 +286,57 @@ publish_demod() {
         PREV_FRAMES_RX=$VAL_DEC
     fi
 
-    # ---- DEMOD_CONTROL (0x004) — bit 0 rx_invert (soft-bit polarity)
+    # ---- DEMOD_CONTROL (0x004) -- bit 0 rx_invert
     VAL_HEX=$(read_demod_hex 0x04)
     if [ -n "$VAL_HEX" ]; then
         pub_register "demod_control" "$VAL_HEX"
         pub_derived "demod/rx_invert" "$(( $(hex_to_dec "$VAL_HEX") & 1 ))"
     fi
 
-    # ---- FREQ_WORD_F1 / F2 (0x008 / 0x00C) — raw hex tone phase increments
-    VAL_HEX=$(read_demod_hex 0x08)
-    [ -n "$VAL_HEX" ] && pub_derived "demod/freq_word_f1" "$VAL_HEX"
-    VAL_HEX=$(read_demod_hex 0x0c)
-    [ -n "$VAL_HEX" ] && pub_derived "demod/freq_word_f2" "$VAL_HEX"
+    # ---- SYM_LOCK_STATUS (0x0A0) -- the symbol lock detector's live view:
+    #   bit 0 locked, bit 1 window_full, [15:8] ratio_pct = live
+    #   100*S|L-E|/S(L+E). Locked signal sits well under SYM_LOCK_THRESH;
+    #   dead air near 100. THE quality gauge (sym_lock_detector.vhd).
+    VAL_HEX=$(read_demod_hex 0xA0)
+    if [ -n "$VAL_HEX" ]; then
+        pub_register "demod_sym_lock_status" "$VAL_HEX"
+        VAL_DEC=$(hex_to_dec "$VAL_HEX")
+        pub_derived "demod/sym_lock/ratio_pct"   "$(((VAL_DEC >> 8) & 0xFF))"
+        pub_derived "demod/sym_lock/window_full" "$(((VAL_DEC >> 1) & 1))"
+    fi
 
-    # ---- SYM_LOCK_THRESHOLD (0x028)
-    VAL_HEX=$(read_demod_hex 0x28)
-    [ -n "$VAL_HEX" ] && pub_derived "demod/sym_lock_threshold" "$(hex_to_dec "$VAL_HEX")"
+    # ---- SYM_CLK_OFFSET (0x0CC) -- timing-loop integrator: estimated
+    # symbol-clock rate error, SIGNED Q24 fractional samples/symbol.
+    # ppm_milli = q24 * 1000000 / 193478  (2^24 * 11.5314 samples/sym).
+    VAL_HEX=$(read_demod_hex 0xCC)
+    if [ -n "$VAL_HEX" ]; then
+        pub_register "demod_sym_clk_offset" "$VAL_HEX"
+        SVAL=$(hex_to_sdec "$VAL_HEX")
+        pub_derived "demod/sym_clk_offset/q24"       "$SVAL"
+        pub_derived "demod/sym_clk_offset/ppm_milli" "$((SVAL * 1000000 / 193478))"
+    fi
 
-    # ---- Full raw demod register snapshot for the forensics pane.
-    # Raw hex only; the parsed values above drive the live panel.
-    # (status / frames / control are already raw-published above.)
-    for pair in version:0x00 freq_word_f1:0x08 freq_word_f2:0x0c \
-                lpf_p_gain:0x10 lpf_i_gain:0x14 lpf_alpha:0x18 \
-                lpf_p_shift:0x1c lpf_i_shift:0x20 \
-                sym_lock_count:0x24 sym_lock_threshold:0x28; do
+    # ---- Tuning readbacks (RW registers, decimal under derived/tuning)
+    VAL_HEX=$(read_demod_hex 0xA4)
+    [ -n "$VAL_HEX" ] && pub_derived "demod/tuning/sym_lock_pct"   "$(hex_to_dec "$VAL_HEX")"
+    VAL_HEX=$(read_demod_hex 0xA8)
+    [ -n "$VAL_HEX" ] && pub_derived "demod/tuning/sym_unlock_pct" "$(hex_to_dec "$VAL_HEX")"
+    VAL_HEX=$(read_demod_hex 0xAC)
+    [ -n "$VAL_HEX" ] && pub_derived "demod/tuning/sym_window_log2" "$(hex_to_dec "$VAL_HEX")"
+    VAL_HEX=$(read_demod_hex 0xC4)
+    [ -n "$VAL_HEX" ] && pub_derived "demod/tuning/tim_alpha_q16"  "$(hex_to_dec "$VAL_HEX")"
+    VAL_HEX=$(read_demod_hex 0xC8)
+    [ -n "$VAL_HEX" ] && pub_derived "demod/tuning/tim_beta_q24"   "$(hex_to_dec "$VAL_HEX")"
+
+    # ---- Full raw demod snapshot for the forensics pane -- LIVE v6
+    # registers ONLY. The retired Costas block (0x008-0x03C, 0x060-0x09C)
+    # is reserved/read-zero per REGISTER_MAP_V6.md and is deliberately
+    # NOT published: no more relic display (v5 lesson).
+    for pair in fs_hunt_thresh:0x48 fs_verify_thresh:0x4c \
+                quant_thr_1:0x50 quant_thr_2:0x54 quant_thr_3:0x58 \
+                demod_init:0x5c \
+                sym_lock_thresh:0xa4 sym_unlock_thresh:0xa8 \
+                sym_lock_window:0xac tim_alpha:0xc4 tim_beta:0xc8; do
         NAME=${pair%%:*}
         OFF=${pair##*:}
         VAL_HEX=$(read_demod_hex $OFF)

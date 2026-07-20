@@ -172,22 +172,36 @@ length stable at 64.
 - **Per-channel demod state** (lock, BER, frame counts). Phase 4a
   territory — one stream first, then 64.
 
-## Adding new topics
+## Demodulator topics (map v6 -- REGISTER_MAP_V6.md is normative)
 
-Edit `bouro_pub.sh`. Two patterns:
+Publisher v0.2 gates on DEMOD_VERSION 0x00060000
+(`derived/demod/signature` = OK | WRONG).
 
-**For a new register-derived value**, add a `pub_derived` call after the
-relevant scalar read. Example:
+Derived (decimal payloads unless noted):
 
-```sh
-# In publish_scalars(), after reading STATUS:
-pub_derived "status/some_new_bit" "$(((VAL_DEC >> 8) & 1))"
-```
+| topic | source | meaning |
+|---|---|---|
+| derived/demod/signature | 0x000 | OK when map v6 |
+| derived/demod/frame_sync_locked | 0x040 b0 | fsync FSM LOCKED |
+| derived/demod/sym_locked | 0x040 b1 | symbol lock detector verdict (sym_lock_detector.vhd; windowed normalized early-late, hysteresis) |
+| derived/demod/in_init | 0x040 b3 | DEMOD_INIT held |
+| derived/demod/frames_received, frames_delta | 0x044 | totals / per-cycle |
+| derived/demod/rx_invert | 0x004 b0 | soft polarity |
+| derived/demod/sym_lock/ratio_pct | 0x0A0[15:8] | live 100*S\|L-E\|/S(L+E); locked well under SYM_LOCK_THRESH (25 default), dead air ~100 |
+| derived/demod/sym_lock/window_full | 0x0A0 b1 | mean valid |
+| derived/demod/sym_clk_offset/q24 | 0x0CC | timing-loop integrator: estimated symbol-clock rate error, SIGNED Q24 samples/symbol |
+| derived/demod/sym_clk_offset/ppm_milli | 0x0CC | q24 * 1e6 / 193478 (= 2^24 * 11.5314) |
+| derived/demod/tuning/sym_lock_pct, sym_unlock_pct | 0x0A4/0x0A8 | percent (C++ 25/50 defaults) |
+| derived/demod/tuning/sym_window_log2 | 0x0AC | window = 2^n symbols |
+| derived/demod/tuning/tim_alpha_q16, tim_beta_q24 | 0x0C4/0x0C8 | C++ timing gains verbatim (328 / 168) |
 
-**For a new IIO attribute** (once Phase 4 brings ADRV9002 telemetry
-online), copy the `pub_iio` helper pattern from
-`pluto_msk/firmware/ori/board/pluto/overlay/root/ovp_status_pub.sh`.
+Raw registers (hex, forensics pane): demod_version, demod_control,
+demod_status, demod_frames, demod_sym_lock_status, demod_sym_lock_thresh,
+demod_sym_unlock_thresh, demod_sym_lock_window, demod_tim_alpha,
+demod_tim_beta, demod_sym_clk_offset, demod_fs_hunt_thresh,
+demod_fs_verify_thresh, demod_quant_thr_1..3, demod_init.
 
-After editing, sanity-check with `sh -n bouro_pub.sh` before
-deploying. Bump the `PUB_VERSION` string when shipping changes;
-subscribers can use it to detect stale publisher versions.
+RETIRED (v5 Costas relics, 0x008-0x03C / 0x060-0x09C): freq_word_f1/f2,
+lpf_*, sym_lock_count/threshold, cst_lock_f1/f2 and all related topics
+are no longer published or displayed. Addresses are reserved read-zero
+per map v6; stale software reads zeros, never plausible values.
