@@ -81,7 +81,10 @@ safe_add_files sources_1 {
 #    ../third_party/pluto_msk/msk_demodulator/src/msk_demodulator.vhd
     ../rtl/rx/msk_symbol_engine.vhd
     ../rtl/rx/msk_mlse4.vhd
+    ../rtl/rx/sym_lock_detector.vhd
+    ../rtl/rx/cfo_rotator.vhd
     ../rtl/rx/msk_demodulator_mlse.vhd
+    ../rtl/rx/lut16q_pkg.vhd
     ../rtl/rx/frame_sync_detector_soft.vhd
     ../rtl/rx/haifuraiya_demod_regs.vhd
     ../rtl/rx/channel_normalizer.vhd
@@ -362,6 +365,32 @@ add_wave -into {MLSE_Trellis}                 $DEM/m_busy
 add_wave_group {Bit_Decisions}
 add_wave -into {Bit_Decisions}            $DEM/rx_data
 add_wave -into {Bit_Decisions} -radix dec $DEM/rx_data_soft
+
+# --- Symbol lock detector (map v6 0x0A0-0x0AC): the measurement that
+# --- drives demod_lock and gates frame sync. sl_e_err = engine timing
+# --- error (LSBs); avg_err = live windowed mean; locked = the verdict.
+set SL $DEM/u_symlock
+add_wave_group {Symbol_Lock}
+add_wave -into {Symbol_Lock}                 $DEM/sl_locked
+add_wave -into {Symbol_Lock} -radix unsigned $SL/ratio_pct
+add_wave -into {Symbol_Lock}                 $SL/window_full
+add_wave -into {Symbol_Lock} -radix unsigned $SL/s_num
+add_wave -into {Symbol_Lock} -radix unsigned $SL/s_den
+add_wave -into {Symbol_Lock} -radix unsigned $SL/fill
+add_wave -into {Symbol_Lock} -radix unsigned $SL/wlog_r
+add_wave -into {Symbol_Lock} -radix unsigned $DEM/sl_e_early
+add_wave -into {Symbol_Lock} -radix unsigned $DEM/sl_e_late
+add_wave -into {Symbol_Lock}                 $DEM/sl_e_err_v
+add_wave -into {Symbol_Lock} -radix dec      $DEM/sym_clk_offset
+
+add_wave_group {CFO}
+set CFO $RX/u_cfo
+add_wave -into {CFO} -radix dec      $RX/cfo_word
+add_wave -into {CFO}                 $CFO/en
+add_wave -into {CFO}                 $CFO/out_valid
+add_wave -into {CFO} -radix unsigned $CFO/phase
+add_wave -into {CFO} -radix dec      $CFO/i_out
+add_wave -into {CFO} -radix dec      $CFO/q_out
 add_wave -into {Bit_Decisions}            $DEM/rx_dvalid
 add_wave -into {Bit_Decisions}            $DEM/demod_lock
 
@@ -426,5 +455,8 @@ add_wave -into {Frame_Sync} $FS/energy_prev
 #add_wave -into {Timing_Search} -radix unsigned $MSK/dbg_setot_10
 #add_wave -into {Timing_Search} -radix unsigned $MSK/dbg_setot_11
 
+add_wave /tb_haifuraiya_channelizer_axi/sb_tvalid
+add_wave /tb_haifuraiya_channelizer_axi/sb_tdata
+add_wave /tb_haifuraiya_channelizer_axi/sb_tlast
 
 run all

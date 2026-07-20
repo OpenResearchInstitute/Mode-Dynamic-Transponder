@@ -2,6 +2,7 @@
 # usage: vivado -mode batch -source run_symbol_engine.tcl
 # expects: msk_symbol_engine.vhd tb_msk_symbol_engine.vhd
 #          lut16.txt stim_engine.txt golden_engine.txt  in cwd
+exec xvhdl --2008 ../../rtl/rx/lut16q_pkg.vhd
 exec xvhdl --2008 msk_symbol_engine.vhd
 exec xvhdl --2008 tb_msk_symbol_engine.vhd
 exec xelab --debug typical tb_msk_symbol_engine -s engine_sim

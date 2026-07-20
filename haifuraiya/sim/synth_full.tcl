@@ -31,6 +31,7 @@ add_files [list \
   ../rtl/rx/msk_symbol_engine.vhd \
   ../rtl/rx/msk_mlse4.vhd \
   ../rtl/rx/msk_demodulator_mlse.vhd \
+  ../rtl/rx/lut16q_pkg.vhd \
   ../rtl/rx/frame_sync_detector_soft.vhd \
   ../rtl/rx/haifuraiya_demod_regs.vhd \
   ../rtl/rx/haifuraiya_rx_top.vhd \

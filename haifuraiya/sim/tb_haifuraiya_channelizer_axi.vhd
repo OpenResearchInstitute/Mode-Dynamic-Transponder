@@ -687,6 +687,7 @@ u_rx : entity work.haifuraiya_rx_axi
         variable max_power      : integer;
         variable max_idx        : integer;
         variable v_demod_ver    : std_logic_vector(31 downto 0);
+        variable sl_wait        : integer := 0;
         variable power_k        : integer;
         variable cycles_per_smp : integer;
         variable tone_phase     : real;
@@ -1138,7 +1139,26 @@ wait for 1 us;    -- let the design come back up
     axi_write_demod(16#024#, x"00000080");   -- SYM_LOCK_COUNT = 128  (standalone count; reset default was 128)
     axi_write_demod(16#028#, x"00000008");   -- SYM_LOCK_THRESHOLD = 8  (CALIBRATE vs CST_IQ_DELTA on real amplitude)
     axi_write_demod(16#030#, x"00000400");   -- GAIN_MANUAL = 1024 = 1.000 (Q6.10)
-    axi_write_demod(16#064#, x"00000000");   -- RX_SAMPLE_DISCARD = 0 (not 0x18) 
+    axi_write_demod(16#064#, x"00000000");   -- RX_SAMPLE_DISCARD = 0 (not 0x18)
+
+    -- map v6 symbol lock detector (sym_lock_detector.vhd) -- explicit
+    -- writes of the proven(-provisional) defaults, bring-up.sh parity:
+    axi_write_demod(16#0A4#, x"00000019");   -- SYM_LOCK_THRESH   = 25 % (C++ LOCK_THRESH 0.25, verbatim)
+    axi_write_demod(16#0A8#, x"00000032");   -- SYM_UNLOCK_THRESH = 50 % (C++ UNLOCK_THRESH 0.50, verbatim)
+    axi_write_demod(16#0AC#, x"00000006");   -- SYM_LOCK_WINDOW   log2 -> 64 symbols
+    -- CFO block (WP2 step 1): auto=1 -> applied word ZERO until the AFC
+    -- lands (step 2), so this regression is unperturbed. RED-FIRST system
+    -- procedure for the manual path (run by hand, documented here):
+    --   1. regenerate stimulus with --carrier-offset 5000 (beyond theta's
+    --      +/-212 Hz): run MUST fail to decode (RED) with defaults.
+    --   2. axi_write_demod 0x0B8 <= 0x00060A00 (auto=0),
+    --      axi_write_demod 0x0BC <= 0x00001388 (+5000): run MUST decode
+    --      6/6 (GREEN) -- correction path proven end to end.
+    --   3. readback 0x0B4 (CFO_ESTIMATE) = applied word both times.
+    axi_write_demod(16#0B8#, x"00060A00");   -- CFO_CTRL: acq_shift 6, trk_shift 10, auto
+    axi_write_demod(16#0BC#, x"0000EC78");   -- CFO_MANUAL: -5000 Hz 1388 is +5000
+    axi_write_demod(16#0C4#, x"00000148");   -- TIM_ALPHA = 328 Q16 (C++ 0.005)
+    axi_write_demod(16#0C8#, x"000000A8");   -- TIM_BETA  = 168 Q24 (C++ 1e-5)
 
     -- Once we have real noise on hardware, run a short BER 
     -- comparison of the uniform set against the current 500/1400/2800 and keep whichever wins. 
@@ -1185,6 +1205,42 @@ wait for 1 us;    -- let the design come back up
     report "READBACK P_SHIFT = 0x" & to_hstring(v_demod_ver) severity note;
     axi_read_demod(16#020#, v_demod_ver);
     report "READBACK I_SHIFT = 0x" & to_hstring(v_demod_ver) severity note;
+
+    ------------------------------------------------------------------
+    -- SL-D: symbol lock detector register walk (map v6 0x0A0-0x0AC)
+    ------------------------------------------------------------------
+    axi_read_demod(16#0A4#, v_demod_ver);
+    if v_demod_ver(7 downto 0) = x"19" then pass("SL-D SYM_LOCK_THRESH readback 25%");
+    else fail("SL-D SYM_LOCK_THRESH readback: got 0x" & to_hstring(v_demod_ver)); end if;
+    axi_read_demod(16#0A8#, v_demod_ver);
+    if v_demod_ver(7 downto 0) = x"32" then pass("SL-D SYM_UNLOCK_THRESH readback 50%");
+    else fail("SL-D SYM_UNLOCK_THRESH readback: got 0x" & to_hstring(v_demod_ver)); end if;
+    axi_read_demod(16#0AC#, v_demod_ver);
+    if v_demod_ver(3 downto 0) = x"6" then pass("SL-D SYM_LOCK_WINDOW readback 6 (64 sym)");
+    else fail("SL-D SYM_LOCK_WINDOW readback: got 0x" & to_hstring(v_demod_ver)); end if;
+    axi_read_demod(16#0B8#, v_demod_ver);
+    if v_demod_ver = x"00060A01" then pass("CFO-D CFO_CTRL readback 0x00060A01");
+    else fail("CFO-D CFO_CTRL readback: got 0x" & to_hstring(v_demod_ver)); end if;
+    axi_read_demod(16#0B4#, v_demod_ver);
+    if v_demod_ver = x"00000000" then pass("CFO-D applied word 0 (auto, no estimator)");
+    else fail("CFO-D applied nonzero: 0x" & to_hstring(v_demod_ver)); end if;
+    axi_read_demod(16#0C4#, v_demod_ver);
+    if v_demod_ver(15 downto 0) = x"0148" then pass("TL-D TIM_ALPHA readback 0x0148 (0.005)");
+    else fail("TL-D TIM_ALPHA readback: got 0x" & to_hstring(v_demod_ver)); end if;
+    axi_read_demod(16#0C8#, v_demod_ver);
+    if v_demod_ver(15 downto 0) = x"00A8" then pass("TL-D TIM_BETA readback 0x00A8 (1e-5)");
+    else fail("TL-D TIM_BETA readback: got 0x" & to_hstring(v_demod_ver)); end if;
+
+    ------------------------------------------------------------------
+    -- SL-B: NO symbol lock before signal (the anti-insta-lock check).
+    -- The demod is released onto a dead channel here; STATUS bit1 must
+    -- read 0 -- the old G_LOCK_SYM calendar would have latched it high
+    -- ~22 ms after init unconditionally.
+    ------------------------------------------------------------------
+    wait for 100 us;
+    axi_read_demod(16#040#, v_demod_ver);
+    if v_demod_ver(1) = '0' then pass("SL-B no symbol lock on dead channel (STATUS.1 = 0)");
+    else fail("SL-B STATUS.1 asserted with no signal -- lock detector lying"); end if;
 	
     wait for 2 us;                           -- let the re-init settle before the burst arrives
     report "MILESTONE 2: demod bracket complete; endfile(fin)=" &
@@ -1245,7 +1301,56 @@ report "MILESTONE 4: injection complete, fed " & integer'image(n_fed) &
 
 
     report "OPV phase fed " & integer'image(n_fed) & " samples" severity note;
+    ------------------------------------------------------------------
+    -- SL-A: symbol lock from the REAL signal within the 40 ms preamble
+    -- budget (Paul KB5MU 2026-07-07 spec: sub-40 ms desired). Polls
+    -- STATUS.1; reports the live avg_err for SL-3 calibration.
+    ------------------------------------------------------------------
+    sl_wait := 0;
+    loop
+        axi_read_demod(16#040#, v_demod_ver);
+        exit when v_demod_ver(1) = '1';
+        sl_wait := sl_wait + 1;
+        if sl_wait > 400 then
+            fail("SL-A symbol lock not achieved within 40 ms of signal");
+            exit;
+        end if;
+        wait for 100 us;
+    end loop;
+    if v_demod_ver(1) = '1' then
+        pass("SL-A symbol lock on real signal at ~" &
+             integer'image(sl_wait/10) & "." & integer'image(sl_wait mod 10) & " ms");
+    end if;
+    axi_read_demod(16#0A0#, v_demod_ver);
+    axi_read_demod(16#0CC#, v_demod_ver);
+    report "TL: SYM_CLK_OFFSET (Q24 smp/sym) = " &
+           integer'image(to_integer(signed(v_demod_ver))) &
+           " (zero-offset stimulus: expect near 0, was walking +/-2500-class pre-fix)"
+           severity note;
+    report "SL quality: locked ratio_pct = " &
+           integer'image(to_integer(unsigned(v_demod_ver(15 downto 8)))) &
+           " % (expect well under 25)" severity note;
+
     wait for 50 us;                          -- let the demod lock + frame_sync drain soft frames
+    ------------------------------------------------------------------
+    -- SL-C: configuration takes effect live -- write window_log2=4,
+    -- detector flushes (map v6: write flushes); on the zero-tail dead
+    -- air the mean rises and lock must NOT return: lock tracks the
+    -- SIGNAL at the new setting, not elapsed time.
+    ------------------------------------------------------------------
+    axi_write_demod(16#0AC#, x"00000004");   -- window 16: flush + reconfig
+    wait for 200 us;
+    axi_read_demod(16#040#, v_demod_ver);
+    if v_demod_ver(1) = '0' then
+        pass("SL-C window reconfig flushed; no relock on dead air (cfg=16)");
+    else
+        fail("SL-C STATUS.1 high on dead air after reconfig");
+    end if;
+    axi_read_demod(16#0A0#, v_demod_ver);
+    report "SL quality: dead-air ratio_pct = " &
+           integer'image(to_integer(unsigned(v_demod_ver(15 downto 8)))) &
+           " % (expect near 100)" severity note;
+
     report "DEMOD PATH: target samples=" & integer'image(n_target_samps)
          & "  soft beats=" & integer'image(n_soft_beats)
          & "  soft frames=" & integer'image(n_soft_frames) severity note;
@@ -1264,7 +1369,26 @@ report "MILESTONE 4: injection complete, fed " & integer'image(n_fed) &
         report "================================================";
         report "soft_raw: captured " & integer'image(n_soft_raw) & " symbols" severity note;
 
-        report "DEMOD PATH: target samples=" & integer'image(n_target_samps)
+        ------------------------------------------------------------------
+    -- SL-C: configuration takes effect live -- write window_log2=4,
+    -- detector flushes (map v6: write flushes); on the zero-tail dead
+    -- air the mean rises and lock must NOT return: lock tracks the
+    -- SIGNAL at the new setting, not elapsed time.
+    ------------------------------------------------------------------
+    axi_write_demod(16#0AC#, x"00000004");   -- window 16: flush + reconfig
+    wait for 200 us;
+    axi_read_demod(16#040#, v_demod_ver);
+    if v_demod_ver(1) = '0' then
+        pass("SL-C window reconfig flushed; no relock on dead air (cfg=16)");
+    else
+        fail("SL-C STATUS.1 high on dead air after reconfig");
+    end if;
+    axi_read_demod(16#0A0#, v_demod_ver);
+    report "SL quality: dead-air ratio_pct = " &
+           integer'image(to_integer(unsigned(v_demod_ver(15 downto 8)))) &
+           " % (expect near 100)" severity note;
+
+    report "DEMOD PATH: target samples=" & integer'image(n_target_samps)
          & "  soft beats=" & integer'image(n_soft_beats)
          & "  soft frames=" & integer'image(n_soft_frames) severity note;
 

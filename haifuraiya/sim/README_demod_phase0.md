@@ -705,3 +705,38 @@ counter restored: 175,935); opv_stim C/N printout now per convention
 REMAINING to hardware: integrated-build migration (syn/ source list +
 TCL.PRE hex hook), make haifuraiya-xsa-integrated (~5 h), PetaLinux
 boot, opv-decode -3 on the A53, antennas.
+
+## REPO SWEEP + pluto_msk DEPENDENCY SEVERED (2026-07-17 afternoon)
+
+Sweep: verified work committed (LEVEL_PLAN, TB patches, runner
+migration, conventions); block-level benches retired with honors
+(superseded by the system bench); canonical stimulus/references/goldens
+finally tracked; generated projects gitignored; demod_regs defaults
+(normalized fsync 85/70 pct + uniform quantizer ladder) and the --fp
+harness flag adjudicated and committed.
+
+Archaeology rescued: the cxx-faithful Costas rework (-761/+236, verified
+bit-exact + OTA 2026) was UNCOMMITTED in a detached-HEAD nested
+submodule -- preserved on pluto_msk branch `cxx-faithful-demod`. The
+normalized-CFAR fsync feature committed on `haifuraiya-normalized-fsync`.
+
+Promotion + removal, every step gated:
+  frame_sync_detector_soft.vhd -> rtl/rx/ (provenance in commit msg)
+  component.xml: Costas out, MLSE trio + normalizer mux + fsync + ROM
+    data file in; spirit:version HELD at 0.4 (BD pins the VLNV --
+    verified by grep), coreRevision 2->3. Lesson filed in the map.
+  synth regression: WNS +0.499 IDENTICAL to the picosecond; netlist
+    log names rtl/rx path explicitly; 405-warning census taken as the
+    integrated build's baseline (all benign; wstrb-ignored noted).
+  system bench regression: 6/6 + 6/6, metrics EXACT
+    ([181,109,120,47,50,163] / [173,100,105,36,43,152]).
+  43 remaining pluto_msk references audited: zero load-bearing.
+  git rm third_party/pluto_msk. Haifuraiya is self-contained.
+
+Docs: haifuraiya/README.md rewritten (setup w/o pluto_msk, proven
+quick-start commands, LVDS as mainline); Dungeon Map update block
+drafted (Phase 4 PL section, trophy case, open quests, two-version
+IP-XACT lesson). pluto_msk itself: future work to strengthen it
+standalone (W5NYV).
+
+NEXT: make haifuraiya-xsa-integrated (the 5-hour judge).
