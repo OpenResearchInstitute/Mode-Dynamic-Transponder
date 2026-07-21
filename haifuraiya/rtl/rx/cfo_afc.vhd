@@ -106,8 +106,17 @@ architecture rtl of cfo_afc is
 
     -- captured symbol
     signal c1r, c1i, c2r, c2i : signed(23 downto 0) := (others => '0');
-    -- dominant + previous dominant
+    -- dominant this symbol + PER-TONE previous correlations.
+    -- The reference stores prev_corr_f1_ AND prev_corr_f2_ every symbol
+    -- and compares dominant against ITS OWN tone's previous
+    -- (opv_demod.hpp:390-409): a tone's correlation rotates at the
+    -- offset rate whether or not it is dominant, so same-tone deltas
+    -- always measure the offset. A single cross-tone prev (this block's
+    -- first port) measures tone separation on switches and biased the
+    -- servo to a false equilibrium (measured: est stalled 677 Hz short,
+    -- 2026-07-21 system bench).
     signal dr, di, pr, pi     : signed(23 downto 0) := (others => '0');
+    signal p1r, p1i, p2r, p2i : signed(23 downto 0) := (others => '0');
     signal have_prev          : std_logic := '0';
     -- magnitude compare
     signal m1, m2             : signed(47 downto 0) := (others => '0');
@@ -126,7 +135,15 @@ architecture rtl of cfo_afc is
     -- dwell counters
     signal good_cnt           : unsigned(6 downto 0) := (others => '0');
     signal lost_cnt           : unsigned(6 downto 0) := (others => '0');
-    signal bad_cnt            : unsigned(3 downto 0) := (others => '0');
+    -- HELD gate: estimate snapshot at each 64-symbol window boundary.
+    -- The dwell criterion judges ESTIMATE STABILITY (|est - est_64ago|
+    -- < 200 Hz), not per-symbol ferr: the raw discriminator is
+    -- intrinsically spiky on real data (measured 2026-07-21: servo
+    -- converged tightly on -5000 while a ferr-based consecutive gate
+    -- never fired). The C++ has no lock gate at all -- one gear, free
+    -- integration -- so this criterion is ours; it watches the quantity
+    -- the flag actually claims.
+    signal est_snap           : signed(35 downto 0) := (others => '0');
 
 begin
 
@@ -157,6 +174,8 @@ begin
                 c2r <= (others=>'0'); c2i <= (others=>'0');
                 dr <= (others=>'0'); di <= (others=>'0');
                 pr <= (others=>'0'); pi <= (others=>'0');
+                p1r <= (others=>'0'); p1i <= (others=>'0');
+                p2r <= (others=>'0'); p2i <= (others=>'0');
                 have_prev <= '0';
                 m1 <= (others=>'0'); m2 <= (others=>'0');
                 dotp <= (others=>'0'); crossp <= (others=>'0');
@@ -186,8 +205,11 @@ begin
                         ph <= P_SEL;
 
                     when P_SEL =>
-                        if m1 >= m2 then dr <= c1r; di <= c1i;
-                        else             dr <= c2r; di <= c2i;
+                        -- dominant pair AND its own tone's previous pair
+                        if m1 >= m2 then
+                            dr <= c1r; di <= c1i; pr <= p1r; pi <= p1i;
+                        else
+                            dr <= c2r; di <= c2i; pr <= p2r; pi <= p2i;
                         end if;
                         -- quality: |re|+|im| of dominant, windowed 64 sym
                         if m1 >= m2 then
@@ -208,11 +230,15 @@ begin
                         ph <= P_PROD;
 
                     when P_PROD =>
-                        -- dom * conj(prev): dot = dr*pr + di*pi,
-                        --                   cross = di*pr - dr*pi
+                        -- dom * conj(same-tone prev): dot = dr*pr + di*pi,
+                        --                             cross = di*pr - dr*pi
                         dotp   <= resize(dr*pr, 48) + resize(di*pi, 48);
                         crossp <= resize(di*pr, 48) - resize(dr*pi, 48);
-                        pr <= dr; pi <= di;
+                        -- store BOTH tones' correlations, every symbol
+                        -- (reference verbatim: prev_corr_f1_/f2_ updated
+                        -- unconditionally at the bottom of the loop)
+                        p1r <= c1r; p1i <= c1i;
+                        p2r <= c2r; p2i <= c2i;
                         if have_prev = '1' then
                             ph <= P_NORM;
                         else
@@ -307,36 +333,35 @@ begin
                             when S_CORRECTING =>
                                 if q_win < G_QUAL_FLOOR and q_win /= 0 then
                                     st <= S_LOST; lost_cnt <= (others => '0');
-                                elsif ferr_hz_v < 13107200 and
-                                      ferr_hz_v > -13107200 then
-                                    -- |ferr| < 200 Hz for 64 consecutive
-                                    if good_cnt = 63 then
+                                elsif q_cnt = 0 then
+                                    -- window boundary: estimate stable
+                                    -- across the whole window -> HELD
+                                    if (est_q16 - est_snap) < 13107200 and
+                                       (est_q16 - est_snap) > -13107200 then
                                         st <= S_HELD;
-                                    else
-                                        good_cnt <= good_cnt + 1;
                                     end if;
-                                else
-                                    good_cnt <= (others => '0');
+                                    est_snap <= est_q16;
                                 end if;
                             when S_HELD =>
+                                -- HYSTERESIS (2026-07-21: state flapped
+                                -- 2<->3 on real data because this exit
+                                -- judged noisy per-symbol ferr -- the
+                                -- same defect evicted from the entry
+                                -- gate). Enter under 200 Hz/window;
+                                -- leave only over 400 Hz/window of
+                                -- ESTIMATE movement. A genuine step
+                                -- moves the estimate ~500 Hz/window
+                                -- even in the tracking gear, so real
+                                -- steps still downshift within one
+                                -- window, 1.2 ms (bench T2).
                                 if q_win < G_QUAL_FLOOR then
                                     st <= S_LOST; lost_cnt <= (others => '0');
-                                elsif ferr_hz_v > 13107200 or
-                                      ferr_hz_v < -13107200 then
-                                    -- |ferr| > 200 Hz sustained 8 symbols:
-                                    -- offset stepped; downshift to the
-                                    -- acquisition gear (T2 lesson: the
-                                    -- tracking gear alone takes ~1000
-                                    -- symbols to cross an 8 kHz step)
-                                    if bad_cnt = 7 then
+                                elsif q_cnt = 0 then
+                                    if (est_q16 - est_snap) > 26214400 or
+                                       (est_q16 - est_snap) < -26214400 then
                                         st <= S_CORRECTING;
-                                        good_cnt <= (others => '0');
-                                        bad_cnt  <= (others => '0');
-                                    else
-                                        bad_cnt <= bad_cnt + 1;
                                     end if;
-                                else
-                                    bad_cnt <= (others => '0');
+                                    est_snap <= est_q16;
                                 end if;
                             when S_LOST =>
                                 -- estimate retained (warm start); one
