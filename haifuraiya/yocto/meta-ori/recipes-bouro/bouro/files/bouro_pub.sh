@@ -34,7 +34,7 @@ set -u
 ADDR_BASE=0x84A70000             # Channelizer AXI-Lite base (from Phase 3 build)
 EXPECTED_VERSION=0x00010000      # v0.1.0 magic — refuse to start otherwise
 INTERVAL=1                       # seconds between cycles
-PUB_VERSION="0.2"
+PUB_VERSION="0.3"
 
 N_CHANNELS=64
 CHANNEL_BASE_OFFSET=0x100        # CHANNEL_POWER_N at 0x100 + 4*N
@@ -244,8 +244,10 @@ publish_channel_powers() {
 # Same shape as the channelizer scalars, but against the demod regs.
 # DEMOD_STATUS bit layout (haifuraiya_demod_regs.vhd):
 #   bit 0 frame_sync_locked, bit 1 cst_lock_f1, bit 2 cst_lock_f2.
-# FRAMES_RECEIVED is a monotonic 32-bit counter (frames decoded since reset);
-# its per-cycle delta is the live "are we locking?" signal.
+# FRAMES_RECEIVED counts frames SYNC'D AND FORWARDED by the fabric (monotonic
+# 32-bit). The fabric demodulates + frame-syncs + forwards soft bits; DECODE
+# happens downstream on the A53 (opv-decode). Do not call this "decoded" --
+# corrected 2026-07-21 after it confused a bench session.
 #
 # Non-fatal: if the demod block isn't present (reads empty) the whole
 # section quietly skips, so the channelizer dashboard still works.
@@ -305,6 +307,58 @@ publish_demod() {
         pub_derived "demod/sym_lock/window_full" "$(((VAL_DEC >> 1) & 1))"
     fi
 
+    # ---- FREQ_WORD_F1/F2 (0x008/0x00C) -- LIVE in v6: tone correlator
+    # phase increments (+/-13550 Hz @ 625 ksps). Config confirmation for
+    # the dashboard; hardware readback proves nonzero (2026-07-21).
+    VAL_HEX=$(read_demod_hex 0x08)
+    if [ -n "$VAL_HEX" ]; then
+        pub_register "demod_freq_word_f1" "$VAL_HEX"
+        pub_derived  "demod/config/freq_word_f1" "$VAL_HEX"
+    fi
+    VAL_HEX=$(read_demod_hex 0x0C)
+    if [ -n "$VAL_HEX" ]; then
+        pub_register "demod_freq_word_f2" "$VAL_HEX"
+        pub_derived  "demod/config/freq_word_f2" "$VAL_HEX"
+    fi
+
+    # ---- CFO AFC block (0x0B0-0x0C0) -- WP2, live since VERSION 0x00060000.
+    # CFO_STATE: 0 IDLE, 1 SEARCH, 2 CORRECTING, 3 HELD, 4 LOST (warm estimate).
+    VAL_HEX=$(read_demod_hex 0xB0)
+    if [ -n "$VAL_HEX" ]; then
+        pub_register "demod_cfo_state" "$VAL_HEX"
+        VAL_DEC=$(( $(hex_to_dec "$VAL_HEX") & 7 ))
+        case $VAL_DEC in
+            0) ST_NAME=IDLE ;; 1) ST_NAME=SEARCH ;; 2) ST_NAME=CORRECTING ;;
+            3) ST_NAME=HELD ;; 4) ST_NAME=LOST ;; *) ST_NAME=UNKNOWN ;;
+        esac
+        pub_derived "demod/cfo/state"      "$VAL_DEC"
+        pub_derived "demod/cfo/state_name" "$ST_NAME"
+    fi
+
+    # CFO_ESTIMATE (0x0B4): applied correction, SIGNED Hz.
+    VAL_HEX=$(read_demod_hex 0xB4)
+    if [ -n "$VAL_HEX" ]; then
+        pub_register "demod_cfo_estimate" "$VAL_HEX"
+        pub_derived "demod/cfo/est_hz" "$(hex_to_sdec "$VAL_HEX")"
+    fi
+
+    # CFO_QUALITY (0x0C0): windowed dominant-tone magnitude. Gate floor 512;
+    # locked runs ~6k-22k; bench noise floor measured 424 (2026-07-21).
+    VAL_HEX=$(read_demod_hex 0xC0)
+    if [ -n "$VAL_HEX" ]; then
+        pub_register "demod_cfo_quality" "$VAL_HEX"
+        pub_derived "demod/cfo/quality" "$(hex_to_dec "$VAL_HEX")"
+    fi
+
+    # CFO_CTRL (0x0B8): b0 auto; CFO_MANUAL (0x0BC): manual word (auto=0 path).
+    VAL_HEX=$(read_demod_hex 0xB8)
+    if [ -n "$VAL_HEX" ]; then
+        pub_register "demod_cfo_ctrl" "$VAL_HEX"
+        pub_derived "demod/cfo/auto" "$(( $(hex_to_dec "$VAL_HEX") & 1 ))"
+    fi
+    VAL_HEX=$(read_demod_hex 0xBC)
+    [ -n "$VAL_HEX" ] && pub_register "demod_cfo_manual" "$VAL_HEX"
+
     # ---- SYM_CLK_OFFSET (0x0CC) -- timing-loop integrator: estimated
     # symbol-clock rate error, SIGNED Q24 fractional samples/symbol.
     # ppm_milli = q24 * 1000000 / 193478  (2^24 * 11.5314 samples/sym).
@@ -332,11 +386,22 @@ publish_demod() {
     # registers ONLY. The retired Costas block (0x008-0x03C, 0x060-0x09C)
     # is reserved/read-zero per REGISTER_MAP_V6.md and is deliberately
     # NOT published: no more relic display (v5 lesson).
-    for pair in fs_hunt_thresh:0x48 fs_verify_thresh:0x4c \
-                quant_thr_1:0x50 quant_thr_2:0x54 quant_thr_3:0x58 \
-                demod_init:0x5c \
-                sym_lock_thresh:0xa4 sym_unlock_thresh:0xa8 \
-                sym_lock_window:0xac tim_alpha:0xc4 tim_beta:0xc8; do
+    # COMPLETE demod map v6, address order, no gaps (haifuraiya_demod_regs.vhd
+    # ADDR_ constants are the source of truth). Costas-block rows 0x10-0x20 and
+    # 0x68-0x94 are retired/undriven in MLSE but still published: the pane
+    # shows every register that exists, labeled, rather than hiding any.
+    for pair in version:0x00 control:0x04 freq_word_f1:0x08 freq_word_f2:0x0C \
+                lpf_p_gain:0x10 lpf_i_gain:0x14 lpf_alpha:0x18 lpf_p_shift:0x1C \
+                lpf_i_shift:0x20 sym_lock_count:0x24 sym_lock_threshold:0x28 gain_manual:0x30 \
+                gain_current:0x38 status:0x40 frames:0x44 fs_hunt_thresh:0x48 \
+                fs_verify_thresh:0x4C quant_thr_1:0x50 quant_thr_2:0x54 quant_thr_3:0x58 \
+                demod_init:0x5C loop_ctrl:0x60 rx_sample_discard:0x64 f1_nco_adjust:0x68 \
+                f2_nco_adjust:0x6C f1_error:0x70 f2_error:0x74 lpf_accum_f1:0x78 \
+                lpf_accum_f2:0x7C cst_locktime_f1:0x80 cst_locktime_f2:0x84 lock_status:0x88 \
+                cst_acc_i_f1:0x8C cst_acc_q_f1:0x90 cst_iq_delta_f1:0x94 sym_lock_status:0xA0 \
+                sym_lock_thresh:0xA4 sym_unlock_thresh:0xA8 sym_lock_window:0xAC cfo_state:0xB0 \
+                cfo_estimate:0xB4 cfo_ctrl:0xB8 cfo_manual:0xBC cfo_quality:0xC0 \
+                tim_alpha:0xC4 tim_beta:0xC8 sym_clk_offset:0xCC; do
         NAME=${pair%%:*}
         OFF=${pair##*:}
         VAL_HEX=$(read_demod_hex $OFF)
@@ -360,9 +425,9 @@ if [ "$MAGIC" != "$EXPECTED_VERSION" ]; then
 fi
 
 # Publish startup metadata so subscribers know we restarted.
-mosquitto_pub -t "haifuraiya/status/publisher/started" -m "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-mosquitto_pub -t "haifuraiya/status/publisher/pid"     -m "$$"
-mosquitto_pub -t "haifuraiya/status/publisher/version" -m "$PUB_VERSION"
+mosquitto_pub -r -t "haifuraiya/status/publisher/started" -m "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+mosquitto_pub -r -t "haifuraiya/status/publisher/pid"     -m "$$"
+mosquitto_pub -r -t "haifuraiya/status/publisher/version" -m "$PUB_VERSION"
 
 # =====================================================================
 # Main loop

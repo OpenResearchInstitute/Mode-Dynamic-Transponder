@@ -615,17 +615,30 @@
                     <span class="label">sym clock offset (ppm, milli)</span>
                     <span class="value" id="sym-clk-ppm">&mdash;</span>
                 </div>
+                <div class="metric">
+                    <span class="label">CFO state (SEARCH&rarr;CORRECTING&rarr;HELD; LOST holds warm)</span>
+                    <span class="value" id="cfo-state">&mdash;</span>
+                </div>
+                <div class="metric">
+                    <span class="label">CFO estimate (Hz, applied)</span>
+                    <span class="value" id="cfo-est-hz">&mdash;</span>
+                </div>
+                <div class="metric">
+                    <span class="label">CFO quality (gate 512; locked ~6k&ndash;22k; bench noise ~424)</span>
+                    <span class="value" id="cfo-quality">&mdash;</span>
+                </div>
                 <div style="margin-top:10px;">
-                    <span id="demod-frame-rate" class="big-number">0</span><span class="big-number-suffix">frames since last cycle</span>
+                    <span id="demod-frame-rate" class="big-number">0</span><span class="big-number-suffix">frames sync'd &amp; forwarded since last cycle</span>
                 </div>
                 <div class="big-number-sub">
-                    total decoded: <span id="demod-frames-total">0</span>
+                    total sync'd &amp; forwarded (decode happens on the A53): <span id="demod-frames-total">0</span>
                 </div>
             </section>
 
             <section class="card">
                 <h2><span class="pip"></span>Demod config (read-only)</h2>
                 <div class="flag"><span class="flag-dot" id="flag-rx-invert"></span><span class="flag-label">rx_invert (soft polarity)</span></div>
+                <div class="flag"><span class="flag-dot" id="flag-cfo-auto"></span><span class="flag-label">CFO auto mode (AFC armed)</span></div>
                 <div class="metric">
                     <span class="label">FREQ_WORD_F1</span>
                     <span class="value" id="demod-fw-f1">—</span>
@@ -635,8 +648,8 @@
                     <span class="value" id="demod-fw-f2">—</span>
                 </div>
                 <div class="metric">
-                    <span class="label">sym lock threshold</span>
-                    <span class="value" id="demod-sym-thr">—</span>
+                    <span class="label">sym lock / unlock (%)</span>
+                    <span class="value" id="demod-sym-pcts">—</span>
                 </div>
                 <div class="big-number-sub">demod regs at <code>0x84A80000</code></div>
             </section>
@@ -646,28 +659,63 @@
         <details class="registers no-stale">
             <summary>Raw registers (forensics)</summary>
             <div class="reg-table" id="reg-table">
-                <span class="reg-name">version</span>        <span class="reg-val" data-reg="version">—</span>
-                <span class="reg-name">control</span>        <span class="reg-val" data-reg="control">—</span>
-                <span class="reg-name">status</span>         <span class="reg-val" data-reg="status">—</span>
-                <span class="reg-name">frame_count</span>    <span class="reg-val" data-reg="frame_count">—</span>
+                <!-- channelizer 0x84A70000, address order -->
+                <span class="reg-name">version</span> <span class="reg-val" data-reg="version">—</span>
+                <span class="reg-name">control</span> <span class="reg-val" data-reg="control">—</span>
+                <span class="reg-name">status</span> <span class="reg-val" data-reg="status">—</span>
+                <span class="reg-name">frame_count</span> <span class="reg-val" data-reg="frame_count">—</span>
                 <span class="reg-name">dropped_frames</span> <span class="reg-val" data-reg="dropped_frames">—</span>
-                <span class="reg-name">output_shift</span>   <span class="reg-val" data-reg="output_shift">—</span>
-                <span class="reg-name">power_alpha1</span>   <span class="reg-val" data-reg="power_alpha1">—</span>
-                <span class="reg-name">power_alpha2</span>   <span class="reg-val" data-reg="power_alpha2">—</span>
-
-                <span class="reg-name">demod_version</span>            <span class="reg-val" data-reg="demod_version">—</span>
-                <span class="reg-name">demod_control</span>            <span class="reg-val" data-reg="demod_control">—</span>
-                <span class="reg-name">demod_status</span>             <span class="reg-val" data-reg="demod_status">—</span>
-                <span class="reg-name">demod_frames</span>             <span class="reg-val" data-reg="demod_frames">—</span>
-                <span class="reg-name">demod_sym_lock_status</span>    <span class="reg-val" data-reg="demod_sym_lock_status">—</span>
-                <span class="reg-name">demod_sym_lock_thresh</span>    <span class="reg-val" data-reg="demod_sym_lock_thresh">—</span>
-                <span class="reg-name">demod_sym_unlock_thresh</span>  <span class="reg-val" data-reg="demod_sym_unlock_thresh">—</span>
-                <span class="reg-name">demod_sym_lock_window</span>    <span class="reg-val" data-reg="demod_sym_lock_window">—</span>
-                <span class="reg-name">demod_tim_alpha</span>          <span class="reg-val" data-reg="demod_tim_alpha">—</span>
-                <span class="reg-name">demod_tim_beta</span>           <span class="reg-val" data-reg="demod_tim_beta">—</span>
-                <span class="reg-name">demod_sym_clk_offset</span>     <span class="reg-val" data-reg="demod_sym_clk_offset">—</span>
-                <span class="reg-name">demod_fs_hunt_thresh</span>     <span class="reg-val" data-reg="demod_fs_hunt_thresh">—</span>
-                <span class="reg-name">demod_fs_verify_thresh</span>   <span class="reg-val" data-reg="demod_fs_verify_thresh">—</span>
+                <span class="reg-name">output_shift</span> <span class="reg-val" data-reg="output_shift">—</span>
+                <span class="reg-name">power_alpha1</span> <span class="reg-val" data-reg="power_alpha1">—</span>
+                <span class="reg-name">power_alpha2</span> <span class="reg-val" data-reg="power_alpha2">—</span>
+                <!-- demod 0x84A80000, map v6, address order, complete -->
+                <span class="reg-name">demod_version</span> <span class="reg-val" data-reg="demod_version">—</span>
+                <span class="reg-name">demod_control</span> <span class="reg-val" data-reg="demod_control">—</span>
+                <span class="reg-name">demod_freq_word_f1  <em class="reg-note">(NOT consumed by MLSE — see WP)</em></span> <span class="reg-val" data-reg="demod_freq_word_f1">—</span>
+                <span class="reg-name">demod_freq_word_f2  <em class="reg-note">(NOT consumed by MLSE — see WP)</em></span> <span class="reg-val" data-reg="demod_freq_word_f2">—</span>
+                <span class="reg-name">demod_lpf_p_gain  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_lpf_p_gain">—</span>
+                <span class="reg-name">demod_lpf_i_gain  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_lpf_i_gain">—</span>
+                <span class="reg-name">demod_lpf_alpha  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_lpf_alpha">—</span>
+                <span class="reg-name">demod_lpf_p_shift  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_lpf_p_shift">—</span>
+                <span class="reg-name">demod_lpf_i_shift  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_lpf_i_shift">—</span>
+                <span class="reg-name">demod_sym_lock_count</span> <span class="reg-val" data-reg="demod_sym_lock_count">—</span>
+                <span class="reg-name">demod_sym_lock_threshold</span> <span class="reg-val" data-reg="demod_sym_lock_threshold">—</span>
+                <span class="reg-name">demod_gain_manual</span> <span class="reg-val" data-reg="demod_gain_manual">—</span>
+                <span class="reg-name">demod_gain_current</span> <span class="reg-val" data-reg="demod_gain_current">—</span>
+                <span class="reg-name">demod_status</span> <span class="reg-val" data-reg="demod_status">—</span>
+                <span class="reg-name">demod_frames</span> <span class="reg-val" data-reg="demod_frames">—</span>
+                <span class="reg-name">demod_fs_hunt_thresh</span> <span class="reg-val" data-reg="demod_fs_hunt_thresh">—</span>
+                <span class="reg-name">demod_fs_verify_thresh</span> <span class="reg-val" data-reg="demod_fs_verify_thresh">—</span>
+                <span class="reg-name">demod_quant_thr_1</span> <span class="reg-val" data-reg="demod_quant_thr_1">—</span>
+                <span class="reg-name">demod_quant_thr_2</span> <span class="reg-val" data-reg="demod_quant_thr_2">—</span>
+                <span class="reg-name">demod_quant_thr_3</span> <span class="reg-val" data-reg="demod_quant_thr_3">—</span>
+                <span class="reg-name">demod_demod_init</span> <span class="reg-val" data-reg="demod_demod_init">—</span>
+                <span class="reg-name">demod_loop_ctrl</span> <span class="reg-val" data-reg="demod_loop_ctrl">—</span>
+                <span class="reg-name">demod_rx_sample_discard</span> <span class="reg-val" data-reg="demod_rx_sample_discard">—</span>
+                <span class="reg-name">demod_f1_nco_adjust  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_f1_nco_adjust">—</span>
+                <span class="reg-name">demod_f2_nco_adjust  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_f2_nco_adjust">—</span>
+                <span class="reg-name">demod_f1_error  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_f1_error">—</span>
+                <span class="reg-name">demod_f2_error  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_f2_error">—</span>
+                <span class="reg-name">demod_lpf_accum_f1  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_lpf_accum_f1">—</span>
+                <span class="reg-name">demod_lpf_accum_f2  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_lpf_accum_f2">—</span>
+                <span class="reg-name">demod_cst_locktime_f1  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_cst_locktime_f1">—</span>
+                <span class="reg-name">demod_cst_locktime_f2  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_cst_locktime_f2">—</span>
+                <span class="reg-name">demod_lock_status  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_lock_status">—</span>
+                <span class="reg-name">demod_cst_acc_i_f1  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_cst_acc_i_f1">—</span>
+                <span class="reg-name">demod_cst_acc_q_f1  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_cst_acc_q_f1">—</span>
+                <span class="reg-name">demod_cst_iq_delta_f1  <em class="reg-note">(retired Costas)</em></span> <span class="reg-val" data-reg="demod_cst_iq_delta_f1">—</span>
+                <span class="reg-name">demod_sym_lock_status</span> <span class="reg-val" data-reg="demod_sym_lock_status">—</span>
+                <span class="reg-name">demod_sym_lock_thresh</span> <span class="reg-val" data-reg="demod_sym_lock_thresh">—</span>
+                <span class="reg-name">demod_sym_unlock_thresh</span> <span class="reg-val" data-reg="demod_sym_unlock_thresh">—</span>
+                <span class="reg-name">demod_sym_lock_window</span> <span class="reg-val" data-reg="demod_sym_lock_window">—</span>
+                <span class="reg-name">demod_cfo_state</span> <span class="reg-val" data-reg="demod_cfo_state">—</span>
+                <span class="reg-name">demod_cfo_estimate</span> <span class="reg-val" data-reg="demod_cfo_estimate">—</span>
+                <span class="reg-name">demod_cfo_ctrl</span> <span class="reg-val" data-reg="demod_cfo_ctrl">—</span>
+                <span class="reg-name">demod_cfo_manual</span> <span class="reg-val" data-reg="demod_cfo_manual">—</span>
+                <span class="reg-name">demod_cfo_quality</span> <span class="reg-val" data-reg="demod_cfo_quality">—</span>
+                <span class="reg-name">demod_tim_alpha</span> <span class="reg-val" data-reg="demod_tim_alpha">—</span>
+                <span class="reg-name">demod_tim_beta</span> <span class="reg-val" data-reg="demod_tim_beta">—</span>
+                <span class="reg-name">demod_sym_clk_offset</span> <span class="reg-val" data-reg="demod_sym_clk_offset">—</span>
             </div>
         </details>
 
@@ -1037,8 +1085,26 @@
             case 'derived/demod/sym_lock/ratio_pct':
                 setText('sym-ratio-pct', payload + ' %');
                 break;
+            case 'derived/demod/config/freq_word_f1':
+                setText('demod-fw-f1', payload);
+                break;
+            case 'derived/demod/config/freq_word_f2':
+                setText('demod-fw-f2', payload);
+                break;
             case 'derived/demod/sym_clk_offset/ppm_milli':
                 setText('sym-clk-ppm', payload);
+                break;
+            case 'derived/demod/cfo/state_name':
+                setText('cfo-state', payload);
+                break;
+            case 'derived/demod/cfo/est_hz':
+                setText('cfo-est-hz', payload);
+                break;
+            case 'derived/demod/cfo/quality':
+                setText('cfo-quality', payload);
+                break;
+            case 'derived/demod/cfo/auto':
+                setFlag('flag-cfo-auto', payload === '1' ? 'on' : 'err');
                 break;
             case 'derived/demod/tuning/sym_lock_pct':
                 window._slp = payload;

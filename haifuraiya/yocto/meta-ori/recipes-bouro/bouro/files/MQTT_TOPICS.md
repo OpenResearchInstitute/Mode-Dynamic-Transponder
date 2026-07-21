@@ -194,12 +194,19 @@ Derived (decimal payloads unless noted):
 | derived/demod/tuning/sym_lock_pct, sym_unlock_pct | 0x0A4/0x0A8 | percent (C++ 25/50 defaults) |
 | derived/demod/tuning/sym_window_log2 | 0x0AC | window = 2^n symbols |
 | derived/demod/tuning/tim_alpha_q16, tim_beta_q24 | 0x0C4/0x0C8 | C++ timing gains verbatim (328 / 168) |
+| derived/demod/cfo/state | 0x0B0[2:0] | AFC FSM: 0 IDLE, 1 SEARCH, 2 CORRECTING, 3 HELD, 4 LOST |
+| derived/demod/cfo/state_name | 0x0B0[2:0] | same, decoded (IDLE/SEARCH/CORRECTING/HELD/LOST) |
+| derived/demod/cfo/est_hz | 0x0B4 | applied CFO correction, SIGNED Hz; LOST retains warm |
+| derived/demod/cfo/quality | 0x0C0 | windowed dominant-tone magnitude; gate floor 512, locked ~6k-22k, bench noise 424 (2026-07-21) |
+| derived/demod/cfo/auto | 0x0B8 b0 | 1 = AFC auto mode armed (reset default) |
 
 Raw registers (hex, forensics pane): demod_version, demod_control,
 demod_status, demod_frames, demod_sym_lock_status, demod_sym_lock_thresh,
 demod_sym_unlock_thresh, demod_sym_lock_window, demod_tim_alpha,
 demod_tim_beta, demod_sym_clk_offset, demod_fs_hunt_thresh,
-demod_fs_verify_thresh, demod_quant_thr_1..3, demod_init.
+demod_fs_verify_thresh, demod_quant_thr_1..3, demod_init,
+demod_cfo_state, demod_cfo_estimate, demod_cfo_ctrl, demod_cfo_manual,
+demod_cfo_quality.
 
 RETIRED (v5 Costas relics, 0x008-0x03C / 0x060-0x09C): freq_word_f1/f2,
 lpf_*, sym_lock_count/threshold, cst_lock_f1/f2 and all related topics
