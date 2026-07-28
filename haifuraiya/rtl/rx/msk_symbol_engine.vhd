@@ -126,7 +126,56 @@ architecture rtl of msk_symbol_engine is
 
   -- position and loop state
   signal pos    : unsigned(47 downto 0) := to_unsigned(2, 32) & x"0000";
-  signal freq   : signed(31 downto 0) := (others => '0');  -- Q24 clk offset
+  signal freq   : signed(31 downto 0) := (others => '0');  -- Q24 clk offset (readback view)
+  ------------------------------------------------------------------------
+  -- PLESIOCHRONOUS FIX (2026-07-27): full-precision timing integrator.
+  --
+  -- Field evidence (2026-07-21, first OTA session, free-running Pluto TX
+  -- vs ADRV9002 RX, ~11.5 ppm symbol-clock offset):
+  --   * bad-frame pockets every 0.756 s, metronomic (mean gap 18.9 frames)
+  --   * SYM_CLK_OFFSET (0x0CC) sawtoothing +/-16 ppm around mean +4 ppm
+  --     instead of settling at the required ~+11.5 ppm (2225 Q24)
+  --   * graded Viterbi metrics (4..2100) = half-symbol slip position
+  --     uniformly distributed in the frame
+  --
+  -- Root cause: the C++ reference integrates in DOUBLE precision
+  --     (opv_demod.hpp: timing_freq_ += beta_timing_ * ted;)
+  -- while this RTL truncated per symbol:
+  --     fnew := freq + shift_right(ted * beta, 15);
+  -- With beta=168, any |ted| < 195 contributed ZERO (168>>15 = 0), and
+  -- arithmetic shift_right rounds toward -inf, so ted=-1 integrated while
+  -- ted=+1 did not: a deadzone with asymmetric bias. Small persistent
+  -- errors -- the entire diet of a ppm-scale drift -- never reached the
+  -- integrator; phase walked to a half-symbol and slipped, whose large
+  -- TED spike finally moved the integrator: the 0.756 s sawtooth.
+  --
+  -- Reference behavior at full precision (opv-mod | opv-resample |
+  -- opv-demod, same alpha/beta, measured 2026-07-27):
+  --   11.5 ppm: 149/149 perfect;  25 ppm: 149/149;  50 ppm: 147/149.
+  --
+  -- Fix: keep the integrator in Q39 (freq_full, the 15 discarded bits
+  -- restored). The full ted*beta product accumulates; truncation now
+  -- applies only to the Q24 readback slice (round-to-nearest), never to
+  -- the state -- exactly the sub-LSB drip the double provides. Clamp
+  -- unchanged in value (+/-0.1 sample), applied in the widened domain.
+  -- The alpha (proportional) path and the Q16 adj slice also gain
+  -- round-to-nearest to remove the -inf shift bias there.
+  --
+  -- Deliberately NOT changed here (one variable at a time): the C++
+  -- gates its integrators on tracking_enabled_ ("on noise the TED
+  -- chases random correlations"); this RTL has no equivalent gate.
+  -- Documented as a separate parity delta for its own commit.
+  --
+  -- Expected sim signature of success (--clock-offset-ppm 11.5 stimulus):
+  -- freq settles near +2225 Q24 and STAYS (sawtooth gone), zero slip
+  -- pockets, decode does not degrade after the first seconds.
+  -- See WP_SYMBOL_CLOCK_SLIP.
+  ------------------------------------------------------------------------
+  signal freq_full : signed(39 downto 0) := (others => '0'); -- Q39 integrator state
+  constant C_FREQ_CLAMP_FULL : signed(39 downto 0) :=
+      shift_left(to_signed(1677722, 40), 15);   -- +/-0.1 sample, Q39
+  constant C_RND15 : signed(39 downto 0) := to_signed(16384, 40);   -- 2^14
+  constant C_RND23 : signed(39 downto 0) := to_signed(4194304, 40); -- 2^22
   -- serial divider for ted = (|L-E|<<15)/(L+E), exact Q15 (|num|<den always)
   signal div_acc  : unsigned(46 downto 0) := (others => '0');
   signal div_den  : unsigned(31 downto 0) := (others => '0');
@@ -216,7 +265,8 @@ begin
     variable err        : signed(31 downto 0);
     variable ted        : signed(16 downto 0);
     variable adj        : signed(31 downto 0);
-    variable fnew       : signed(33 downto 0);
+    variable fnew       : signed(33 downto 0);   -- retired by Q39 path; kept for ports/debug if referenced
+    variable fnew_full  : signed(39 downto 0);
 
     procedure bank(ya, yb : in yset_t; sa, sb : in integer;
                    variable m : out mag4_t) is
@@ -256,6 +306,7 @@ begin
         pos   <= to_unsigned(2, 32) & x"0000";
         -- (reset body continues below)
         freq  <= (others => '0');
+        freq_full <= (others => '0');
         div_acc <= (others => '0'); div_den <= (others => '0');
         div_q <= (others => '0'); div_cnt <= (others => '0');
         ted_neg <= '0';
@@ -448,15 +499,23 @@ begin
               ted :=  signed(resize(div_q, 17));
               if div_q > 32767 then ted := to_signed( 32767, 17); end if;
             end if;
-            -- integrator: clk_off_q24 += (ted*BETA_Q24)>>15, clamp +/-0.1 smp
-            fnew := resize(freq, 34)
-                  + resize(shift_right(ted * signed(resize(cfg_tim_beta, 17)), 15), 34);
-            if fnew >  1677722 then fnew := to_signed( 1677722, 34); end if;
-            if fnew < -1677722 then fnew := to_signed(-1677722, 34); end if;
-            freq <= resize(fnew, 32);
-            -- proportional + integrator, Q16 samples; RTL guard clamp kept
-            adj := resize(shift_right(ted * signed(resize(cfg_tim_alpha, 17)), 15), 32)
-                 + resize(shift_right(fnew, 8), 32);
+            -- integrator, FULL precision: freq_full(Q39) += ted*beta,
+            -- clamp +/-0.1 smp in the widened domain. No per-symbol
+            -- truncation: sub-LSB error drips accumulate as in the C++
+            -- double (see header block). fnew_full is a variable of the
+            -- same width declared beside fnew.
+            fnew_full := freq_full
+                       + resize(ted * signed(resize(cfg_tim_beta, 17)), 40);
+            if fnew_full >  C_FREQ_CLAMP_FULL then fnew_full :=  C_FREQ_CLAMP_FULL; end if;
+            if fnew_full < -C_FREQ_CLAMP_FULL then fnew_full := -C_FREQ_CLAMP_FULL; end if;
+            freq_full <= fnew_full;
+            -- Q24 readback view (0x0CC semantics unchanged), round-to-nearest
+            freq <= resize(shift_right(fnew_full + C_RND15, 15), 32);
+            -- proportional + integrator, Q16 samples; round-to-nearest on
+            -- both slices (kills the arithmetic-shift -inf bias)
+            adj := resize(shift_right(ted * signed(resize(cfg_tim_alpha, 17))
+                                      + to_signed(16384, 34), 15), 32)
+                 + resize(shift_right(fnew_full + C_RND23, 23), 32);
             if adj >  131072 then adj := to_signed( 131072, 32); end if;
             if adj < -131072 then adj := to_signed(-131072, 32); end if;
             pos <= unsigned(signed(pos)
