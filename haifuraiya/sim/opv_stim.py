@@ -239,6 +239,12 @@ def main():
     ap.add_argument("--fs", type=float, default=20.0e6)
     ap.add_argument("--baud", type=float, default=54200.0)
     ap.add_argument("--fc", type=float, default=0.0)
+    ap.add_argument("--clock-offset-ppm", type=float, default=0.0,
+        help="TX symbol/sample clock offset in ppm (plesiochronous test: "
+             "resamples the clean waveform by 1+ppm*1e-6 BEFORE noise, "
+             "emulating a transmitter crystal running fast (+) or slow (-). "
+             "Field reference: free-running Pluto vs ADRV9002 measured "
+             "~11.5 ppm on 2026-07-21; C++ demod holds 25 ppm losslessly.)")
     ap.add_argument("--carrier-offset", type=float, default=0.0)
     ap.add_argument("--fd", type=float, default=None)
     ap.add_argument("--amp", type=float, default=9000.0)
@@ -277,6 +283,20 @@ def main():
         bits = build_bitstream(a.frames)
         s, ns = modulate_diff(bits, a.fs, a.baud, fd, a.amp, center)
 
+    # --- TX clock offset (plesiochronous stimulus) -------------------
+    # Applied to the CLEAN signal only: the clock error is the
+    # transmitter's; the receiver's noise floor keeps the receiver's
+    # clock. Linear interpolation is exact-enough here: the signal
+    # occupies ~54 kHz of a 20 Msps stimulus (~370x oversampled), so
+    # interp error sits far below the quantizer floor.
+    if a.clock_offset_ppm != 0.0:
+        ratio = 1.0 + a.clock_offset_ppm * 1e-6
+        idx = np.arange(len(s)) * ratio
+        idx = idx[idx <= len(s) - 1]
+        s = (np.interp(idx, np.arange(len(s)), s.real)
+             + 1j * np.interp(idx, np.arange(len(s)), s.imag))
+        ns = len(s)
+
     sigma = 0.0
     meas_ebn0 = None
     eff_amp = a.amp
@@ -296,6 +316,9 @@ def main():
         eff_amp = a.amp * k
     write_stimulus(a.out, s, a.fullscale)
     print(f"wrote {a.out}: {ns} samples, {len(bits)} bits")
+    if a.clock_offset_ppm != 0.0:
+        print(f"  clock off  : {a.clock_offset_ppm:+.2f} ppm TX symbol-clock "
+              f"(resampled x{1.0 + a.clock_offset_ppm*1e-6:.9f})")
     if a.bursts > 1 or a.preamble or a.idle_ms > 0:
         per = (1 if a.preamble else 0) + a.frames
         print(f"  timeline   : {a.bursts} burst(s) of "
