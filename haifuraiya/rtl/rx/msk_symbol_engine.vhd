@@ -126,7 +126,21 @@ architecture rtl of msk_symbol_engine is
 
   -- position and loop state
   signal pos    : unsigned(47 downto 0) := to_unsigned(2, 32) & x"0000";
-  signal freq   : signed(31 downto 0) := (others => '0');  -- Q24 clk offset
+  signal freq   : signed(31 downto 0) := (others => '0');  -- Q24 clk offset (readback view)
+  -- PLESIOCHRONOUS PRECISION (restored 2026-07-29 after a git-stash ate
+  -- the 2026-07-27 patch from the working copy -- see WP_SYMBOL_CLOCK_SLIP
+  -- and the plan-of-attack case file): the C++ reference integrates
+  -- timing_freq_ in DOUBLE precision; truncating (ted*beta)>>15 per
+  -- symbol creates a deadzone (|ted|<195 contributes zero at beta=168)
+  -- with arithmetic-shift -inf bias. freq_full keeps the 15 discarded
+  -- bits; truncation applies only to the Q24 readback, never the state.
+  -- Reference behavior at full precision (opv-resample, 2026-07-27):
+  -- 11.5 ppm: 149/149; 25 ppm: 149/149; 50 ppm: 147/149.
+  signal freq_full : signed(39 downto 0) := (others => '0'); -- Q39 integrator state
+  constant C_FREQ_CLAMP_FULL : signed(39 downto 0) :=
+      shift_left(to_signed(1677722, 40), 15);   -- +/-0.1 sample, Q39
+  constant C_RND15 : signed(39 downto 0) := to_signed(16384, 40);   -- 2^14
+  constant C_RND23 : signed(39 downto 0) := to_signed(4194304, 40); -- 2^22
   -- serial divider for ted = (|L-E|<<15)/(L+E), exact Q15 (|num|<den always)
   signal div_acc  : unsigned(46 downto 0) := (others => '0');
   signal div_den  : unsigned(31 downto 0) := (others => '0');
@@ -222,7 +236,8 @@ begin
     variable err        : signed(31 downto 0);
     variable ted        : signed(16 downto 0);
     variable adj        : signed(31 downto 0);
-    variable fnew       : signed(33 downto 0);
+    variable fnew       : signed(33 downto 0);   -- retired by Q39 path
+    variable fnew_full  : signed(39 downto 0);
 
     procedure bank(ya, yb : in yset_t; sa, sb : in integer;
                    variable m : out mag4_t) is
@@ -262,6 +277,7 @@ begin
         pos   <= to_unsigned(2, 32) & x"0000";
         -- (reset body continues below)
         freq  <= (others => '0');
+        freq_full <= (others => '0');
         div_acc <= (others => '0'); div_den <= (others => '0');
         div_q <= (others => '0'); div_cnt <= (others => '0');
         ted_neg <= '0';
@@ -303,8 +319,13 @@ begin
             end case;
             a1r <= (others=>'0'); a1i <= (others=>'0');
             a2r <= (others=>'0'); a2i <= (others=>'0');
-            -- stop condition mirrors the model loop guard
-            if to_integer(resize(pos(47 downto 16),32)) + G_EL + 14
+            -- stop condition mirrors the model loop guard -- BENCH ONLY.
+            -- CONTINUOUS MODE (G_NSAMP = 0): a radio has no end of
+            -- stimulus. An unconditional compare here with G_NSAMP=0 is
+            -- always true -> S_DONE on the FIRST window -> engine dead
+            -- at birth (the 0x00060100/0x00060200 flatline, QUAL==0).
+            if G_NSAMP /= 0 and
+               to_integer(resize(pos(47 downto 16),32)) + G_EL + 14
                >= G_NSAMP then
               state  <= S_DONE;
             else
@@ -456,15 +477,20 @@ begin
               ted :=  signed(resize(div_q, 17));
               if div_q > 32767 then ted := to_signed( 32767, 17); end if;
             end if;
-            -- integrator: clk_off_q24 += (ted*BETA_Q24)>>15, clamp +/-0.1 smp
-            fnew := resize(freq, 34)
-                  + resize(shift_right(ted * signed(resize(cfg_tim_beta, 17)), 15), 34);
-            if fnew >  1677722 then fnew := to_signed( 1677722, 34); end if;
-            if fnew < -1677722 then fnew := to_signed(-1677722, 34); end if;
-            freq <= resize(fnew, 32);
-            -- proportional + integrator, Q16 samples; RTL guard clamp kept
-            adj := resize(shift_right(ted * signed(resize(cfg_tim_alpha, 17)), 15), 32)
-                 + resize(shift_right(fnew, 8), 32);
+            -- integrator, FULL precision: freq_full(Q39) += ted*beta,
+            -- clamp +/-0.1 smp in the widened domain (see header note).
+            fnew_full := freq_full
+                       + resize(ted * signed(resize(cfg_tim_beta, 17)), 40);
+            if fnew_full >  C_FREQ_CLAMP_FULL then fnew_full :=  C_FREQ_CLAMP_FULL; end if;
+            if fnew_full < -C_FREQ_CLAMP_FULL then fnew_full := -C_FREQ_CLAMP_FULL; end if;
+            freq_full <= fnew_full;
+            -- Q24 readback view (0x0CC semantics unchanged), round-to-nearest
+            freq <= resize(shift_right(fnew_full + C_RND15, 15), 32);
+            -- proportional + integrator, Q16 samples; round-to-nearest on
+            -- both slices (kills the arithmetic-shift -inf bias)
+            adj := resize(shift_right(ted * signed(resize(cfg_tim_alpha, 17))
+                                      + to_signed(16384, 34), 15), 32)
+                 + resize(shift_right(fnew_full + C_RND23, 23), 32);
             if adj >  131072 then adj := to_signed( 131072, 32); end if;
             if adj < -131072 then adj := to_signed(-131072, 32); end if;
             pos <= unsigned(signed(pos)
