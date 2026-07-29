@@ -98,7 +98,7 @@ entity haifuraiya_demod_regs is
         ADDR_WIDTH    : positive := 12;   -- 4 KB window
         VERSION_MAJOR : natural  := 0;
         VERSION_MINOR : natural  := 6;    -- bumped: expanded demod control plane
-        VERSION_PATCH : natural  := 1    -- 0x00060100: wedge-cure FIFO + witnesses
+        VERSION_PATCH : natural  := 2    -- 0x00060100: wedge-cure FIFO + witnesses
     );
     port (
         aclk            : in  std_logic;

@@ -557,7 +557,17 @@ begin
             stats_clear   => soft_stats_clear );
 
     u_soft_fifo : entity work.axis_async_fifo
-        generic map ( DATA_WIDTH => 3, ADDR_WIDTH => 18, FRAME_SIZE => 2144 )
+        generic map ( DATA_WIDTH => 3, ADDR_WIDTH => 18,
+                      -- FRAME_SIZE sets the prog_full threshold. TWO frames
+                      -- (4288), not one: prog_full is registered (~2 cycles
+                      -- stale) and this stream is GAPLESS -- the decision
+                      -- beat of frame N+1 lands 1 cycle after frame N's
+                      -- tlast. A one-frame threshold let that staleness
+                      -- admit an unfittable frame at the brim (tready_viol
+                      -- fired on first-night hardware, 2026-07-28). Two
+                      -- frames of headroom makes 2-cycle staleness need to
+                      -- span 2144 beats to lie. Usable depth 122 -> 121.
+                      FRAME_SIZE => 4288 )
         port map (
             wr_aclk => aclk, wr_aresetn => aresetn,
             s_axis_tdata  => gate_tdata,

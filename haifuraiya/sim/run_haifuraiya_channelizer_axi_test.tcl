@@ -89,6 +89,8 @@ safe_add_files sources_1 {
     ../rtl/rx/frame_sync_detector_soft.vhd
     ../rtl/rx/haifuraiya_demod_regs.vhd
     ../rtl/rx/channel_normalizer.vhd
+    ../rtl/rx/frame_drop_gate.vhd
+    ../rtl/rx/axis_async_fifo.vhd
     ../rtl/rx/haifuraiya_rx_top.vhd
     ../rtl/rx/haifuraiya_rx_axi.vhd
 }

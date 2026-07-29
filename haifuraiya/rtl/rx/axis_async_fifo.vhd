@@ -1,25 +1,3 @@
-----------------------------------------------------------------------------
--- PROVENANCE (Mode-Dynamic-Transponder copy -- read before editing):
---   Source     : github.com/OpenResearchInstitute/pluto_msk
---   Path       : src/axis_async_fifo.vhd
---   Commit     : 59ec3ace8bbb08dd3617ea09812487cb8e13ba33
---   Authored   : 2026-01-08 (Abraxas3d)
---   Copied     : 2026-07-28, for the wedge cure (WP_SOFTBIT_DROP_FIFO):
---                storage + handshake behind frame_drop_gate.vhd in the
---                RX soft-bit path. Deployed SINGLE-CLOCK (both domains
---                tied to the demod aclk); the CDC machinery is benign
---                and unexercised in this use.
---   Rule       : fixes belong UPSTREAM in pluto_msk first, then re-copy
---                with a new SHA. Do not let the copies drift silently --
---                2026-07-21's format bug is what silent drift costs.
---
--- MEASURED CONTRACT (tb_frame_drop_gate gauntlet, 2026-07-28):
---   prog_full's boundary sacrifices one entry: usable whole-frame
---   capacity = floor((DEPTH-1)/FRAME_SIZE). At the deployed geometry
---   (DATA_WIDTH=3, ADDR_WIDTH=18, FRAME_SIZE=2144) that is 122 frames
---   ~= 4.9 s of buffering at 25 fps. prog_full LOW at frame start
---   guarantees a complete frame fits (see original header, ~line 95 below).
-----------------------------------------------------------------------------
 ------------------------------------------------------------------------------------------------------
 -- AXIS-Compliant Asynchronous FIFO
 ------------------------------------------------------------------------------------------------------
@@ -193,18 +171,31 @@ ARCHITECTURE rtl OF axis_async_fifo IS
     ---------------------------------------------------------------------------
 
     -- Resolve frame size: use 1 if FRAME_SIZE is 0 to avoid zero thresholds
-    CONSTANT FRAME_SIZE_RESOLVED : NATURAL := maximum(FRAME_SIZE, 1);
+    -- PORTABILITY (MDT copy, 2026-07-28): minimum/maximum are VHDL-2008
+    -- predefined functions; Vivado synthesis compiles IP files as VHDL-93
+    -- and rejects them (Synth 8-36). Local helpers below are dialect-proof
+    -- and behavior-identical. Candidate for upstream (pluto_msk) too.
+    FUNCTION f_min(a, b : NATURAL) RETURN NATURAL IS
+    BEGIN
+        IF a < b THEN RETURN a; ELSE RETURN b; END IF;
+    END FUNCTION;
+    FUNCTION f_max(a, b : NATURAL) RETURN NATURAL IS
+    BEGIN
+        IF a > b THEN RETURN a; ELSE RETURN b; END IF;
+    END FUNCTION;
+
+    CONSTANT FRAME_SIZE_RESOLVED : NATURAL := f_max(FRAME_SIZE, 1);
 
     -- Programmable Full Threshold
     -- Asserts prog_full when remaining space drops below one frame.
     -- Clamped to DEPTH for edge case where DEPTH < FRAME_SIZE.
-    CONSTANT PROG_FULL_THRESHOLD : NATURAL := minimum(FRAME_SIZE_RESOLVED, DEPTH);
+    CONSTANT PROG_FULL_THRESHOLD : NATURAL := f_min(FRAME_SIZE_RESOLVED, DEPTH);
     
     -- Programmable Empty Threshold  
     -- Asserts prog_empty when fill level drops below two frames.
     -- Provides margin for upstream latency to refill before starvation.
     CONSTANT FRAMES_UNTIL_EMPTY_ALERT : NATURAL := 2;
-    CONSTANT PROG_EMPTY_THRESHOLD : NATURAL := minimum(
+    CONSTANT PROG_EMPTY_THRESHOLD : NATURAL := f_min(
         FRAMES_UNTIL_EMPTY_ALERT * FRAME_SIZE_RESOLVED,
         DEPTH  -- Can't alert for more than the FIFO holds
     );
@@ -215,6 +206,16 @@ ARCHITECTURE rtl OF axis_async_fifo IS
     
     SIGNAL ram_data : ram_data_type;
     SIGNAL ram_last : ram_last_type;
+    -- MDT PORTABILITY (2026-07-28): at ADDR_WIDTH=18 the original two-address
+    -- read (STATE A: rd_ptr, STATE B: rd_ptr_next, same process) exceeds a
+    -- block RAM's single read port, so Vivado fell back to distributed
+    -- LUT-RAM -- a die-wide sprawl that failed timing by -0.8 ns of pure
+    -- route. Reads are collapsed below to one enable + one muxed address
+    -- (semantics identical, branch-exclusive) and the arrays are pinned to
+    -- block RAM. Candidate for upstream (pluto_msk); harmless at any depth.
+    ATTRIBUTE ram_style : string;
+    ATTRIBUTE ram_style OF ram_data : SIGNAL IS "block";
+    ATTRIBUTE ram_style OF ram_last : SIGNAL IS "block";
     
     -- Gray code pointers (reset-initialized in respective clock domains)
     SIGNAL wr_ptr_gray      : std_logic_vector(ADDR_WIDTH DOWNTO 0);
@@ -355,6 +356,8 @@ BEGIN
     read_proc: PROCESS(rd_aclk)
         VARIABLE rd_ptr_bin_next : std_logic_vector(ADDR_WIDTH DOWNTO 0);
         VARIABLE empty_current : std_logic;
+        VARIABLE rd_do_v   : std_logic;
+        VARIABLE rd_addr_v : std_logic_vector(ADDR_WIDTH-1 DOWNTO 0);
     BEGIN
         IF rising_edge(rd_aclk) THEN
             IF rd_aresetn = '0' THEN
@@ -379,6 +382,7 @@ BEGIN
                 -- Now becomes:
                 --   wr_ptr_gray_sync2 -> gray_to_bin -> wr_ptr_bin_sync (REG)
                 --   wr_ptr_bin_sync -> comparison -> m_axis_tdata
+                rd_do_v := '0';
                 wr_ptr_bin_sync <= gray_to_bin(wr_ptr_gray_sync2);
                 
                 -- Check if FIFO is currently empty (now uses registered wr_ptr_bin_sync)
@@ -395,8 +399,8 @@ BEGIN
                 -- STATE A: Becoming valid (was invalid, now have data)
                 -- Action: Present first byte, assert tvalid, DO NOT advance pointer
                 IF tvalid_int = '0' AND empty_current = '0' THEN
-                    m_axis_tdata <= ram_data(to_integer(unsigned(rd_ptr_bin(ADDR_WIDTH-1 DOWNTO 0))));
-                    m_axis_tlast <= ram_last(to_integer(unsigned(rd_ptr_bin(ADDR_WIDTH-1 DOWNTO 0))));
+                    rd_do_v   := '1';
+                    rd_addr_v := rd_ptr_bin(ADDR_WIDTH-1 DOWNTO 0);
                     tvalid_int <= '1';
                     -- rd_ptr_bin stays same! This is the first presentation
                 
@@ -416,8 +420,8 @@ BEGIN
                     ELSE
                         -- More data available - present next byte
                         tvalid_int <= '1';
-                        m_axis_tdata <= ram_data(to_integer(unsigned(rd_ptr_bin_next(ADDR_WIDTH-1 DOWNTO 0))));
-                        m_axis_tlast <= ram_last(to_integer(unsigned(rd_ptr_bin_next(ADDR_WIDTH-1 DOWNTO 0))));
+                        rd_do_v   := '1';
+                        rd_addr_v := rd_ptr_bin_next(ADDR_WIDTH-1 DOWNTO 0);
                     END IF;
                 
                 -- STATE C: Valid but NOT ready (tvalid='1', tready='0')
@@ -431,6 +435,13 @@ BEGIN
                     tvalid_int <= '0';
                     m_axis_tlast <= '0';
                     m_axis_tdata <= (OTHERS => '0');
+                END IF;
+
+                -- single-port synchronous read (BRAM template): exactly the
+                -- value the removed inline reads would have produced.
+                IF rd_do_v = '1' THEN
+                    m_axis_tdata <= ram_data(to_integer(unsigned(rd_addr_v)));
+                    m_axis_tlast <= ram_last(to_integer(unsigned(rd_addr_v)));
                 END IF;
                 
                 -- Programmable empty (uses registered wr_ptr_bin_sync)

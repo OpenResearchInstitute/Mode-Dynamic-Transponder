@@ -108,6 +108,7 @@ architecture rtl of msk_demodulator_mlse is
   signal mem_word : std_logic_vector(31 downto 0);
   signal mem_i, mem_q : signed(15 downto 0);
   signal hold     : std_logic;
+  signal hold_lead : unsigned(23 downto 0);
 
   -- engine <-> mlse
   signal e_valid  : std_logic;
@@ -153,14 +154,26 @@ begin
 
   -- stall the engine while any sample its current symbol could touch
   -- (up to pos+wlen+EL+2 <= pos+16) has not yet been written
-  hold <= '1' when resize(e_pos(39 downto 16), 24) + 16 > wr_n else '0';
+  -- wrap-safe modular lead: writer minus reader in mod-2^24 arithmetic.
+  -- GUARDED WINDOW (2026-07-29 fix): the engine's pos initializes at
+  -- EL+1 (= 2), AHEAD of wr_n = 0, so the raw modular lead wraps to
+  -- ~2^24 at startup; an unguarded (lead < 16) then RELEASES hold and
+  -- the engine free-runs an empty ring forever (QUAL identically 0 --
+  -- the dead-at-birth bitstream of 2026-07-29 AM). Lead MSB set means
+  -- the reader is at or ahead of the writer: hold for that half-space
+  -- too. Healthy operation lives in lead = 16..63; both guards are
+  -- far from it.
+  hold_lead <= wr_n - resize(e_pos(39 downto 16), 24);
+  hold <= '1' when (hold_lead < 16) or (hold_lead(23) = '1') else '0';
 
   ------------------------------------------------------------------
   -- the two verified blocks
   ------------------------------------------------------------------
   engine: entity work.msk_symbol_engine
     generic map (
-      G_NSAMP    => 16777200            -- effectively unbounded (see wrap note)
+      G_NSAMP    => 0                   -- CONTINUOUS: a radio has no end of
+                                        -- stimulus. 16777200 here was the
+                                        -- 26.84 s bench-freeze fuse (2026-07-28).
     )
     port map (
       clk => clk, rst => init, hold => hold,

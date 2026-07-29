@@ -126,56 +126,7 @@ architecture rtl of msk_symbol_engine is
 
   -- position and loop state
   signal pos    : unsigned(47 downto 0) := to_unsigned(2, 32) & x"0000";
-  signal freq   : signed(31 downto 0) := (others => '0');  -- Q24 clk offset (readback view)
-  ------------------------------------------------------------------------
-  -- PLESIOCHRONOUS FIX (2026-07-27): full-precision timing integrator.
-  --
-  -- Field evidence (2026-07-21, first OTA session, free-running Pluto TX
-  -- vs ADRV9002 RX, ~11.5 ppm symbol-clock offset):
-  --   * bad-frame pockets every 0.756 s, metronomic (mean gap 18.9 frames)
-  --   * SYM_CLK_OFFSET (0x0CC) sawtoothing +/-16 ppm around mean +4 ppm
-  --     instead of settling at the required ~+11.5 ppm (2225 Q24)
-  --   * graded Viterbi metrics (4..2100) = half-symbol slip position
-  --     uniformly distributed in the frame
-  --
-  -- Root cause: the C++ reference integrates in DOUBLE precision
-  --     (opv_demod.hpp: timing_freq_ += beta_timing_ * ted;)
-  -- while this RTL truncated per symbol:
-  --     fnew := freq + shift_right(ted * beta, 15);
-  -- With beta=168, any |ted| < 195 contributed ZERO (168>>15 = 0), and
-  -- arithmetic shift_right rounds toward -inf, so ted=-1 integrated while
-  -- ted=+1 did not: a deadzone with asymmetric bias. Small persistent
-  -- errors -- the entire diet of a ppm-scale drift -- never reached the
-  -- integrator; phase walked to a half-symbol and slipped, whose large
-  -- TED spike finally moved the integrator: the 0.756 s sawtooth.
-  --
-  -- Reference behavior at full precision (opv-mod | opv-resample |
-  -- opv-demod, same alpha/beta, measured 2026-07-27):
-  --   11.5 ppm: 149/149 perfect;  25 ppm: 149/149;  50 ppm: 147/149.
-  --
-  -- Fix: keep the integrator in Q39 (freq_full, the 15 discarded bits
-  -- restored). The full ted*beta product accumulates; truncation now
-  -- applies only to the Q24 readback slice (round-to-nearest), never to
-  -- the state -- exactly the sub-LSB drip the double provides. Clamp
-  -- unchanged in value (+/-0.1 sample), applied in the widened domain.
-  -- The alpha (proportional) path and the Q16 adj slice also gain
-  -- round-to-nearest to remove the -inf shift bias there.
-  --
-  -- Deliberately NOT changed here (one variable at a time): the C++
-  -- gates its integrators on tracking_enabled_ ("on noise the TED
-  -- chases random correlations"); this RTL has no equivalent gate.
-  -- Documented as a separate parity delta for its own commit.
-  --
-  -- Expected sim signature of success (--clock-offset-ppm 11.5 stimulus):
-  -- freq settles near +2225 Q24 and STAYS (sawtooth gone), zero slip
-  -- pockets, decode does not degrade after the first seconds.
-  -- See WP_SYMBOL_CLOCK_SLIP.
-  ------------------------------------------------------------------------
-  signal freq_full : signed(39 downto 0) := (others => '0'); -- Q39 integrator state
-  constant C_FREQ_CLAMP_FULL : signed(39 downto 0) :=
-      shift_left(to_signed(1677722, 40), 15);   -- +/-0.1 sample, Q39
-  constant C_RND15 : signed(39 downto 0) := to_signed(16384, 40);   -- 2^14
-  constant C_RND23 : signed(39 downto 0) := to_signed(4194304, 40); -- 2^22
+  signal freq   : signed(31 downto 0) := (others => '0');  -- Q24 clk offset
   -- serial divider for ted = (|L-E|<<15)/(L+E), exact Q15 (|num|<den always)
   signal div_acc  : unsigned(46 downto 0) := (others => '0');
   signal div_den  : unsigned(31 downto 0) := (others => '0');
@@ -211,6 +162,12 @@ architecture rtl of msk_symbol_engine is
 
   signal y_valid_i : std_logic := '0';
   signal done_i    : std_logic := '0';
+  -- CONTINUOUS MODE (2026-07-28): position wraps mod 2^24; tone phase
+  -- stays continuous by accumulating the wrap residue of G_INC32*2^24
+  -- (= (G_INC32 mod 256) << 24 in 32-bit phase) into ph_base.
+  signal ph_base   : unsigned(31 downto 0) := (others => '0');
+  constant C_WRAP_RES : unsigned(31 downto 0)
+      := to_unsigned(G_INC32 mod 256, 8) & to_unsigned(0, 24);
   signal sym_out   : unsigned(23 downto 0) := (others => '0');
 
   -- amax + (3/8)min on 25-bit sums
@@ -265,8 +222,7 @@ begin
     variable err        : signed(31 downto 0);
     variable ted        : signed(16 downto 0);
     variable adj        : signed(31 downto 0);
-    variable fnew       : signed(33 downto 0);   -- retired by Q39 path; kept for ports/debug if referenced
-    variable fnew_full  : signed(39 downto 0);
+    variable fnew       : signed(33 downto 0);
 
     procedure bank(ya, yb : in yset_t; sa, sb : in integer;
                    variable m : out mag4_t) is
@@ -306,7 +262,6 @@ begin
         pos   <= to_unsigned(2, 32) & x"0000";
         -- (reset body continues below)
         freq  <= (others => '0');
-        freq_full <= (others => '0');
         div_acc <= (others => '0'); div_den <= (others => '0');
         div_q <= (others => '0'); div_cnt <= (others => '0');
         ted_neg <= '0';
@@ -317,6 +272,7 @@ begin
         widx  <= 0;
         prev_valid <= '0';
         done_i     <= '0';
+        ph_base    <= (others => '0');
       elsif hold = '0' then
         e_err_v <= '0';                      -- one-cycle strobe default
         case state is
@@ -358,7 +314,8 @@ begin
           when S_MAC_A =>
             -- address phase: fold NCO phase, register ROM output next
             -- edge; capture the sample pair aligned with the ROM data
-            ph32 := resize(to_unsigned(G_INC32, 32) * resize(n_cur, 32), 64);
+            ph32 := resize(to_unsigned(G_INC32, 32) * resize(n_cur, 32), 64)
+                    + resize(ph_base, 64);
             fold_phase(unsigned(ph32(31 downto 16)), vaddr, vcneg, vsneg);
             -- synchronous ROM read in the address phase: data registered
             -- on THIS edge, valid when S_MAC_B executes next edge
@@ -499,23 +456,15 @@ begin
               ted :=  signed(resize(div_q, 17));
               if div_q > 32767 then ted := to_signed( 32767, 17); end if;
             end if;
-            -- integrator, FULL precision: freq_full(Q39) += ted*beta,
-            -- clamp +/-0.1 smp in the widened domain. No per-symbol
-            -- truncation: sub-LSB error drips accumulate as in the C++
-            -- double (see header block). fnew_full is a variable of the
-            -- same width declared beside fnew.
-            fnew_full := freq_full
-                       + resize(ted * signed(resize(cfg_tim_beta, 17)), 40);
-            if fnew_full >  C_FREQ_CLAMP_FULL then fnew_full :=  C_FREQ_CLAMP_FULL; end if;
-            if fnew_full < -C_FREQ_CLAMP_FULL then fnew_full := -C_FREQ_CLAMP_FULL; end if;
-            freq_full <= fnew_full;
-            -- Q24 readback view (0x0CC semantics unchanged), round-to-nearest
-            freq <= resize(shift_right(fnew_full + C_RND15, 15), 32);
-            -- proportional + integrator, Q16 samples; round-to-nearest on
-            -- both slices (kills the arithmetic-shift -inf bias)
-            adj := resize(shift_right(ted * signed(resize(cfg_tim_alpha, 17))
-                                      + to_signed(16384, 34), 15), 32)
-                 + resize(shift_right(fnew_full + C_RND23, 23), 32);
+            -- integrator: clk_off_q24 += (ted*BETA_Q24)>>15, clamp +/-0.1 smp
+            fnew := resize(freq, 34)
+                  + resize(shift_right(ted * signed(resize(cfg_tim_beta, 17)), 15), 34);
+            if fnew >  1677722 then fnew := to_signed( 1677722, 34); end if;
+            if fnew < -1677722 then fnew := to_signed(-1677722, 34); end if;
+            freq <= resize(fnew, 32);
+            -- proportional + integrator, Q16 samples; RTL guard clamp kept
+            adj := resize(shift_right(ted * signed(resize(cfg_tim_alpha, 17)), 15), 32)
+                 + resize(shift_right(fnew, 8), 32);
             if adj >  131072 then adj := to_signed( 131072, 32); end if;
             if adj < -131072 then adj := to_signed(-131072, 32); end if;
             pos <= unsigned(signed(pos)
@@ -530,6 +479,15 @@ begin
             done_i <= '1';
 
         end case;
+
+        -- position wrap normalization (continuous mode): int part >= 2^24
+        -- -> subtract 2^24 (Q16) and bump the phase base by the residue.
+        -- May land one cycle after an FSM pos update; n_cur views are
+        -- mod-2^24 by construction so the interim value is harmless.
+        if pos(47 downto 40) /= x"00" then
+          pos     <= pos - shift_left(to_unsigned(1, 48), 40);
+          ph_base <= ph_base + C_WRAP_RES;
+        end if;
       end if;
     end if;
   end process;
