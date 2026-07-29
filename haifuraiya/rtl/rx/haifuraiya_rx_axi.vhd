@@ -171,6 +171,10 @@ architecture rtl of haifuraiya_rx_axi is
     signal cfg_tim_alpha        : std_logic_vector(15 downto 0);
     signal cfg_tim_beta         : std_logic_vector(15 downto 0);
     signal sts_sym_clk_offset   : std_logic_vector(31 downto 0);
+    signal sts_soft_dropped     : std_logic_vector(31 downto 0);
+    signal sts_soft_ovf         : std_logic;
+    signal sts_soft_viol        : std_logic;
+    signal ctl_soft_clear       : std_logic;
     signal sts_frames_received    : std_logic_vector(31 downto 0);
     signal sts_cst_lock_f1        : std_logic;
     signal sts_cst_lock_f2        : std_logic;
@@ -316,7 +320,11 @@ begin
             cfo_quality           => sts_cfo_quality,
             tim_alpha             => cfg_tim_alpha,
             tim_beta              => cfg_tim_beta,
-            sym_clk_offset        => sts_sym_clk_offset
+            sym_clk_offset        => sts_sym_clk_offset,
+            soft_dropped          => sts_soft_dropped,
+            soft_ovf_sticky       => sts_soft_ovf,
+            soft_tready_viol      => sts_soft_viol,
+            soft_stats_clear      => ctl_soft_clear
         );
 
     ---------------------------------------------------------------------------
@@ -384,6 +392,10 @@ begin
             tim_alpha         => cfg_tim_alpha,
             tim_beta          => cfg_tim_beta,
             sym_clk_offset    => sts_sym_clk_offset,
+            soft_dropped      => sts_soft_dropped,
+            soft_ovf_sticky   => sts_soft_ovf,
+            soft_tready_viol  => sts_soft_viol,
+            soft_stats_clear  => ctl_soft_clear,
             sl_pct_lock       => cfg_sl_pct_lock,
             sl_pct_unlock     => cfg_sl_pct_unlock,
             sl_window_log2    => cfg_sl_window_log2,

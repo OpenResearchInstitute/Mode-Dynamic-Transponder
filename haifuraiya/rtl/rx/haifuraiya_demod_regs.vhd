@@ -98,7 +98,7 @@ entity haifuraiya_demod_regs is
         ADDR_WIDTH    : positive := 12;   -- 4 KB window
         VERSION_MAJOR : natural  := 0;
         VERSION_MINOR : natural  := 6;    -- bumped: expanded demod control plane
-        VERSION_PATCH : natural  := 0
+        VERSION_PATCH : natural  := 1    -- 0x00060100: wedge-cure FIFO + witnesses
     );
     port (
         aclk            : in  std_logic;
@@ -198,7 +198,11 @@ entity haifuraiya_demod_regs is
         cfo_quality       : in  std_logic_vector(15 downto 0);
         tim_alpha         : out std_logic_vector(15 downto 0);
         tim_beta          : out std_logic_vector(15 downto 0);
-        sym_clk_offset    : in  std_logic_vector(31 downto 0)
+        sym_clk_offset    : in  std_logic_vector(31 downto 0);
+        soft_dropped      : in  std_logic_vector(31 downto 0);
+        soft_ovf_sticky   : in  std_logic;
+        soft_tready_viol  : in  std_logic;
+        soft_stats_clear  : out std_logic
     );
 end entity haifuraiya_demod_regs;
 
@@ -240,6 +244,7 @@ architecture rtl of haifuraiya_demod_regs is
     -- nearest power of two to the C++ afc_alpha 0.001 -- 2.3% low,
     -- register-adjustable), [23:16] alpha_acq SHIFT (6 -> 16x track,
     -- provisional per decision 2). Consumed by the step-2 AFC estimator.
+    signal soft_stats_clear_i : std_logic := '0';
     signal reg_cfo_ctrl         : std_logic_vector(31 downto 0) := x"00060A01";
     signal reg_cfo_manual       : std_logic_vector(15 downto 0) := x"0000";
     -- timing-loop coefficients, defaults = C++ constants verbatim:
@@ -297,6 +302,9 @@ architecture rtl of haifuraiya_demod_regs is
     constant ADDR_TIM_ALPHA        : std_logic_vector(11 downto 0) := x"0C4";
     constant ADDR_TIM_BETA         : std_logic_vector(11 downto 0) := x"0C8";
     constant ADDR_SYM_CLK_OFFSET   : std_logic_vector(11 downto 0) := x"0CC";
+    -- WEDGE CURE witnesses (WP_SOFTBIT_DROP_FIFO)
+    constant ADDR_SOFT_DROPPED     : std_logic_vector(11 downto 0) := x"0D0";  -- RO drop count
+    constant ADDR_SOFT_STATUS      : std_logic_vector(11 downto 0) := x"0D4";  -- RO {1:viol,0:ovf}; any write clears
     constant ADDR_LOOP_CTRL        : std_logic_vector(11 downto 0) := x"060";
     constant ADDR_RX_SAMPLE_DISCARD: std_logic_vector(11 downto 0) := x"064";
     -- NEW: demod telemetry (read-only)
@@ -338,6 +346,8 @@ architecture rtl of haifuraiya_demod_regs is
     signal r_data_int     : std_logic_vector(31 downto 0) := (others => '0');
 
 begin
+
+    soft_stats_clear <= soft_stats_clear_i;
 
     cfo_ctrl         <= reg_cfo_ctrl;
     cfo_manual       <= reg_cfo_manual;
@@ -387,6 +397,7 @@ begin
     p_write : process(aclk)
     begin
         if rising_edge(aclk) then
+                soft_stats_clear_i <= '0';
             if aresetn = '0' then
                 w_state                <= W_IDLE;
                 latched_awaddr         <= (others => '0');
@@ -492,6 +503,8 @@ begin
                                 reg_tim_alpha <= s_axi_wdata(15 downto 0);
                             when ADDR_TIM_BETA =>
                                 reg_tim_beta <= s_axi_wdata(15 downto 0);
+                            when ADDR_SOFT_STATUS =>
+                                soft_stats_clear_i <= '1';   -- W1C-any: one-cycle pulse
                             when ADDR_FS_HUNT_THRESH =>
                                 reg_fs_hunt_thresh <= s_axi_wdata(31 downto 0);
                             when ADDR_FS_VERIFY_THRESH =>
@@ -640,6 +653,10 @@ begin
                                 r_data_int(15 downto 0) <= reg_tim_beta;
                             when ADDR_SYM_CLK_OFFSET =>
                                 r_data_int <= sym_clk_offset;
+                            when ADDR_SOFT_DROPPED =>
+                                r_data_int <= soft_dropped;
+                            when ADDR_SOFT_STATUS =>
+                                r_data_int <= (0 => soft_ovf_sticky, 1 => soft_tready_viol, others => '0');
                             when ADDR_FS_HUNT_THRESH =>
                                 r_data_int <= reg_fs_hunt_thresh;
                             when ADDR_FS_VERIFY_THRESH =>

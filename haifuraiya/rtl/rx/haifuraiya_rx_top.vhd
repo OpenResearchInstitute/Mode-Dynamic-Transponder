@@ -47,6 +47,10 @@ entity haifuraiya_rx_top is
         m_axis_soft_bit_tvalid : out std_logic;
         m_axis_soft_bit_tready : in  std_logic;
         m_axis_soft_bit_tlast  : out std_logic;
+        soft_dropped           : out std_logic_vector(31 downto 0);
+        soft_ovf_sticky        : out std_logic;
+        soft_tready_viol       : out std_logic;
+        soft_stats_clear       : in  std_logic;
 
         -- channelizer AXI-Lite control (pass through to PS)
         s_axi_ctrl_awaddr  : in  std_logic_vector(C_S_AXI_CTRL_ADDR_WIDTH-1 downto 0);
@@ -223,7 +227,22 @@ architecture rtl of haifuraiya_rx_top is
     signal prod_q_g : signed(32 downto 0);
     signal gi, gq   : signed(15 downto 0);
 
+    -- WEDGE CURE plumbing
+    signal fsync_soft_tdata  : std_logic_vector(2 downto 0);
+    signal fsync_soft_tvalid : std_logic;
+    signal fsync_soft_tlast  : std_logic;
+    signal gate_tdata        : std_logic_vector(2 downto 0);
+    signal gate_tvalid       : std_logic;
+    signal gate_tlast        : std_logic;
+    signal soft_prog_full    : std_logic;
+    signal soft_fifo_tready  : std_logic;
+    signal soft_dropped_u    : unsigned(31 downto 0);
+
 begin
+
+    soft_dropped <= std_logic_vector(soft_dropped_u);
+
+
 
     tim_a_u        <= unsigned(tim_alpha);
     tim_b_u        <= unsigned(tim_beta);
@@ -479,10 +498,12 @@ begin
             m_axis_tready => '1',         -- byte path unused; let it drain
             m_axis_tlast  => open,
 
-            m_axis_soft_bit_tdata  => m_axis_soft_bit_tdata,
-            m_axis_soft_bit_tvalid => m_axis_soft_bit_tvalid,
-            m_axis_soft_bit_tready => m_axis_soft_bit_tready,
-            m_axis_soft_bit_tlast  => m_axis_soft_bit_tlast,
+            -- WEDGE CURE: fsync now feeds the frame_drop_gate + FIFO
+            -- (soft path never backpressures the detector; tready ends here)
+            m_axis_soft_bit_tdata  => fsync_soft_tdata,
+            m_axis_soft_bit_tvalid => fsync_soft_tvalid,
+            m_axis_soft_bit_tready => '1',
+            m_axis_soft_bit_tlast  => fsync_soft_tlast,
 
             hunting_threshold_i    => fs_hunt_thresh,
             locked_threshold_i     => fs_verify_thresh,
@@ -512,6 +533,47 @@ begin
             debug_corr_peak      => sig_fs_corr_peak,
             debug_soft_quantized => dbg_fs_soft_q
         );
+
+    ------------------------------------------------------------------
+    -- WEDGE CURE (WP_SOFTBIT_DROP_FIFO): frame_drop_gate + proven
+    -- axis_async_fifo (pluto_msk) between the detector and the world.
+    -- THE DEMODULATOR NEVER SEES DOWNSTREAM TREADY.
+    ------------------------------------------------------------------
+    u_soft_gate : entity work.frame_drop_gate
+        generic map ( G_FRAME_BEATS => 2144 )
+        port map (
+            clk => aclk, rst => reset_h,
+            s_tdata  => fsync_soft_tdata,
+            s_tvalid => fsync_soft_tvalid,
+            s_tlast  => fsync_soft_tlast,
+            m_tdata  => gate_tdata,
+            m_tvalid => gate_tvalid,
+            m_tlast  => gate_tlast,
+            prog_full   => soft_prog_full,
+            fifo_tready => soft_fifo_tready,
+            dropped_count => soft_dropped_u,
+            ovf_sticky    => soft_ovf_sticky,
+            tready_viol   => soft_tready_viol,
+            stats_clear   => soft_stats_clear );
+
+    u_soft_fifo : entity work.axis_async_fifo
+        generic map ( DATA_WIDTH => 3, ADDR_WIDTH => 18, FRAME_SIZE => 2144 )
+        port map (
+            wr_aclk => aclk, wr_aresetn => aresetn,
+            s_axis_tdata  => gate_tdata,
+            s_axis_tvalid => gate_tvalid,
+            s_axis_tready => soft_fifo_tready,
+            s_axis_tlast  => gate_tlast,
+            rd_aclk => aclk, rd_aresetn => aresetn,
+            m_axis_tdata  => m_axis_soft_bit_tdata,
+            m_axis_tvalid => m_axis_soft_bit_tvalid,
+            m_axis_tready => m_axis_soft_bit_tready,
+            m_axis_tlast  => m_axis_soft_bit_tlast,
+            prog_full  => soft_prog_full,
+            prog_empty => open,
+            status_aclk => aclk, status_aresetn => aresetn,
+            status_req => '0', status_ack => open,
+            fifo_wr_ptr => open, fifo_rd_ptr => open );
 
 end architecture rtl;
 
