@@ -212,3 +212,14 @@ RETIRED (v5 Costas relics, 0x008-0x03C / 0x060-0x09C): freq_word_f1/f2,
 lpf_*, sym_lock_count/threshold, cst_lock_f1/f2 and all related topics
 are no longer published or displayed. Addresses are reserved read-zero
 per map v6; stale software reads zeros, never plausible values.
+
+## v0.4 additions (wedge-cure witnesses; require demod VERSION 0x00060100)
+
+- `haifuraiya/registers/demod_soft_dropped` -- 0x0D0, RO monotonic count of
+  frames swallowed by the frame_drop_gate. Healthy steady-state: 0.
+- `haifuraiya/registers/demod_soft_status` -- 0x0D4, b0 = overflow sticky
+  (any drop since clear), b1 = tready violation (design invariant breach;
+  must never assert). Any write to the register clears both.
+- Not published on v6.0 (0x00060000) silicon: topics simply absent, panel
+  shows the em-dash. The dashboard never displays a register the fabric
+  does not have.

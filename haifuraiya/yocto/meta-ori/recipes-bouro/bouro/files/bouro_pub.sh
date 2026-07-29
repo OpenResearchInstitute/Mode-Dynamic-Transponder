@@ -34,13 +34,14 @@ set -u
 ADDR_BASE=0x84A70000             # Channelizer AXI-Lite base (from Phase 3 build)
 EXPECTED_VERSION=0x00010000      # v0.1.0 magic — refuse to start otherwise
 INTERVAL=1                       # seconds between cycles
-PUB_VERSION="0.3"
+PUB_VERSION="0.4"
 
 N_CHANNELS=64
 CHANNEL_BASE_OFFSET=0x100        # CHANNEL_POWER_N at 0x100 + 4*N
 
 DEMOD_BASE=0x84A80000            # Demod / frame-sync AXI-Lite base (rx_axi demod_regs)
-DEMOD_EXPECTED_VERSION=0x00060000  # map v6 -- consumers gate on this (REGISTER_MAP_V6.md)
+DEMOD_EXPECTED_VERSION=0x00060100  # map v6.1: wedge-cure witnesses (0x0D0/0x0D4)
+DEMOD_LEGACY_VERSION=0x00060000    # v6.0 accepted; witness topics simply absent
 
 # State across cycles (wrap-aware delta computation for monotonic counters).
 # Empty on first cycle → first delta published as 0.
@@ -258,7 +259,8 @@ publish_demod() {
     VAL_HEX=$(read_demod_hex 0x00)
     if [ -n "$VAL_HEX" ]; then
         pub_register "demod_version" "$VAL_HEX"
-        if [ "$VAL_HEX" = "$DEMOD_EXPECTED_VERSION" ]; then
+        DEMOD_VERSION_SEEN="$VAL_HEX"
+        if [ "$VAL_HEX" = "$DEMOD_EXPECTED_VERSION" ] || [ "$VAL_HEX" = "$DEMOD_LEGACY_VERSION" ]; then
             pub_derived "demod/signature" "OK"
         else
             pub_derived "demod/signature" "WRONG"
@@ -407,6 +409,18 @@ publish_demod() {
         VAL_HEX=$(read_demod_hex $OFF)
         [ -n "$VAL_HEX" ] && pub_register "demod_$NAME" "$VAL_HEX"
     done
+
+    # ---- WEDGE-CURE WITNESSES (v6.1+, VERSION >= 0x00060100 only) ----
+    # 0x0D0 SOFT_DROPPED: frames swallowed by the drop gate (0 = consumer
+    #       keeping up). 0x0D4 SOFT_STATUS: b0 = overflow-ever (sticky),
+    #       b1 = tready violation (design invariant; must NEVER set).
+    #       Any write to 0x0D4 clears both. Absent on v6.0 silicon.
+    if [ "$DEMOD_VERSION_SEEN" = "0x00060100" ]; then
+        VAL_HEX=$(read_demod_hex 0xD0)
+        [ -n "$VAL_HEX" ] && pub_register "demod_soft_dropped" "$VAL_HEX"
+        VAL_HEX=$(read_demod_hex 0xD4)
+        [ -n "$VAL_HEX" ] && pub_register "demod_soft_status" "$VAL_HEX"
+    fi
 }
 
 # =====================================================================
