@@ -73,12 +73,6 @@ safe_add_files sources_1 {
     ../rtl/resampler/channel_eq.vhd
     ../rtl/channelizer/channel_normalizer_mux.vhd
     ../rtl/axi/haifuraiya_channelizer_axi.vhd
-#    ../third_party/pluto_msk/nco/src/sin_cos_lut.vhd
-#    ../third_party/pluto_msk/nco/src/nco.vhd
-#    ../third_party/pluto_msk/pi_controller/src/pi_controller.vhd
-#    ../third_party/pluto_msk/msk_demodulator/src/costas_lock_detect.vhd
-#    ../third_party/pluto_msk/msk_demodulator/src/costas_loop.vhd
-#    ../third_party/pluto_msk/msk_demodulator/src/msk_demodulator.vhd
     ../rtl/rx/msk_symbol_engine.vhd
     ../rtl/rx/msk_mlse4.vhd
     ../rtl/rx/sym_lock_detector.vhd
@@ -91,6 +85,7 @@ safe_add_files sources_1 {
     ../rtl/rx/channel_normalizer.vhd
     ../rtl/rx/frame_drop_gate.vhd
     ../rtl/rx/axis_async_fifo.vhd
+    ../rtl/rx/cfo_slew.vhd
     ../rtl/rx/haifuraiya_rx_top.vhd
     ../rtl/rx/haifuraiya_rx_axi.vhd
 }

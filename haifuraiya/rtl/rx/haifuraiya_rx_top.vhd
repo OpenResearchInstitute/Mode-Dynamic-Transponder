@@ -201,6 +201,8 @@ architecture rtl of haifuraiya_rx_top is
     signal clk_off_s: signed(31 downto 0);
     -- CFO correction (WP2 step 1: manual path; step 2 adds the AFC estimate)
     signal cfo_word   : signed(15 downto 0);
+    signal cfo_slewed : signed(15 downto 0);
+    signal afc_held_s : std_logic;
     signal rot_valid  : std_logic;
     signal rot_i      : signed(15 downto 0);
     signal afc_est_s  : signed(15 downto 0);
@@ -377,9 +379,32 @@ begin
     -- Applied word: CFO_MANUAL when CFO_CTRL.auto=0; zero when auto=1
     -- until step 2 lands the AFC estimator (which will drive this mux).
     ----------------------------------------------------------------------------
+    -- POCKET CURE (2026-07-29, measured: AFC stepping cost ~20% of
+    -- frames; frozen-AFC control trial ran ~96%): the correction word
+    -- now reaches the rotator through cfo_slew, which glides to each
+    -- new target instead of stepping. Fast gear during acquisition
+    -- (capture unaffected), gentle gear in HELD (~1 Hz/symbol; a
+    -- typical 78 Hz update spreads over ~80 symbols, below the timing
+    -- loop's tracking bandwidth). CFO_CTRL(31:24): gentle-rate
+    -- override, 0 = default. Applies to manual writes too -- bench
+    -- experiments inherit the gentleness.
     cfo_word <= signed(cfo_manual) when cfo_ctrl(0) = '0'
                 else afc_est_s;         -- step 2 LANDED: the AFC drives auto
-    cfo_applied <= std_logic_vector(cfo_word);
+    afc_held_s <= '1' when afc_st_u = to_unsigned(3, 3) else '0';
+
+    u_slew : entity work.cfo_slew
+        port map (
+            clk        => aclk,
+            rst        => reset_h,
+            en         => rx_svalid,
+            target_hz  => cfo_word,
+            afc_held   => afc_held_s,
+            cfg_rate   => unsigned(cfo_ctrl(31 downto 24)),
+            applied_hz => cfo_slewed );
+
+    -- readback shows the word actually applied (the glide is visible
+    -- in Bouro's cfo_applied during corrections)
+    cfo_applied <= std_logic_vector(cfo_slewed);
 
     u_cfo : entity work.cfo_rotator
         port map (
@@ -388,7 +413,7 @@ begin
             en        => rx_svalid,
             i_in      => gi,               -- TRUE domain: no swap yet
             q_in      => gq,
-            freq_hz   => cfo_word,         -- natural sign, antenna frame
+            freq_hz   => cfo_slewed,       -- slewed; natural sign, antenna frame
             out_valid => rot_valid,
             i_out     => rot_i,
             q_out     => rot_q
