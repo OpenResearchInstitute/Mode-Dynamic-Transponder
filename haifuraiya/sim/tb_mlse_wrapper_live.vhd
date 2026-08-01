@@ -60,6 +60,8 @@ begin
       sl_ratio_pct => slr, sl_window_full => slf,
       demod_lock => dlock,
       ovfl_mlse => ovfl, ring_lag => lag,
+      fine_seed_hz => to_signed(0,16), fine_seed_load => '0',
+      fine_enable => '0', fine_hz => open,
       dbg_pos => dpos, dbg_sym => dsym, dbg_th0 => dth0 );
 
   -- writer: one sample per 160 clks, 32-bit LFSR noise, amp ~ +/-8k

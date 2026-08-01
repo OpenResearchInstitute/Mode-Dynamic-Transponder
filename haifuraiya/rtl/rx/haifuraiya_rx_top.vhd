@@ -201,7 +201,10 @@ architecture rtl of haifuraiya_rx_top is
     signal clk_off_s: signed(31 downto 0);
     -- CFO correction (WP2 step 1: manual path; step 2 adds the AFC estimate)
     signal cfo_word   : signed(15 downto 0);
-    signal cfo_slewed : signed(15 downto 0);
+    signal rot_word   : signed(15 downto 0);
+    signal fine_hz_s  : signed(15 downto 0);
+    signal held_d     : std_logic := '0';
+    signal seed_pulse : std_logic;
     signal afc_held_s : std_logic;
     signal rot_valid  : std_logic;
     signal rot_i      : signed(15 downto 0);
@@ -380,8 +383,8 @@ begin
     -- until step 2 lands the AFC estimator (which will drive this mux).
     ----------------------------------------------------------------------------
     -- POCKET CURE (2026-07-29, measured: AFC stepping cost ~20% of
-    -- frames; frozen-AFC control trial ran ~96%): the correction word
-    -- now reaches the rotator through cfo_slew, which glides to each
+    -- frames; frozen-AFC control trial ran ~96%): the correction word 
+    -- now reaches the rotator per the reference law (cfo_fine, in the wrapper): per-symbol trickle to each
     -- new target instead of stepping. Fast gear during acquisition
     -- (capture unaffected), gentle gear in HELD (~1 Hz/symbol; a
     -- typical 78 Hz update spreads over ~80 symbols, below the timing
@@ -392,19 +395,26 @@ begin
                 else afc_est_s;         -- step 2 LANDED: the AFC drives auto
     afc_held_s <= '1' when afc_st_u = to_unsigned(3, 3) else '0';
 
-    u_slew : entity work.cfo_slew
-        port map (
-            clk        => aclk,
-            rst        => reset_h,
-            en         => rx_svalid,
-            target_hz  => cfo_word,
-            afc_held   => afc_held_s,
-            cfg_rate   => unsigned(cfo_ctrl(31 downto 24)),
-            applied_hz => cfo_slewed );
+    -- (cfo_slew removed 2026-07-29: superseded by the reference-law
+    -- fine tracker inside the demod wrapper. See cfo_fine.vhd header.)
 
-    -- readback shows the word actually applied (the glide is visible
-    -- in Bouro's cfo_applied during corrections)
-    cfo_applied <= std_logic_vector(cfo_slewed);
+    -- HELD-entry edge: latch the coarse word into the fine tracker's
+    -- seed (the C++'s init_offset handoff), then the fine law owns the
+    -- rotator. Before HELD (acquisition) and in manual mode the coarse
+    -- word drives directly -- the proven dynamics, untouched.
+    process(aclk)
+    begin
+        if rising_edge(aclk) then
+            held_d <= afc_held_s;
+        end if;
+    end process;
+    seed_pulse <= afc_held_s and not held_d;
+
+    rot_word <= fine_hz_s when (cfo_ctrl(0) = '1' and afc_held_s = '1')
+                else cfo_word;
+
+    -- readback shows the word actually applied
+    cfo_applied <= std_logic_vector(rot_word);
 
     u_cfo : entity work.cfo_rotator
         port map (
@@ -413,7 +423,7 @@ begin
             en        => rx_svalid,
             i_in      => gi,               -- TRUE domain: no swap yet
             q_in      => gq,
-            freq_hz   => cfo_slewed,       -- slewed; natural sign, antenna frame
+            freq_hz   => rot_word,         -- natural sign, antenna frame
             out_valid => rot_valid,
             i_out     => rot_i,
             q_out     => rot_q
@@ -466,6 +476,10 @@ begin
 
             ovfl_mlse    => open,   -- sticky diagnostics: route to demod
             ring_lag     => open,   -- regs status when the map is reworked
+            fine_seed_hz   => cfo_word,
+            fine_seed_load => seed_pulse,
+            fine_enable    => afc_held_s,
+            fine_hz        => fine_hz_s,
 
             dbg_pos      => open,
             dbg_sym      => open,

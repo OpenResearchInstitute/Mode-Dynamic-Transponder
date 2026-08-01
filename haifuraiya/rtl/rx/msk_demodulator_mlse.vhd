@@ -85,6 +85,13 @@ entity msk_demodulator_mlse is
     -- sticky diagnostics (cleared by init)
     ovfl_mlse    : out std_logic;
     ring_lag     : out std_logic;
+    -- fine CFO tracking (reference-law transcription, cfo_fine.vhd):
+    -- seeded by rx_top with the coarse word at HELD entry; output drives
+    -- the rotator after HELD. y-samples stay internal to the demod.
+    fine_seed_hz   : in  signed(15 downto 0);
+    fine_seed_load : in  std_logic;
+    fine_enable    : in  std_logic;
+    fine_hz        : out signed(15 downto 0);
 
     -- debug taps
     dbg_pos      : out unsigned(47 downto 0);
@@ -106,6 +113,8 @@ architecture rtl of msk_demodulator_mlse is
   -- engine <-> ring
   signal mem_addr : unsigned(23 downto 0);
   signal mem_word : std_logic_vector(31 downto 0);
+  signal mem_word2 : std_logic_vector(31 downto 0);
+  signal fetch_frac : signed(16 downto 0);
   signal mem_i, mem_q : signed(15 downto 0);
   signal hold     : std_logic;
   signal hold_lead : unsigned(23 downto 0);
@@ -148,9 +157,30 @@ begin
     end if;
   end process;
 
-  mem_word <= ring(to_integer(mem_addr(5 downto 0)));
-  mem_i    <= signed(mem_word(15 downto 0));
-  mem_q    <= signed(mem_word(31 downto 16));
+  -- FRACTIONAL-DELAY FETCH (2026-08-01). The reference fetches every
+  -- correlation sample at the TRUE fractional position:
+  --     p_on = pos + i;  s_on = interp(samples, p_on)   (opv_demod.hpp)
+  -- The port fetched integer ring addresses and discarded frac(pos) at
+  -- the point of use -- benign at fixed offset (quantization settles,
+  -- TED nulls it: every 0-ppm gold run), but under sustained clock ppm
+  -- frac ramps continuously and the quantization error ramps and snaps
+  -- once per accumulated symbol: the measured 0.97 s burst period at
+  -- 19 ppm. This is the reference's linear interp() transcribed: a
+  -- 2-tap blend weighted by the engine's live fraction. frac is stable
+  -- across a symbol's window (pos updates at S_TED_C, after the MACs),
+  -- matching the C++'s constant-frac-per-symbol p_on = pos + i. The
+  -- +1 tap is covered by the hold guard (reader margin >= 16 samples).
+  mem_word  <= ring(to_integer(mem_addr(5 downto 0)));
+  mem_word2 <= ring(to_integer(mem_addr(5 downto 0) + 1));
+  fetch_frac <= signed(resize(unsigned(e_pos(15 downto 0)), 17));
+  mem_i <= signed(mem_word(15 downto 0))
+           + resize(shift_right(
+               (signed(mem_word2(15 downto 0))
+                - signed(mem_word(15 downto 0))) * fetch_frac, 16), 16);
+  mem_q <= signed(mem_word(31 downto 16))
+           + resize(shift_right(
+               (signed(mem_word2(31 downto 16))
+                - signed(mem_word(31 downto 16))) * fetch_frac, 16), 16);
 
   -- stall the engine while any sample its current symbol could touch
   -- (up to pos+wlen+EL+2 <= pos+16) has not yet been written
@@ -231,6 +261,25 @@ begin
       quality    => afc_quality,
       cfo_locked => afc_locked
     );
+
+  -- per-symbol fine tracker: the C++ AFC law (opv_demod.hpp 388-402),
+  -- consuming the same per-symbol tone correlations as the coarse AFC.
+  -- 24-bit y's -> top 16 bits (the discriminator is ratio-based; scale
+  -- is irrelevant, headroom is not).
+  u_fine : entity work.cfo_fine
+    port map (
+      clk       => clk,
+      rst       => init,
+      y_valid   => e_valid,
+      y1_re     => e_y1r(23 downto 8),
+      y1_im     => e_y1i(23 downto 8),
+      y2_re     => e_y2r(23 downto 8),
+      y2_im     => e_y2i(23 downto 8),
+      seed_hz   => fine_seed_hz,
+      seed_load => fine_seed_load,
+      enable    => fine_enable,
+      fine_hz   => fine_hz );
+
 
 
   ------------------------------------------------------------------

@@ -86,6 +86,7 @@ safe_add_files sources_1 {
     ../rtl/rx/frame_drop_gate.vhd
     ../rtl/rx/axis_async_fifo.vhd
     ../rtl/rx/cfo_slew.vhd
+    ../rtl/rx/cfo_fine.vhd
     ../rtl/rx/haifuraiya_rx_top.vhd
     ../rtl/rx/haifuraiya_rx_axi.vhd
 }
