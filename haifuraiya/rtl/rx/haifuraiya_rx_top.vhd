@@ -205,6 +205,7 @@ architecture rtl of haifuraiya_rx_top is
     signal fine_hz_s  : signed(15 downto 0);
     signal held_d     : std_logic := '0';
     signal seed_pulse : std_logic;
+    signal fine_owns  : std_logic := '0';
     signal afc_held_s : std_logic;
     signal rot_valid  : std_logic;
     signal rot_i      : signed(15 downto 0);
@@ -402,15 +403,32 @@ begin
     -- seed (the C++'s init_offset handoff), then the fine law owns the
     -- rotator. Before HELD (acquisition) and in manual mode the coarse
     -- word drives directly -- the proven dynamics, untouched.
+    -- REFERENCE CARRIER DISCIPLINE (2026-08-01). The C++ has no coarse
+    -- stepping, no state-machine handoff, no re-seeding: its entire AFC
+    -- is freq_offset_ += 0.001*ferr per symbol, clamp +/-2000 -- a
+    -- trickle physically incapable of stepping the carrier (max 0.013 Hz
+    -- per symbol). The waveform conviction (cfo_applied sawtoothing at
+    -- ~4-symbol period while softs flipped rails, 2026-08-01) showed our
+    -- invented coarse/fine handoff apparatus limit-cycling at 19 ppm.
+    -- Transcription: coarse AFC runs ONCE to acquire the unknown LO
+    -- offset (real hardware need: Pluto drift exceeds the +/-2000
+    -- reference range), seeds the per-symbol integrator at first HELD,
+    -- and is then OUT OF THE LOOP PERMANENTLY. The trickle owns the
+    -- word forever after. No re-seeds, no handbacks, no steps -- ever.
     process(aclk)
     begin
         if rising_edge(aclk) then
             held_d <= afc_held_s;
+            if demod_init = '1' then
+                fine_owns <= '0';
+            elsif afc_held_s = '1' and held_d = '0' and fine_owns = '0' then
+                fine_owns <= '1';       -- first HELD only: seed once
+            end if;
         end if;
     end process;
-    seed_pulse <= afc_held_s and not held_d;
+    seed_pulse <= afc_held_s and not held_d and not fine_owns;
 
-    rot_word <= fine_hz_s when (cfo_ctrl(0) = '1' and afc_held_s = '1')
+    rot_word <= fine_hz_s when (cfo_ctrl(0) = '1' and fine_owns = '1')
                 else cfo_word;
 
     -- readback shows the word actually applied
@@ -478,7 +496,7 @@ begin
             ring_lag     => open,   -- regs status when the map is reworked
             fine_seed_hz   => cfo_word,
             fine_seed_load => seed_pulse,
-            fine_enable    => afc_held_s,
+            fine_enable    => fine_owns,   -- trickle runs continuously once seeded (reference: AFC updates every symbol, no gating by carrier state)
             fine_hz        => fine_hz_s,
 
             dbg_pos      => open,

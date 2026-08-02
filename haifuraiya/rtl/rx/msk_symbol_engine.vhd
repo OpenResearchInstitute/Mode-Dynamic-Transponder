@@ -44,6 +44,14 @@ entity msk_symbol_engine is
     hold       : in  std_logic := '0';
     -- sample memory interface (int16 I/Q served by ring buffer / bench)
     mem_addr   : out unsigned(23 downto 0);
+    -- TRACKING GATE (2026-08-01): transcribes the reference's
+    -- tracking_enabled_ discipline (opv_demod.hpp: "On noise the TED and
+    -- AFC chase random correlations, causing drift that hurts acquisition
+    -- when a real signal arrives"). The PROPORTIONAL (alpha) path always
+    -- runs -- the reference's timing_adj includes alpha*ted regardless.
+    -- Only the RATE INTEGRATOR (timing_freq_ / freq_full) is gated: it
+    -- holds its value until carrier lock, then integrates.
+    trk_enable : in  std_logic := '1';
     mem_i      : in  signed(15 downto 0);
     mem_q      : in  signed(15 downto 0);
     -- per-symbol outputs
@@ -143,15 +151,15 @@ architecture rtl of msk_symbol_engine is
   constant C_RND23 : signed(39 downto 0) := to_signed(4194304, 40); -- 2^22
   -- serial divider for ted = (|L-E|<<15)/(L+E), exact Q15 (|num|<den always)
   signal div_acc  : unsigned(46 downto 0) := (others => '0');
-  -- FRACTIONAL-BOUNDARY INTEGRATE-AND-DUMP (2026-08-01). The window
-  -- integrates the TRUE symbol span [pos, pos+SPS): wlen+1 taps, the
-  -- first weighted (1-frac_a), the last weighted frac_b, unity between.
-  -- Total weight == SPS exactly, EVERY symbol: correlation energy is
-  -- constant to 0.02 dB across the fraction sweep (python model,
-  -- 2026-08-01) vs 0.72 dB ripple for unit-weight 11/12 windows -- the
-  -- measured comb mechanism. Textbook fractional-interval I&D (Rice;
-  -- Gardner lineage), the reference's matched filter realized at an
-  -- incommensurate rate.
+  -- FRACTIONAL-BOUNDARY INTEGRATE-AND-DUMP + EXACT QUARTER-SYMBOL GATES
+  -- (2026-08-01, rebuilt after a git-checkout clobbered the first pass).
+  -- Windows integrate the TRUE span [a, a+SPS_Q16), a = pos + {-EL,0,+EL}
+  -- with EL = SPS/4 EXACT in Q16 (reference: EL_OFFSET = SPS/4). Taps:
+  -- n from floor(a) to floor(a+SPS) INCLUSIVE; first weighted (1-frac_a),
+  -- last weighted frac_b, unity interior; total == SPS exactly, every
+  -- symbol, every window. Energy flat to 0.02 dB across the frac sweep
+  -- (python model) vs 0.72 dB unit-weight -- the measured comb mechanism.
+  constant C_EL_Q16 : natural := (G_SPS_Q16 + 2) / 4;  -- SPS/4 exact-est Q16
   signal wfrac_a  : unsigned(15 downto 0) := (others => '0');
   signal wfrac_b  : unsigned(15 downto 0) := (others => '0');
   signal n_start  : unsigned(23 downto 0) := (others => '0');
@@ -233,6 +241,7 @@ begin
   process(clk)
     -- combinational helpers used sequentially inside the process
     variable p_int   : unsigned(23 downto 0);
+    variable vspan   : unsigned(47 downto 0);
     variable ph32    : unsigned(63 downto 0);
     variable vaddr   : unsigned(14 downto 0);
     variable vcneg, vsneg : std_logic;
@@ -311,34 +320,25 @@ begin
             wlen  <= to_integer(resize(
                        resize(pos + to_unsigned(G_SPS_Q16, 48), 48)
                          (47 downto 16), 24) - p_int);
+            -- TRUE fractional span per window (early/on/late), EL exact
             case widx is
-              when 0 => n_cur <= p_int - G_EL;
-              when 1 => n_cur <= p_int;
-              when 2 => n_cur <= p_int + G_EL;
+              when 0 =>
+                if resize(pos,48) > to_unsigned(C_EL_Q16,48) then
+                  vspan := resize(pos,48) - to_unsigned(C_EL_Q16,48);
+                else
+                  vspan := (others => '0');   -- C++ p_early<0 clamp
+                end if;
+              when 1 => vspan := resize(pos,48);
+              when 2 => vspan := resize(pos,48) + to_unsigned(C_EL_Q16,48);
             end case;
-            case widx is
-              when 0 => n_end <= p_int - G_EL
-                        + to_unsigned(to_integer(resize(
-                            resize(pos + to_unsigned(G_SPS_Q16,48),48)
-                              (47 downto 16),24) - p_int), 24);
-              when 1 => n_end <= p_int
-                        + to_unsigned(to_integer(resize(
-                            resize(pos + to_unsigned(G_SPS_Q16,48),48)
-                              (47 downto 16),24) - p_int), 24);
-              when 2 => n_end <= p_int + G_EL
-                        + to_unsigned(to_integer(resize(
-                            resize(pos + to_unsigned(G_SPS_Q16,48),48)
-                              (47 downto 16),24) - p_int), 24);
-            end case;
+            n_cur   <= resize(vspan(47 downto 16), 24);
+            n_start <= resize(vspan(47 downto 16), 24);
+            wfrac_a <= vspan(15 downto 0);
+            vspan   := vspan + to_unsigned(G_SPS_Q16, 48);
+            n_end   <= resize(vspan(47 downto 16), 24);
+            wfrac_b <= vspan(15 downto 0);
             a1r <= (others=>'0'); a1i <= (others=>'0');
             a2r <= (others=>'0'); a2i <= (others=>'0');
-            wfrac_a <= pos(15 downto 0);
-            wfrac_b <= resize(pos + to_unsigned(G_SPS_Q16, 48), 48)(15 downto 0);
-            case widx is
-              when 0 => n_start <= p_int - G_EL;
-              when 1 => n_start <= p_int;
-              when 2 => n_start <= p_int + G_EL;
-            end case;
             -- stop condition mirrors the model loop guard -- BENCH ONLY.
             -- CONTINUOUS MODE (G_NSAMP = 0): a radio has no end of
             -- stimulus. An unconditional compare here with G_NSAMP=0 is
@@ -390,7 +390,7 @@ begin
             a1i <= a1i + resize(m3,40) - resize(m4,40);
             a2r <= a2r + resize(m1,40) - resize(m2,40);
             a2i <= a2i + resize(m3,40) + resize(m4,40);
-            if n_cur = n_end then   -- INCLUSIVE: the partial end tap carries wfrac_b
+            if n_cur = n_end then   -- INCLUSIVE: partial end tap carries wfrac_b
               state <= S_WIN_DONE;
             else
               n_cur <= n_cur + 1;
@@ -507,8 +507,12 @@ begin
             end if;
             -- integrator, FULL precision: freq_full(Q39) += ted*beta,
             -- clamp +/-0.1 smp in the widened domain (see header note).
-            fnew_full := freq_full
-                       + resize(ted * signed(resize(cfg_tim_beta, 17)), 40);
+            if trk_enable = '1' then
+              fnew_full := freq_full
+                         + resize(ted * signed(resize(cfg_tim_beta, 17)), 40);
+            else
+              fnew_full := freq_full;   -- HELD, not reset (reference behavior)
+            end if;
             if fnew_full >  C_FREQ_CLAMP_FULL then fnew_full :=  C_FREQ_CLAMP_FULL; end if;
             if fnew_full < -C_FREQ_CLAMP_FULL then fnew_full := -C_FREQ_CLAMP_FULL; end if;
             freq_full <= fnew_full;

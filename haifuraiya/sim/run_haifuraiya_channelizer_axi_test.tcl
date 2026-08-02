@@ -463,4 +463,7 @@ add_wave /tb_haifuraiya_channelizer_axi/sb_tvalid
 add_wave /tb_haifuraiya_channelizer_axi/sb_tdata
 add_wave /tb_haifuraiya_channelizer_axi/sb_tlast
 
+add_wave /tb_haifuraiya_channelizer_axi/u_rx/u_rx/cfo_applied 
+
+
 run all

@@ -113,6 +113,8 @@ architecture rtl of msk_demodulator_mlse is
   -- engine <-> ring
   signal mem_addr : unsigned(23 downto 0);
   signal mem_word : std_logic_vector(31 downto 0);
+  signal mem_word2 : std_logic_vector(31 downto 0);
+  signal fetch_frac : signed(16 downto 0);
   signal mem_i, mem_q : signed(15 downto 0);
   signal hold     : std_logic;
   signal hold_lead : unsigned(23 downto 0);
@@ -137,6 +139,7 @@ architecture rtl of msk_demodulator_mlse is
   signal sl_e_late  : unsigned(15 downto 0);
   signal sl_e_err_v : std_logic;
   signal sl_locked  : std_logic;
+  signal afc_locked_i : std_logic;
 
 begin
 
@@ -168,12 +171,17 @@ begin
   -- across a symbol's window (pos updates at S_TED_C, after the MACs),
   -- matching the C++'s constant-frac-per-symbol p_on = pos + i. The
   -- +1 tap is covered by the hold guard (reader margin >= 16 samples).
-  -- (Interior 2-tap interp reverted 2026-08-01: superseded by the
-  -- engine's fractional-boundary integrate-and-dump: the fractional
-  -- span lives in the WINDOW WEIGHTS now -- the textbook form.)
-  mem_word <= ring(to_integer(mem_addr(5 downto 0)));
-  mem_i    <= signed(mem_word(15 downto 0));
-  mem_q    <= signed(mem_word(31 downto 16));
+  mem_word  <= ring(to_integer(mem_addr(5 downto 0)));
+  mem_word2 <= ring(to_integer(mem_addr(5 downto 0) + 1));
+  fetch_frac <= signed(resize(unsigned(e_pos(15 downto 0)), 17));
+  mem_i <= signed(mem_word(15 downto 0))
+           + resize(shift_right(
+               (signed(mem_word2(15 downto 0))
+                - signed(mem_word(15 downto 0))) * fetch_frac, 16), 16);
+  mem_q <= signed(mem_word(31 downto 16))
+           + resize(shift_right(
+               (signed(mem_word2(31 downto 16))
+                - signed(mem_word(31 downto 16))) * fetch_frac, 16), 16);
 
   -- stall the engine while any sample its current symbol could touch
   -- (up to pos+wlen+EL+2 <= pos+16) has not yet been written
@@ -199,6 +207,7 @@ begin
                                         -- 26.84 s bench-freeze fuse (2026-07-28).
     )
     port map (
+      trk_enable => sl_locked,   -- reference: set_tracking_enabled(sym_locked) -- opv_demod.hpp:1488. SYMBOL lock, not CFO lock: integrators open only when TED statistics are trustworthy
       clk => clk, rst => init, hold => hold,
       mem_addr => mem_addr, mem_i => mem_i, mem_q => mem_q,
       y_valid => e_valid,
@@ -252,7 +261,7 @@ begin
       est_hz     => afc_est_hz,
       state_o    => afc_state,
       quality    => afc_quality,
-      cfo_locked => afc_locked
+      cfo_locked => afc_locked_i
     );
 
   -- per-symbol fine tracker: the C++ AFC law (opv_demod.hpp 388-402),
@@ -319,6 +328,7 @@ begin
   end process;
 
   demod_lock <= sl_locked;
+  afc_locked <= afc_locked_i;
   ovfl_mlse  <= ovfl_r;
   ring_lag   <= lag_r;
   dbg_pos    <= e_pos;

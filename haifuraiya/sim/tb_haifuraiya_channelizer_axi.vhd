@@ -1157,8 +1157,8 @@ wait for 1 us;    -- let the design come back up
     --   3. readback 0x0B4 (CFO_ESTIMATE) = applied word both times.
     axi_write_demod(16#0B8#, x"00060A01");   -- CFO_CTRL: acq_shift 6, trk_shift 10, auto
     axi_write_demod(16#0BC#, x"00000000");   -- CFO_MANUAL: 0 Hz
-    axi_write_demod(16#0C4#, x"00000148");   -- TIM_ALPHA = 328 Q16 (C++ 0.005)
-    axi_write_demod(16#0C8#, x"000000A8");   -- TIM_BETA  = 168 Q24 (C++ 1e-5)
+    axi_write_demod(16#0C4#, x"000000B4");   -- TIM_ALPHA
+    axi_write_demod(16#0C8#, x"0000005C");   -- TIM_BETA
 
     -- Once we have real noise on hardware, run a short BER 
     -- comparison of the uniform set against the current 500/1400/2800 and keep whichever wins. 
@@ -1225,10 +1225,10 @@ wait for 1 us;    -- let the design come back up
     if v_demod_ver = x"00000000" then pass("CFO-D applied word 0 (auto, no estimator)");
     else fail("CFO-D applied nonzero: 0x" & to_hstring(v_demod_ver)); end if;
     axi_read_demod(16#0C4#, v_demod_ver);
-    if v_demod_ver(15 downto 0) = x"0148" then pass("TL-D TIM_ALPHA readback 0x0148 (0.005)");
+    if v_demod_ver(15 downto 0) = x"00B4" then pass("TL-D TIM_ALPHA readback 0x00B4");
     else fail("TL-D TIM_ALPHA readback: got 0x" & to_hstring(v_demod_ver)); end if;
     axi_read_demod(16#0C8#, v_demod_ver);
-    if v_demod_ver(15 downto 0) = x"00A8" then pass("TL-D TIM_BETA readback 0x00A8 (1e-5)");
+    if v_demod_ver(15 downto 0) = x"005C" then pass("TL-D TIM_BETA readback 0x005C");
     else fail("TL-D TIM_BETA readback: got 0x" & to_hstring(v_demod_ver)); end if;
 
     ------------------------------------------------------------------

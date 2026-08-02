@@ -78,11 +78,24 @@ architecture rtl of cfo_fine is
   signal st : st_t := IDLE;
   signal cross_r  : signed(33 downto 0);
   signal dot_r    : signed(33 downto 0);
-  signal rem_r    : unsigned(37 downto 0);
-  signal den_r    : unsigned(23 downto 0);
-  signal quo      : unsigned(15 downto 0);
-  signal neg_q    : std_logic;
-  signal bitn     : integer range 0 to 16;
+  -- CORDIC atan2 (2026-08-01): the reference computes std::arg() -- a
+  -- TRUE 4-quadrant angle. The first transcription's cross/dot small-
+  -- angle ratio RECTIFIED large-angle junk-history updates (deterministic
+  -- ISI correlations of the non-dominant tone, half of all updates on
+  -- patterned data) into a constant bias: cfo_applied climbed smoothly
+  -- away from truth at the trickle rate, bits died ~9.5 ms (waveform
+  -- conviction 2026-08-01). atan2 averages those angles to zero, as the
+  -- reference does. Same machinery the coarse AFC already carries.
+  type atan_t is array (0 to 13) of signed(17 downto 0);
+  constant C_ATAN : atan_t := (
+      to_signed(8192,18), to_signed(4836,18), to_signed(2555,18),
+      to_signed(1297,18), to_signed(651,18),  to_signed(326,18),
+      to_signed(163,18),  to_signed(81,18),   to_signed(41,18),
+      to_signed(20,18),   to_signed(10,18),   to_signed(5,18),
+      to_signed(3,18),    to_signed(1,18));
+  signal cx, cy   : signed(19 downto 0);
+  signal cz       : signed(17 downto 0);
+  signal ci       : unsigned(3 downto 0);
   constant C_CLAMP_Q8 : signed(31 downto 0) := to_signed(2000*256, 32);
 begin
   fine_hz <= resize(shift_right(seed_q8 + acc_q8, 8), 16);
@@ -92,6 +105,7 @@ begin
     variable e1, e2   : signed(33 downto 0);
     variable cr, dt   : signed(33 downto 0);
     variable ferr_q8  : signed(31 downto 0);
+    variable nx, ny   : signed(19 downto 0);
     variable step     : signed(31 downto 0);
     variable nacc     : signed(31 downto 0);
   begin
@@ -135,34 +149,62 @@ begin
             end if;
 
           when DIVSTART =>
-            -- pre-scale to 24-bit, form |cross|<<14 in 38 bits
-            if cross_r < 0 then
-              rem_r <= shift_left(resize(unsigned(-cross_r(33 downto 10)), 38), 14);
-              neg_q <= '1';
+            -- quadrant fold + dead-air guard (coarse lessons, verbatim)
+            if (abs(dot_r) + abs(cross_r)) < 16384 then
+              cz <= (others => '0');
+              ci <= to_unsigned(13, 4);
+              cx <= (others => '0'); cy <= (others => '0');
+              st <= DIVLOOP;
+            elsif dot_r < 0 then
+              cx <= resize(-dot_r(33 downto 14), 20);
+              cy <= resize(-cross_r(33 downto 14), 20);
+              if cross_r >= 0 then
+                cz <= to_signed(-32768, 18);
+              else
+                cz <= to_signed( 32768, 18);
+              end if;
+              ci <= (others => '0');
+              st <= DIVLOOP;
             else
-              rem_r <= shift_left(resize(unsigned(cross_r(33 downto 10)), 38), 14);
-              neg_q <= '0';
+              cx <= resize(dot_r(33 downto 14), 20);
+              cy <= resize(cross_r(33 downto 14), 20);
+              cz <= (others => '0');
+              ci <= (others => '0');
+              st <= DIVLOOP;
             end if;
-            den_r <= unsigned(dot_r(33 downto 10));
-            quo   <= (others => '0');
-            bitn  <= 16;
-            st    <= DIVLOOP;
 
           when DIVLOOP =>
-            if bitn = 0 or den_r = 0 then
-              st <= UPDATE;
+            -- CORDIC vectoring: cy -> 0, angle accumulates in cz (Q16 turns)
+            nx := cx; ny := cy;
+            if cy >= 0 then
+              cx <= nx + shift_right(ny, to_integer(ci));
+              cy <= ny - shift_right(nx, to_integer(ci));
+              cz <= cz - C_ATAN(to_integer(ci));
             else
-              if rem_r >= shift_left(resize(den_r, 38), bitn-1) then
-                rem_r <= rem_r - shift_left(resize(den_r, 38), bitn-1);
-                quo   <= quo or to_unsigned(2**(bitn-1), 16);
-              end if;
-              bitn <= bitn - 1;
+              cx <= nx - shift_right(ny, to_integer(ci));
+              cy <= ny + shift_right(nx, to_integer(ci));
+              cz <= cz + C_ATAN(to_integer(ci));
             end if;
+            if ci = 13 then st <= UPDATE; else ci <= ci + 1; end if;
 
           when UPDATE =>
-            -- ferr_q8 = q(Q14 ratio) * 8627 -> Hz in Q8: (q*8627) >> 6
-            ferr_q8 := resize(shift_right(signed(resize(quo, 17)) * to_signed(8627, 15), 6), 32);
-            if neg_q = '1' then ferr_q8 := -ferr_q8; end if;
+            -- cz = -arg(dom*conj(prev)) in Q16 turns (CORDIC gives minus
+            -- the input angle, coarse convention). ferr_hz = (-cz/65536)*R
+            -- -> Q8: -cz * 54200 * 256 / 65536 = -cz * 211.72 ~= -cz*212.
+            -- RESIDUAL-RANGE GATE (2026-08-01, measured): the loop's own
+            -- clamp is +/-2000 Hz, so a legitimate residual can never
+            -- exceed ~13 deg/symbol (2000/54200 turns). Junk-history
+            -- updates (non-dominant tone's deterministic ISI correlation
+            -- during patterned data) measure at 85-100 deg -- 13-15 kHz
+            -- equivalent, 30x the legit signal, same-sign (FDBG capture:
+            -- cz {+495,-797} legit vs {+15587,+18181} junk). arg() made
+            -- them measurable; this gate, implied by the clamp itself,
+            -- makes them ignorable. Threshold 3022 turns = 2.5 kHz.
+            if abs(cz) > to_signed(3022, 18) then
+              ferr_q8 := (others => '0');   -- junk by construction: skip
+            else
+              ferr_q8 := resize(-cz * to_signed(212, 12), 32);
+            end if;
             -- DOMAIN SIGN (cfo_afc.vhd header, lines 26-30, verbatim rule):
             -- the y's live in the demod's SWAPPED domain (z' = j*conj(z));
             -- conjugation negates frequency, so measured rotation is MINUS
