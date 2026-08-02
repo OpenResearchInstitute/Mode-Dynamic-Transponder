@@ -396,7 +396,7 @@ u_rx : entity work.haifuraiya_rx_axi
         variable cnt : integer := 0;
     begin
         if rising_edge(aclk) then
-            if rx_svalid = '1' and cnt < 60000 then
+            if rx_svalid = '1' and cnt < 160000 then
                 write(l, to_integer(signed(chan_i_reg)));
                 write(l, string'(" "));
                 write(l, to_integer(signed(chan_q_reg)));
@@ -1155,10 +1155,12 @@ wait for 1 us;    -- let the design come back up
     --      axi_write_demod 0x0BC <= 0x00001388 (+5000): run MUST decode
     --      6/6 (GREEN) -- correction path proven end to end.
     --   3. readback 0x0B4 (CFO_ESTIMATE) = applied word both times.
-    axi_write_demod(16#0B8#, x"00060A01");   -- CFO_CTRL: acq_shift 6, trk_shift 10, auto
+    axi_write_demod(16#0B8#, x"00060A01");   -- CFO_CTRL: auto
+    --axi_write_demod(16#0B8#, x"00060A00");   -- CFO_CTRL: manual, use this with non-zero CFO_MANUAL        
     axi_write_demod(16#0BC#, x"00000000");   -- CFO_MANUAL: 0 Hz
-    axi_write_demod(16#0C4#, x"000000B4");   -- TIM_ALPHA
-    axi_write_demod(16#0C8#, x"0000005C");   -- TIM_BETA
+    --axi_write_demod(16#0BC#, x"FFFFEC78");   -- CFO_MANUAL = -5000 Hz
+    axi_write_demod(16#0C4#, x"00000500");   -- TIM_ALPHA
+    axi_write_demod(16#0C8#, x"00000022");   -- TIM_BETA
 
     -- Once we have real noise on hardware, run a short BER 
     -- comparison of the uniform set against the current 500/1400/2800 and keep whichever wins. 
@@ -1219,16 +1221,16 @@ wait for 1 us;    -- let the design come back up
     if v_demod_ver(3 downto 0) = x"6" then pass("SL-D SYM_LOCK_WINDOW readback 6 (64 sym)");
     else fail("SL-D SYM_LOCK_WINDOW readback: got 0x" & to_hstring(v_demod_ver)); end if;
     axi_read_demod(16#0B8#, v_demod_ver);
-    if v_demod_ver = x"00060A01" then pass("CFO-D CFO_CTRL readback 0x00060A01");
+    if v_demod_ver = x"00060A00" then pass("CFO-D CFO_CTRL readback 0x00060A00");
     else fail("CFO-D CFO_CTRL readback: got 0x" & to_hstring(v_demod_ver)); end if;
     axi_read_demod(16#0B4#, v_demod_ver);
     if v_demod_ver = x"00000000" then pass("CFO-D applied word 0 (auto, no estimator)");
     else fail("CFO-D applied nonzero: 0x" & to_hstring(v_demod_ver)); end if;
     axi_read_demod(16#0C4#, v_demod_ver);
-    if v_demod_ver(15 downto 0) = x"00B4" then pass("TL-D TIM_ALPHA readback 0x00B4");
+    if v_demod_ver(15 downto 0) = x"0500" then pass("TL-D TIM_ALPHA readback 0x0500");
     else fail("TL-D TIM_ALPHA readback: got 0x" & to_hstring(v_demod_ver)); end if;
     axi_read_demod(16#0C8#, v_demod_ver);
-    if v_demod_ver(15 downto 0) = x"005C" then pass("TL-D TIM_BETA readback 0x005C");
+    if v_demod_ver(15 downto 0) = x"0022" then pass("TL-D TIM_BETA readback 0x0022");
     else fail("TL-D TIM_BETA readback: got 0x" & to_hstring(v_demod_ver)); end if;
 
     ------------------------------------------------------------------

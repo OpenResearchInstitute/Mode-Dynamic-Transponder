@@ -205,7 +205,8 @@ architecture rtl of haifuraiya_rx_top is
     signal fine_hz_s  : signed(15 downto 0);
     signal held_d     : std_logic := '0';
     signal seed_pulse : std_logic;
-    signal fine_owns  : std_logic := '0';
+    signal fine_owns  : std_logic := '0';  -- retained for readback compat; no longer in path
+    signal slew_out_s : signed(15 downto 0);
     signal afc_held_s : std_logic;
     signal rot_valid  : std_logic;
     signal rot_i      : signed(15 downto 0);
@@ -396,6 +397,16 @@ begin
                 else afc_est_s;         -- step 2 LANDED: the AFC drives auto
     afc_held_s <= '1' when afc_st_u = to_unsigned(3, 3) else '0';
 
+    u_slew : entity work.cfo_slew
+        port map (
+            clk        => aclk,
+            rst        => demod_init,
+            en         => rx_svalid,
+            target_hz  => cfo_word,
+            afc_held   => afc_held_s,
+            cfg_rate   => (others => '0'),
+            applied_hz => slew_out_s );
+
     -- (cfo_slew removed 2026-07-29: superseded by the reference-law
     -- fine tracker inside the demod wrapper. See cfo_fine.vhd header.)
 
@@ -428,8 +439,22 @@ begin
     end process;
     seed_pulse <= afc_held_s and not held_d and not fine_owns;
 
-    rot_word <= fine_hz_s when (cfo_ctrl(0) = '1' and fine_owns = '1')
-                else cfo_word;
+    -- CARRIER ARCHITECTURE (2026-08-02, evidence-closed): the per-symbol
+    -- fine trickle is DELETED from the path. Measured (y-log + model,
+    -- 2026-08-01/02): at fractional SPS the same-tone correlations carry
+    -- a frac-wheel-swept ISI phasor -- two counter-drifting phase
+    -- ladders -- so any per-symbol delta-phase discriminator integrates
+    -- a deterministic ghost (+7 Hz/ms measured on clean input). Integer-
+    -- SPS receivers (the C++ reference) are structurally immune, which
+    -- is why the reference law could not be transcribed here unchanged.
+    -- The wheel-immune architecture, all previously-flown parts:
+    --   * cfo_afc: WINDOWED estimator, tracks in HELD (slow gear) --
+    --     averaging over many wheel cycles cancels the ghost;
+    --   * cfo_slew: turns per-window est updates into bounded ramps
+    --     (reinstated 2026-08-02; removed 2026-07-29 for the trickle);
+    --   * rotator driven by the slewed word. No steps, no per-symbol
+    --     chasing, drift tracking at oscillator timescales.
+    rot_word <= slew_out_s;
 
     -- readback shows the word actually applied
     cfo_applied <= std_logic_vector(rot_word);
