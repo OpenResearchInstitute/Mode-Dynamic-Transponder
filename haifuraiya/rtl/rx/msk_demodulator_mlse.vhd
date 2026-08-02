@@ -113,8 +113,6 @@ architecture rtl of msk_demodulator_mlse is
   -- engine <-> ring
   signal mem_addr : unsigned(23 downto 0);
   signal mem_word : std_logic_vector(31 downto 0);
-  signal mem_word2 : std_logic_vector(31 downto 0);
-  signal fetch_frac : signed(16 downto 0);
   signal mem_i, mem_q : signed(15 downto 0);
   signal hold     : std_logic;
   signal hold_lead : unsigned(23 downto 0);
@@ -170,17 +168,12 @@ begin
   -- across a symbol's window (pos updates at S_TED_C, after the MACs),
   -- matching the C++'s constant-frac-per-symbol p_on = pos + i. The
   -- +1 tap is covered by the hold guard (reader margin >= 16 samples).
-  mem_word  <= ring(to_integer(mem_addr(5 downto 0)));
-  mem_word2 <= ring(to_integer(mem_addr(5 downto 0) + 1));
-  fetch_frac <= signed(resize(unsigned(e_pos(15 downto 0)), 17));
-  mem_i <= signed(mem_word(15 downto 0))
-           + resize(shift_right(
-               (signed(mem_word2(15 downto 0))
-                - signed(mem_word(15 downto 0))) * fetch_frac, 16), 16);
-  mem_q <= signed(mem_word(31 downto 16))
-           + resize(shift_right(
-               (signed(mem_word2(31 downto 16))
-                - signed(mem_word(31 downto 16))) * fetch_frac, 16), 16);
+  -- (Interior 2-tap interp reverted 2026-08-01: superseded by the
+  -- engine's fractional-boundary integrate-and-dump: the fractional
+  -- span lives in the WINDOW WEIGHTS now -- the textbook form.)
+  mem_word <= ring(to_integer(mem_addr(5 downto 0)));
+  mem_i    <= signed(mem_word(15 downto 0));
+  mem_q    <= signed(mem_word(31 downto 16));
 
   -- stall the engine while any sample its current symbol could touch
   -- (up to pos+wlen+EL+2 <= pos+16) has not yet been written

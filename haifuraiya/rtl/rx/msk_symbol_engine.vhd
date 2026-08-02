@@ -143,6 +143,19 @@ architecture rtl of msk_symbol_engine is
   constant C_RND23 : signed(39 downto 0) := to_signed(4194304, 40); -- 2^22
   -- serial divider for ted = (|L-E|<<15)/(L+E), exact Q15 (|num|<den always)
   signal div_acc  : unsigned(46 downto 0) := (others => '0');
+  -- FRACTIONAL-BOUNDARY INTEGRATE-AND-DUMP (2026-08-01). The window
+  -- integrates the TRUE symbol span [pos, pos+SPS): wlen+1 taps, the
+  -- first weighted (1-frac_a), the last weighted frac_b, unity between.
+  -- Total weight == SPS exactly, EVERY symbol: correlation energy is
+  -- constant to 0.02 dB across the fraction sweep (python model,
+  -- 2026-08-01) vs 0.72 dB ripple for unit-weight 11/12 windows -- the
+  -- measured comb mechanism. Textbook fractional-interval I&D (Rice;
+  -- Gardner lineage), the reference's matched filter realized at an
+  -- incommensurate rate.
+  signal wfrac_a  : unsigned(15 downto 0) := (others => '0');
+  signal wfrac_b  : unsigned(15 downto 0) := (others => '0');
+  signal n_start  : unsigned(23 downto 0) := (others => '0');
+  signal wgt_d    : unsigned(16 downto 0) := (others => '0');
   signal div_den  : unsigned(31 downto 0) := (others => '0');
   signal div_q    : unsigned(15 downto 0) := (others => '0');
   signal div_cnt  : unsigned(3 downto 0)  := (others => '0');
@@ -319,6 +332,13 @@ begin
             end case;
             a1r <= (others=>'0'); a1i <= (others=>'0');
             a2r <= (others=>'0'); a2i <= (others=>'0');
+            wfrac_a <= pos(15 downto 0);
+            wfrac_b <= resize(pos + to_unsigned(G_SPS_Q16, 48), 48)(15 downto 0);
+            case widx is
+              when 0 => n_start <= p_int - G_EL;
+              when 1 => n_start <= p_int;
+              when 2 => n_start <= p_int + G_EL;
+            end case;
             -- stop condition mirrors the model loop guard -- BENCH ONLY.
             -- CONTINUOUS MODE (G_NSAMP = 0): a radio has no end of
             -- stimulus. An unconditional compare here with G_NSAMP=0 is
@@ -345,6 +365,13 @@ begin
             sneg_d   <= vsneg;
             xr_d     <= mem_i;
             xi_d     <= mem_q;
+            if n_cur = n_start then
+              wgt_d <= resize(to_unsigned(65536,17) - resize(wfrac_a,17), 17);
+            elsif n_cur = n_end then
+              wgt_d <= resize(wfrac_b, 17);
+            else
+              wgt_d <= to_unsigned(65536, 17);
+            end if;
             state    <= S_MAC_B;
 
           when S_MAC_B =>
@@ -355,14 +382,15 @@ begin
             if sneg_d = '0' then s :=  signed(rom_q(15 downto 0));
             else                 s := -signed(rom_q(15 downto 0));
             end if;
-            xr := xr_d;        xi := xi_d;
+            xr := resize(shift_right(xr_d * signed('0' & wgt_d), 16), 16);
+            xi := resize(shift_right(xi_d * signed('0' & wgt_d), 16), 16);
             m1 := xr * c;  m2 := xi * s;
             m3 := xi * c;  m4 := xr * s;
             a1r <= a1r + resize(m1,40) + resize(m2,40);
             a1i <= a1i + resize(m3,40) - resize(m4,40);
             a2r <= a2r + resize(m1,40) - resize(m2,40);
             a2i <= a2i + resize(m3,40) + resize(m4,40);
-            if n_cur + 1 = n_end then
+            if n_cur = n_end then   -- INCLUSIVE: the partial end tap carries wfrac_b
               state <= S_WIN_DONE;
             else
               n_cur <= n_cur + 1;
