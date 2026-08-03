@@ -324,21 +324,19 @@ add_wave -into {Normalizer_Seam} -radix dec      $CHAN/norm_i
 add_wave -into {Normalizer_Seam} -radix dec      $CHAN/norm_q
 
 
-################################################################################
-# waves_mlse_demod.tcl -- wave groups for msk_demodulator_mlse
-# Source after:  set FS $RX/u_fsync
-# Signal flow: ring write -> engine (timing loop) -> mlse4 (trellis) -> shim
-################################################################################
+# MLSE_Ring group retired with the ring (2026-08-03). The elastic store's
+# observables replace it -- same story, better instruments.
+add_wave_group {Elastic_Store}
+add_wave -into {Elastic_Store}                 $DEM/rx_svalid
+add_wave -into {Elastic_Store} -radix unsigned $DEM/st_wr_ptr_rd
+add_wave -into {Elastic_Store} -radix unsigned $DEM/st_fill_ptr
+add_wave -into {Elastic_Store} -radix unsigned $DEM/st_fill_lead
+add_wave -into {Elastic_Store} -radix unsigned $DEM/st_occ
+add_wave -into {Elastic_Store}                 $DEM/store_hold
+add_wave -into {Elastic_Store}                 $DEM/st_fill_pend
+add_wave -into {Elastic_Store}                 $DEM/st_starve
+add_wave -into {Elastic_Store}                 $DEM/st_stomp
 
-# --- sample ring / pacing ----------------------------------------------------
-#   hold high most of the time is CORRECT: the engine is sample-rate-bound
-#   and waits for writes. ring_lag or ovfl_mlse going high is a bug.
-add_wave_group {MLSE_Ring}
-add_wave -into {MLSE_Ring}                 $DEM/rx_svalid
-add_wave -into {MLSE_Ring} -radix unsigned $DEM/wr_n
-add_wave -into {MLSE_Ring}                 $DEM/hold
-add_wave -into {MLSE_Ring}                 $DEM/ring_lag
-add_wave -into {MLSE_Ring}                 $DEM/ovfl_mlse
 
 # --- symbol engine: the timing loop ------------------------------------------
 #   pos advances ~755720 (Q16) per symbol; sym_index counts symbols;

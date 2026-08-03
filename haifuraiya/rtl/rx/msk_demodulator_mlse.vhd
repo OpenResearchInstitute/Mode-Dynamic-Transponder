@@ -107,13 +107,57 @@ end entity;
 
 architecture rtl of msk_demodulator_mlse is
 
-  -- 64-deep sample ring, asynchronous read (LUTRAM)
-  type ring_t is array (0 to 63) of std_logic_vector(31 downto 0);
-  signal ring : ring_t := (others => (others => '0'));
-  attribute ram_style : string;
-  attribute ram_style of ring : signal is "distributed";
+  -- SAMPLE STORE (2026-08-03 PM): the 64-sample LUTRAM ring is RETIRED.
+  -- Samples now live in elastic_channel_store: the 64-channel BRAM
+  -- geometry of the documented scale-up (SOW_demod_1_to_64_channels),
+  -- instantiated here with ONE lane lit (C_CH_INDEX). 1024 samples of
+  -- per-channel elasticity replace the ring's 48-sample corridor; the
+  -- engine's verified same-cycle two-tap fetch is preserved -- it reads
+  -- the store's filled window through the identical addressing contract
+  -- the ring provided. The week of guard choreography (skip, hysteresis,
+  -- release threshold, the first-flight lap-point bug) treated symptoms
+  -- of an undersized buffer; this is the cure. History and the law this
+  -- module enforces: see elastic_channel_store.vhd.
+  constant C_CH_INDEX : unsigned(5 downto 0) := (others => '0');
+    -- lane assignment within the store. Cosmetic at N=1 (rx_top feeds
+    -- this wrapper ONE channel's stream); the scale-up interleave
+    -- drives the channel index from the interleave tag instead.
+  constant C_ST_CH_AW      : natural := 6;     -- 64 channels
+  constant C_ST_DEPTH_AW   : natural := 10;    -- 1024 samples/channel
+  constant C_ST_DEPTH      : natural := 2**C_ST_DEPTH_AW;
+  constant C_ST_FILL_AHEAD : natural := 48;
+    -- HARD CONSTRAINT (source audit 2026-08-03): C_ST_FILL_AHEAD <= 60.
+    -- The engine fetches BEHIND pos: the early timing window integrates
+    -- from a = pos - EL, EL = SPS/4 ~ 2.88, so taps reach ~pos-3. The
+    -- 64-slot window retains (64 - C_ST_FILL_AHEAD) samples of history
+    -- behind pos; that must exceed ceil(EL)+1. At 48: 16 retained vs ~4
+    -- needed. Raise FILL_AHEAD past 60 and the early window silently
+    -- reads relapped slots. Forward need is ~16.4 (late window + interp
+    -- tap); C_ST_NEED = 18 covers it. pos is monotonic forward by the
+    -- engine's +/-2-sample adj clamp -- the filler never chases backward.
+  constant C_ST_NEED       : natural := 18;    -- pos..pos+17 resident
 
-  signal wr_n   : unsigned(23 downto 0) := (others => '0'); -- next write idx
+  type st_bram_t is array (0 to 2**(C_ST_CH_AW+C_ST_DEPTH_AW)-1)
+    of std_logic_vector(31 downto 0);
+  signal st_bram : st_bram_t := (others => (others => '0'));
+  attribute ram_style : string;
+  attribute ram_style of st_bram : signal is "block";
+  type st_wptr_t is array (0 to 2**C_ST_CH_AW-1) of unsigned(23 downto 0);
+  signal st_wr_ptr    : st_wptr_t := (others => (others => '0'));
+  signal st_wr_ptr_rd : unsigned(23 downto 0);
+  signal st_rdata     : std_logic_vector(31 downto 0);
+  signal st_raddr     : unsigned(C_ST_CH_AW+C_ST_DEPTH_AW-1 downto 0);
+  type st_win_t is array (0 to 63) of std_logic_vector(31 downto 0);
+  signal st_window : st_win_t := (others => (others => '0'));
+  attribute ram_style of st_window : signal is "distributed";
+  signal st_fill_ptr    : unsigned(23 downto 0) := (others => '0');
+  signal st_fill_pend   : std_logic := '0';
+  signal st_fill_addr_q : unsigned(5 downto 0);
+  signal st_fill_lead   : unsigned(23 downto 0);
+  signal st_occ         : unsigned(23 downto 0);
+  signal store_hold     : std_logic;
+  signal st_starve      : std_logic;
+  signal st_stomp       : std_logic;
 
   -- engine <-> ring
   signal mem_addr : unsigned(23 downto 0);
@@ -122,7 +166,6 @@ architecture rtl of msk_demodulator_mlse is
   signal fetch_frac : signed(16 downto 0);
   signal mem_i, mem_q : signed(15 downto 0);
   signal hold     : std_logic;
-  signal hold_lead : unsigned(23 downto 0);
 
   -- engine <-> mlse
   signal e_valid  : std_logic;
@@ -140,7 +183,6 @@ architecture rtl of msk_demodulator_mlse is
   signal dbg_best   : unsigned(1 downto 0);
 
   signal ovfl_r, lag_r : std_logic := '0';
-  signal hold_r : std_logic := '0';
   signal sl_e_early : unsigned(15 downto 0);
   signal sl_e_late  : unsigned(15 downto 0);
   signal sl_e_err_v : std_logic;
@@ -150,16 +192,131 @@ architecture rtl of msk_demodulator_mlse is
 begin
 
   ------------------------------------------------------------------
-  -- sample ring
+  -- sample store (design of record; see header note above)
   ------------------------------------------------------------------
-  wr: process(clk)
+  -- ============================================================
+  -- ELASTIC SAMPLE STORE (inlined 2026-08-03 PM; no new entity, no
+  -- component.xml change -- the IP file list is untouched, exactly as
+  -- the guarded-window and cfo fixes shipped). Logic is the 64-channel
+  -- store of the documented scale-up with one lane lit; the standalone
+  -- entity used for unit test lives ONLY in sim/demod/
+  -- elastic_channel_store.vhd (tb_elastic_store DUT) and must be kept
+  -- textually identical to these processes -- md5 both when either
+  -- changes. The LAW: no unconsumed sample is ever silently
+  -- overwritten; both walls are counted sticky faults.
+  -- ============================================================
+
+  ------------------------------------------------------------------
+  -- store writer: real time, never stalled, per-channel region
+  ------------------------------------------------------------------
+  st_writer : process(clk)
   begin
     if rising_edge(clk) then
       if init = '1' then
-        wr_n <= (others => '0');
+        st_wr_ptr <= (others => (others => '0'));
       elsif rx_enable = '1' and rx_svalid = '1' then
-        ring(to_integer(wr_n(5 downto 0))) <= rx_q_samples & rx_i_samples;
-        wr_n <= wr_n + 1;
+        st_bram(to_integer(C_CH_INDEX &
+                st_wr_ptr(to_integer(C_CH_INDEX))(C_ST_DEPTH_AW-1 downto 0)))
+          <= rx_q_samples & rx_i_samples;
+        st_wr_ptr(to_integer(C_CH_INDEX))
+          <= st_wr_ptr(to_integer(C_CH_INDEX)) + 1;
+      end if;
+    end if;
+  end process;
+
+  ------------------------------------------------------------------
+  -- BRAM read port: registered (block-RAM timing)
+  ------------------------------------------------------------------
+  st_read : process(clk)
+  begin
+    if rising_edge(clk) then
+      st_rdata    <= st_bram(to_integer(st_raddr));
+      st_wr_ptr_rd <= st_wr_ptr(to_integer(C_CH_INDEX));
+    end if;
+  end process;
+  st_raddr <= C_CH_INDEX & st_fill_ptr(C_ST_DEPTH_AW-1 downto 0);
+
+  ------------------------------------------------------------------
+  -- window filler: keep window[pos .. pos+C_ST_FILL_AHEAD) resident
+  ------------------------------------------------------------------
+  st_fill_lead <= st_fill_ptr - e_pos(39 downto 16);
+
+  st_filler : process(clk)
+    variable want : std_logic;
+    variable have : unsigned(23 downto 0);
+  begin
+    if rising_edge(clk) then
+      if init = '1' then
+        st_fill_ptr  <= (others => '0');
+        st_fill_pend <= '0';
+      else
+        if (st_fill_lead(23) = '1') or
+           (st_fill_lead < to_unsigned(C_ST_FILL_AHEAD, 24)) then
+          want := '1';
+        else
+          want := '0';
+        end if;
+        have := st_wr_ptr_rd - st_fill_ptr;
+        if st_fill_pend = '0' then
+          if want = '1' and have /= 0 and have(23) = '0' then
+            st_fill_addr_q <= st_fill_ptr(5 downto 0);
+            st_fill_pend   <= '1';
+          end if;
+        else
+          st_window(to_integer(st_fill_addr_q)) <= st_rdata;
+          st_fill_ptr  <= st_fill_ptr + 1;
+          st_fill_pend <= '0';
+        end if;
+      end if;
+    end if;
+  end process;
+
+  ------------------------------------------------------------------
+  -- engine fetch: async LUTRAM window, the ring's exact contract
+  ------------------------------------------------------------------
+  mem_word  <= st_window(to_integer(mem_addr(5 downto 0)));
+  mem_word2 <= st_window(to_integer(mem_addr(5 downto 0) + 1));
+
+  ------------------------------------------------------------------
+  -- hold: pure window residency (2026-08-03, corrected by the chain
+  -- sim's own waveform). The engine is a CONSUME-ON-ARRIVAL reader:
+  -- it runs at fabric speed and paces itself on this hold line, so
+  -- occupancy rides the floor BY DESIGN and hold toggles at symbol
+  -- rate in health. The earlier mid-fill priming assumed an
+  -- isochronous consumer (telecom slip-buffer model) -- wrong for
+  -- this engine; the 512-sample cushion evaporated in microseconds
+  -- of sim time, exactly as a faster-than-real-time reader must
+  -- make it. Depth serves the STOMP side: backlog capacity for the
+  -- time-shared scale-up, and a wedge tripwire at N=1.
+  ------------------------------------------------------------------
+  st_occ <= st_wr_ptr_rd - e_pos(39 downto 16);
+
+  store_hold <= '1' when (st_fill_lead(23) = '1') or
+                         (st_fill_lead < to_unsigned(C_ST_NEED, 24))
+                    else '0';
+  hold <= store_hold;
+
+  ------------------------------------------------------------------
+  -- store faults (sticky until init; wired into ovfl/lag below)
+  ------------------------------------------------------------------
+  st_faults : process(clk)
+  begin
+    if rising_edge(clk) then
+      if init = '1' then
+        st_starve <= '0'; st_stomp <= '0';
+      else
+        -- lag (early warning): occupancy past half the region means the
+        -- engine is not consuming on arrival -- a wedge precursor. In
+        -- health with a consume-on-arrival engine this NEVER sets.
+        if st_occ(23) = '0' and
+           st_occ > to_unsigned(C_ST_DEPTH/2, 24) then
+          st_starve <= '1';
+        end if;
+        -- stomp: writer lapped the region -- unread data overwritten.
+        -- At N=1 reachable only via a wedged engine: the tripwire.
+        if st_occ(23) = '0' and st_occ > to_unsigned(C_ST_DEPTH, 24) then
+          st_stomp <= '1';
+        end if;
       end if;
     end if;
   end process;
@@ -177,8 +334,6 @@ begin
   -- across a symbol's window (pos updates at S_TED_C, after the MACs),
   -- matching the C++'s constant-frac-per-symbol p_on = pos + i. The
   -- +1 tap is covered by the hold guard (reader margin >= 16 samples).
-  mem_word  <= ring(to_integer(mem_addr(5 downto 0)));
-  mem_word2 <= ring(to_integer(mem_addr(5 downto 0) + 1));
   fetch_frac <= signed(resize(unsigned(e_pos(15 downto 0)), 17));
   mem_i <= signed(mem_word(15 downto 0))
            + resize(shift_right(
@@ -189,49 +344,6 @@ begin
                (signed(mem_word2(31 downto 16))
                 - signed(mem_word(31 downto 16))) * fetch_frac, 16), 16);
 
-  -- stall the engine while any sample its current symbol could touch
-  -- (up to pos+wlen+EL+2 <= pos+16) has not yet been written
-  -- wrap-safe modular lead: writer minus reader in mod-2^24 arithmetic.
-  -- GUARDED WINDOW (2026-07-29 fix): the engine's pos initializes at
-  -- EL+1 (= 2), AHEAD of wr_n = 0, so the raw modular lead wraps to
-  -- ~2^24 at startup; an unguarded (lead < 16) then RELEASES hold and
-  -- the engine free-runs an empty ring forever (QUAL identically 0 --
-  -- the dead-at-birth bitstream of 2026-07-29 AM). Lead MSB set means
-  -- the reader is at or ahead of the writer: hold for that half-space
-  -- too. Healthy operation lives in lead = 16..63; both guards are
-  -- far from it.
-  hold_lead <= wr_n - resize(e_pos(39 downto 16), 24);
-  -- RE-CENTERING GUARD (2026-08-03). The old gate held only while
-  -- lead < 16 and released immediately -- a hard floor with no restoring
-  -- force. Writer and reader run at IDENTICAL average rates, so the
-  -- timing loop's +/-10 ppm corrections walk the lead at ~6 samples/s;
-  -- from small margins the floor is struck about once per second. Each
-  -- strike skipped one symbol, broke the deframer's count, and forced a
-  -- sync miss: the 1 Hz comb, measured on hardware 2026-08-02 (pos
-  -- double-step + sym_valid gap + fs_state fall, one ILA window).
-  -- Sims never saw it: the walk needs ~1 s, sims ran 0.28 s.
-  -- The fix: once the floor is struck, STAY held until the lead
-  -- recovers to a re-centered margin (64 samples ~ 100 us). One
-  -- deliberate resync event per era instead of a skip per second, and
-  -- each event leaves the reader with maximal margin. lag_r goes sticky
-  -- on every event (now readable: SOFT_STATUS bit2).
-  recentering : process(clk)
-  begin
-    if rising_edge(clk) then
-      if init = '1' then
-        hold_r <= '0';
-      elsif hold_r = '0' then
-        if (hold_lead < 16) or (hold_lead(23) = '1') then
-          hold_r <= '1';                    -- floor struck: begin re-center
-        end if;
-      else
-        if (hold_lead >= 64) and (hold_lead(23) = '0') then
-          hold_r <= '0';                    -- margin restored: release
-        end if;
-      end if;
-    end if;
-  end process;
-  hold <= hold_r;
 
   ------------------------------------------------------------------
   -- the two verified blocks
@@ -355,10 +467,15 @@ begin
       if init = '1' then
         ovfl_r <= '0'; lag_r <= '0';
       else
-        if e_valid = '1' and m_busy = '1' then
+        -- ovfl: engine backpressure (design invariant, never expected)
+        -- OR the store's stomp fault (writer lapped unread data --
+        -- the old silent-corruption case, now a counted witness).
+        if (e_valid = '1' and m_busy = '1') or st_stomp = '1' then
           ovfl_r <= '1';
         end if;
-        if wr_n - resize(e_pos(39 downto 16), 24) > 48 then
+        -- lag: store starvation after first release -- the reader
+        -- caught the writer (dead air / TX stop mid-signal).
+        if st_starve = '1' then
           lag_r <= '1';
         end if;
       end if;
