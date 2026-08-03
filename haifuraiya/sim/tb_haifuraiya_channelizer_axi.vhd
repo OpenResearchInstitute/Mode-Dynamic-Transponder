@@ -1221,7 +1221,7 @@ wait for 1 us;    -- let the design come back up
     if v_demod_ver(3 downto 0) = x"6" then pass("SL-D SYM_LOCK_WINDOW readback 6 (64 sym)");
     else fail("SL-D SYM_LOCK_WINDOW readback: got 0x" & to_hstring(v_demod_ver)); end if;
     axi_read_demod(16#0B8#, v_demod_ver);
-    if v_demod_ver = x"00060A00" then pass("CFO-D CFO_CTRL readback 0x00060A00");
+    if v_demod_ver = x"00060A01" then pass("CFO-D CFO_CTRL readback 0x00060A01");
     else fail("CFO-D CFO_CTRL readback: got 0x" & to_hstring(v_demod_ver)); end if;
     axi_read_demod(16#0B4#, v_demod_ver);
     if v_demod_ver = x"00000000" then pass("CFO-D applied word 0 (auto, no estimator)");
