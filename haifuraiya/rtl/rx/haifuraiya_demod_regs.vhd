@@ -98,7 +98,7 @@ entity haifuraiya_demod_regs is
         ADDR_WIDTH    : positive := 12;   -- 4 KB window
         VERSION_MAJOR : natural  := 0;
         VERSION_MINOR : natural  := 6;    -- bumped: expanded demod control plane
-        VERSION_PATCH : natural  := 6    -- 0x00060100: wedge-cure FIFO + witnesses
+        VERSION_PATCH : natural  := 5    -- 0x00060100: wedge-cure FIFO + witnesses
     );
     port (
         aclk            : in  std_logic;
@@ -202,6 +202,8 @@ entity haifuraiya_demod_regs is
         soft_dropped      : in  std_logic_vector(31 downto 0);
         soft_ovf_sticky   : in  std_logic;
         soft_tready_viol  : in  std_logic;
+        dm_ovfl_mlse      : in  std_logic := '0';
+        dm_ring_lag       : in  std_logic := '0';
         soft_stats_clear  : out std_logic
     );
 end entity haifuraiya_demod_regs;
@@ -656,7 +658,9 @@ begin
                             when ADDR_SOFT_DROPPED =>
                                 r_data_int <= soft_dropped;
                             when ADDR_SOFT_STATUS =>
-                                r_data_int <= (0 => soft_ovf_sticky, 1 => soft_tready_viol, others => '0');
+                                r_data_int <= (0 => soft_ovf_sticky, 1 => soft_tready_viol,
+                                               2 => dm_ring_lag,    3 => dm_ovfl_mlse,
+                                               others => '0');
                             when ADDR_FS_HUNT_THRESH =>
                                 r_data_int <= reg_fs_hunt_thresh;
                             when ADDR_FS_VERIFY_THRESH =>

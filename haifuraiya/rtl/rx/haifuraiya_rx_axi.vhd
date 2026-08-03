@@ -120,6 +120,12 @@ entity haifuraiya_rx_axi is
         dbg_fs_state      : out std_logic_vector(2 downto 0);
         dbg_fs_corr       : out std_logic_vector(31 downto 0);
         dbg_fs_corr_peak  : out std_logic_vector(31 downto 0);
+        -- burst-birth camera (2026-08-02):
+        dbg_eng_ted       : out std_logic_vector(16 downto 0);
+        dbg_eng_freq      : out std_logic_vector(31 downto 0);
+        dbg_eng_pos       : out std_logic_vector(23 downto 0);
+        dbg_eng_trk       : out std_logic;
+        dbg_eng_eerr      : out std_logic;
         dbg_fs_soft_q     : out std_logic_vector(2 downto 0);
         dbg_soft_corr     : out std_logic_vector(15 downto 0);
         dbg_sym_valid     : out std_logic;
@@ -174,6 +180,7 @@ architecture rtl of haifuraiya_rx_axi is
     signal sts_soft_dropped     : std_logic_vector(31 downto 0);
     signal sts_soft_ovf         : std_logic;
     signal sts_soft_viol        : std_logic;
+    signal sts_dm_ovfl, sts_dm_lag : std_logic;
     signal ctl_soft_clear       : std_logic;
     signal sts_frames_received    : std_logic_vector(31 downto 0);
     signal sts_cst_lock_f1        : std_logic;
@@ -324,6 +331,8 @@ begin
             soft_dropped          => sts_soft_dropped,
             soft_ovf_sticky       => sts_soft_ovf,
             soft_tready_viol      => sts_soft_viol,
+            dm_ovfl_mlse          => sts_dm_ovfl,
+            dm_ring_lag           => sts_dm_lag,
             soft_stats_clear      => ctl_soft_clear
         );
 
@@ -395,6 +404,8 @@ begin
             soft_dropped      => sts_soft_dropped,
             soft_ovf_sticky   => sts_soft_ovf,
             soft_tready_viol  => sts_soft_viol,
+            dm_ovfl_mlse      => sts_dm_ovfl,
+            dm_ring_lag       => sts_dm_lag,
             soft_stats_clear  => ctl_soft_clear,
             sl_pct_lock       => cfg_sl_pct_lock,
             sl_pct_unlock     => cfg_sl_pct_unlock,
@@ -411,6 +422,11 @@ begin
             dbg_fs_state      => dbg_fs_state,
             dbg_fs_corr       => dbg_fs_corr,
             dbg_fs_corr_peak  => dbg_fs_corr_peak,
+            dbg_eng_ted       => dbg_eng_ted,
+            dbg_eng_freq      => dbg_eng_freq,
+            dbg_eng_pos       => dbg_eng_pos,
+            dbg_eng_trk       => dbg_eng_trk,
+            dbg_eng_eerr      => dbg_eng_eerr,
             dbg_fs_soft_q     => dbg_fs_soft_q,
             dbg_soft_corr     => dbg_soft_corr,
             dbg_sym_valid     => dbg_sym_valid,

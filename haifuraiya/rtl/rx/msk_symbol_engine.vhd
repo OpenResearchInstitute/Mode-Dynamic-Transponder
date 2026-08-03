@@ -64,6 +64,11 @@ entity msk_symbol_engine is
     pos_q16    : out unsigned(47 downto 0);   -- debug tap: position word
     dbg_mac    : out std_logic;                -- high during S_MAC
     dbg_a1r    : out signed(39 downto 0);      -- live accumulator
+    -- burst-birth camera taps (2026-08-02, additive only):
+    dbg_ted    : out signed(16 downto 0);      -- per-symbol timing error
+    dbg_freq   : out signed(31 downto 0);      -- integrator Q24 view (=0x0CC)
+    dbg_trk    : out std_logic;                -- tracking gate as applied
+    dbg_eerr   : out std_logic;                -- e_err_v (walkthrough 8.2)
     -- per-symbol EARLY/LATE magnitude export for the symbol lock
     -- detector (normalized early-late gate; Mengali & D'Andrea 1997,
     -- and bit-for-concept identical to the C++ reference TED
@@ -171,6 +176,7 @@ architecture rtl of msk_symbol_engine is
   signal e_early_r : unsigned(15 downto 0) := (others => '0');
   signal e_late_r  : unsigned(15 downto 0) := (others => '0');
   signal e_err_v   : std_logic := '0';
+  signal dbg_ted_r : signed(16 downto 0) := (others=>'0');
   signal k      : unsigned(23 downto 0) := (others => '0');
 
   -- window sequencing: 0 = early, 1 = on-time, 2 = late
@@ -518,6 +524,7 @@ begin
             freq_full <= fnew_full;
             -- Q24 readback view (0x0CC semantics unchanged), round-to-nearest
             freq <= resize(shift_right(fnew_full + C_RND15, 15), 32);
+            dbg_ted_r <= ted;                  -- camera: TED as used this symbol
             -- proportional + integrator, Q16 samples; round-to-nearest on
             -- both slices (kills the arithmetic-shift -inf bias)
             adj := resize(shift_right(ted * signed(resize(cfg_tim_alpha, 17))
@@ -549,5 +556,11 @@ begin
       end if;
     end if;
   end process;
+
+  -- burst-birth camera (additive, no logic touched)
+  dbg_ted  <= dbg_ted_r;
+  dbg_freq <= freq;
+  dbg_trk  <= trk_enable;
+  dbg_eerr <= e_err_v;
 
 end architecture;

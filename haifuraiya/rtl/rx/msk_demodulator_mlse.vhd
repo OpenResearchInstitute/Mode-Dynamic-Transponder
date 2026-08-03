@@ -96,7 +96,12 @@ entity msk_demodulator_mlse is
     -- debug taps
     dbg_pos      : out unsigned(47 downto 0);
     dbg_sym      : out unsigned(23 downto 0);
-    dbg_th0      : out unsigned(15 downto 0)
+    dbg_th0      : out unsigned(15 downto 0);
+    -- burst-birth camera pass-throughs (2026-08-02):
+    dbg_ted      : out signed(16 downto 0);
+    dbg_freq     : out signed(31 downto 0);
+    dbg_trk      : out std_logic;
+    dbg_eerr     : out std_logic
   );
 end entity;
 
@@ -135,6 +140,7 @@ architecture rtl of msk_demodulator_mlse is
   signal dbg_best   : unsigned(1 downto 0);
 
   signal ovfl_r, lag_r : std_logic := '0';
+  signal hold_r : std_logic := '0';
   signal sl_e_early : unsigned(15 downto 0);
   signal sl_e_late  : unsigned(15 downto 0);
   signal sl_e_err_v : std_logic;
@@ -195,7 +201,37 @@ begin
   -- too. Healthy operation lives in lead = 16..63; both guards are
   -- far from it.
   hold_lead <= wr_n - resize(e_pos(39 downto 16), 24);
-  hold <= '1' when (hold_lead < 16) or (hold_lead(23) = '1') else '0';
+  -- RE-CENTERING GUARD (2026-08-03). The old gate held only while
+  -- lead < 16 and released immediately -- a hard floor with no restoring
+  -- force. Writer and reader run at IDENTICAL average rates, so the
+  -- timing loop's +/-10 ppm corrections walk the lead at ~6 samples/s;
+  -- from small margins the floor is struck about once per second. Each
+  -- strike skipped one symbol, broke the deframer's count, and forced a
+  -- sync miss: the 1 Hz comb, measured on hardware 2026-08-02 (pos
+  -- double-step + sym_valid gap + fs_state fall, one ILA window).
+  -- Sims never saw it: the walk needs ~1 s, sims ran 0.28 s.
+  -- The fix: once the floor is struck, STAY held until the lead
+  -- recovers to a re-centered margin (64 samples ~ 100 us). One
+  -- deliberate resync event per era instead of a skip per second, and
+  -- each event leaves the reader with maximal margin. lag_r goes sticky
+  -- on every event (now readable: SOFT_STATUS bit2).
+  recentering : process(clk)
+  begin
+    if rising_edge(clk) then
+      if init = '1' then
+        hold_r <= '0';
+      elsif hold_r = '0' then
+        if (hold_lead < 16) or (hold_lead(23) = '1') then
+          hold_r <= '1';                    -- floor struck: begin re-center
+        end if;
+      else
+        if (hold_lead >= 64) and (hold_lead(23) = '0') then
+          hold_r <= '0';                    -- margin restored: release
+        end if;
+      end if;
+    end if;
+  end process;
+  hold <= hold_r;
 
   ------------------------------------------------------------------
   -- the two verified blocks
@@ -217,6 +253,8 @@ begin
       cfg_tim_alpha => tim_alpha, cfg_tim_beta => tim_beta,
       sym_clk_offset => sym_clk_offset,
       dbg_mac => open, dbg_a1r => open,
+      dbg_ted => dbg_ted, dbg_freq => dbg_freq,
+      dbg_trk => dbg_trk, dbg_eerr => dbg_eerr,
       done => e_done );
 
   mlse: entity work.msk_mlse4

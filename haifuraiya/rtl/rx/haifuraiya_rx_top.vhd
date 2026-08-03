@@ -50,6 +50,8 @@ entity haifuraiya_rx_top is
         soft_dropped           : out std_logic_vector(31 downto 0);
         soft_ovf_sticky        : out std_logic;
         soft_tready_viol       : out std_logic;
+        dm_ovfl_mlse           : out std_logic;
+        dm_ring_lag            : out std_logic;
         soft_stats_clear       : in  std_logic;
 
         -- channelizer AXI-Lite control (pass through to PS)
@@ -136,6 +138,12 @@ entity haifuraiya_rx_top is
         dbg_fs_state      : out std_logic_vector(2 downto 0);
         dbg_fs_corr       : out std_logic_vector(31 downto 0);
         dbg_fs_corr_peak  : out std_logic_vector(31 downto 0);
+        -- burst-birth camera (engine timing internals, 2026-08-02):
+        dbg_eng_ted       : out std_logic_vector(16 downto 0);
+        dbg_eng_freq      : out std_logic_vector(31 downto 0);
+        dbg_eng_pos       : out std_logic_vector(23 downto 0);
+        dbg_eng_trk       : out std_logic;
+        dbg_eng_eerr      : out std_logic;
         dbg_fs_soft_q     : out std_logic_vector(2 downto 0);
         dbg_soft_corr     : out std_logic_vector(15 downto 0);
         dbg_sym_valid     : out std_logic;
@@ -206,6 +214,10 @@ architecture rtl of haifuraiya_rx_top is
     signal held_d     : std_logic := '0';
     signal seed_pulse : std_logic;
     signal fine_owns  : std_logic := '0';  -- retained for readback compat; no longer in path
+    signal dm_ovfl_s, dm_lag_s : std_logic;
+    signal dbg_pos_s  : unsigned(47 downto 0);
+    signal dbg_ted_s  : signed(16 downto 0);
+    signal dbg_freq_s : signed(31 downto 0);
     signal slew_out_s : signed(15 downto 0);
     signal afc_held_s : std_logic;
     signal rot_valid  : std_logic;
@@ -517,14 +529,24 @@ begin
             sl_ratio_pct     => sl_pct_u,
             sl_window_full   => sl_window_full,
 
-            ovfl_mlse    => open,   -- sticky diagnostics: route to demod
-            ring_lag     => open,   -- regs status when the map is reworked
+            ovfl_mlse    => dm_ovfl_s,   -- routed 2026-08-03: SOFT_STATUS b3
+            ring_lag     => dm_lag_s,    -- routed 2026-08-03: SOFT_STATUS b2
+                                         -- (b2 = the original >48-sample ring-lag
+                                         -- sticky. With the re-centering guard,
+                                         -- lead deliberately recovers to 64 on a
+                                         -- re-center, so b2 SETTING is expected
+                                         -- rarely; a dedicated re-center event
+                                         -- counter is next spin's telemetry.)
             fine_seed_hz   => cfo_word,
             fine_seed_load => seed_pulse,
             fine_enable    => fine_owns,   -- trickle runs continuously once seeded (reference: AFC updates every symbol, no gating by carrier state)
             fine_hz        => fine_hz_s,
 
-            dbg_pos      => open,
+            dbg_pos      => dbg_pos_s,
+            dbg_ted      => dbg_ted_s,
+            dbg_freq     => dbg_freq_s,
+            dbg_trk      => dbg_eng_trk,
+            dbg_eerr     => dbg_eng_eerr,
             dbg_sym      => open,
             dbg_th0      => open
         );
@@ -666,6 +688,15 @@ begin
             status_aclk => aclk, status_aresetn => aresetn,
             status_req => '0', status_ack => open,
             fifo_wr_ptr => open, fifo_rd_ptr => open );
+
+    -- burst-birth camera exports: pos low 24 bits = frac(16) + int LSBs(8),
+    -- enough to film symbol-boundary crossings and the frac wheel directly
+    dbg_eng_ted  <= std_logic_vector(dbg_ted_s);
+    dbg_eng_freq <= std_logic_vector(dbg_freq_s);
+    dbg_eng_pos  <= std_logic_vector(dbg_pos_s(23 downto 0));
+
+    dm_ovfl_mlse <= dm_ovfl_s;
+    dm_ring_lag  <= dm_lag_s;
 
 end architecture rtl;
 

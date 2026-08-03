@@ -417,3 +417,72 @@ ad_connect channelizer_rx1/frames_received   ila_rx_fsync/probe6
 ad_connect channelizer_rx1/dbg_sym_valid     ila_rx_fsync/probe7
 
 puts "INFO: haifuraiya - RX ILAs: ila_rx_demod (16p carrier) + ila_rx_fsync (8p frame-sync)"
+
+
+##############################################################################
+# ila_rx_engine -- BURST-BIRTH CAMERA (2026-08-02)
+# Replaces the Costas-era ila_rx_demod probe set. Films the engine's timing
+# machinery across a comb burst / wall onset at symbol rate.
+# Requires rx_top 2c329000 (dbg_eng_* ports) + wrapper b04e4d20 + engine 6f32f5ce.
+##############################################################################
+create_bd_cell -type ip -vlnv xilinx.com:ip:ila:6.2 ila_rx_engine
+set_property -dict [list \
+    CONFIG.C_MONITOR_TYPE {Native} \
+    CONFIG.C_TRIGIN_EN {false} \
+    CONFIG.C_EN_STRG_QUAL {1} \
+    CONFIG.C_DATA_DEPTH {4096} \
+    CONFIG.C_NUM_OF_PROBES {10} \
+] [get_bd_cells ila_rx_engine]
+set_property -dict [list \
+    CONFIG.C_PROBE0_WIDTH {17} \
+    CONFIG.C_PROBE1_WIDTH {32} \
+    CONFIG.C_PROBE2_WIDTH {24} \
+    CONFIG.C_PROBE3_WIDTH {1}  \
+    CONFIG.C_PROBE4_WIDTH {1}  \
+    CONFIG.C_PROBE5_WIDTH {16} \
+    CONFIG.C_PROBE6_WIDTH {3}  \
+    CONFIG.C_PROBE7_WIDTH {1}  \
+    CONFIG.C_PROBE8_WIDTH {32} \
+    CONFIG.C_PROBE9_WIDTH {1}  \
+] [get_bd_cells ila_rx_engine]
+ad_connect $sys_cpu_clk ila_rx_engine/clk
+ad_connect channelizer_rx1/dbg_eng_ted    ila_rx_engine/probe0  ;# TED per symbol (signed 17)
+ad_connect channelizer_rx1/dbg_eng_freq   ila_rx_engine/probe1  ;# integrator Q24 (= 0x0CC live)
+ad_connect channelizer_rx1/dbg_eng_pos    ila_rx_engine/probe2  ;# pos: frac(15:0)+int LSBs
+ad_connect channelizer_rx1/dbg_eng_trk    ila_rx_engine/probe3  ;# tracking gate as applied
+ad_connect channelizer_rx1/dbg_eng_eerr   ila_rx_engine/probe4  ;# e_err_v (walkthrough 8.2)
+ad_connect channelizer_rx1/dbg_soft_corr  ila_rx_engine/probe5  ;# soft stream (garbage-span marker)
+ad_connect channelizer_rx1/dbg_fs_state   ila_rx_engine/probe6  ;# fsync state (span edges)
+ad_connect channelizer_rx1/frame_sync_locked ila_rx_engine/probe7
+ad_connect channelizer_rx1/dbg_fs_corr    ila_rx_engine/probe8  ;# sync spikes (radix: signed dec)
+ad_connect channelizer_rx1/dbg_sym_valid  ila_rx_engine/probe9  ;# storage qualifier
+
+puts "INFO: haifuraiya - ila_rx_engine (burst-birth camera, 10 probes)"
+
+##############################################################################
+# CAPTURE RECIPES
+# Storage qualifier for ALL sessions: dbg_sym_valid == 1  (4096 symbols/window)
+#
+# FILM-1  "the snap":        trigger  dbg_eng_freq > 1500  OR  < -1500
+#                            (signed compare; catches the sawtooth's fast edge
+#                            mid-act). Position 2048. One capture = the
+#                            disturbance entering the loop, ted's face, the
+#                            gate's state, and the soft stream's health, all
+#                            aligned on the same symbol axis.
+#
+# FILM-2  "the garbage span": trigger  frame_sync_locked == F, position 3000.
+#                            Pre-trigger shows the last healthy symbols, the
+#                            trigger region shows the span's birth. Compare
+#                            dbg_eng_pos across the span edges: net change of
+#                            the int LSBs vs 2144/frame = the displacement,
+#                            measured, signed.
+#
+# FILM-3  "gate autopsy":    same trigger as FILM-2; read probe3 (trk gate).
+#                            Gate dropping BEFORE the ted excursion = the
+#                            freeze-cycle hypothesis (loop coasts on bias,
+#                            drifts, snaps on re-enable). Gate solid through
+#                            the excursion = external disturbance confirmed,
+#                            witness capture inherits the case.
+#
+# The three films discriminate every hypothesis left standing. One spin.
+##############################################################################
