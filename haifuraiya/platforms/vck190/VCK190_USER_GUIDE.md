@@ -53,10 +53,15 @@ We have a tcl script runner that calls up a VHDL test bench.
 
 To use it, create the stimulus file first. 
 
-`python3 opv_stim.py --preamble --clock-offset-ppm 11.5 --carrier-offset 500 --ebn0 10 --seed 1 --out opv_chan_stim.txt`
+```
+ python3 opv_stim.py --preamble --clock-offset-ppm 11.5 \
+    --fc 781250 --carrier-offset 500 \
+    --ebn0 10 --seed 1 --out opv_chan_stim.txt
+```
 
 This sets up a 40 ms preamble and then makes six 40 ms frames. There is 
 some resampling from the ppm offset, to give our circuits something to do!
+It's on channel 5 (781250 Hz offset). 
 
 With noise and CFO in the stimulus, the soft codes should leave the rails and 
 populate the middle values, `cfo_word` and `est_hz` in the CFO group should 
