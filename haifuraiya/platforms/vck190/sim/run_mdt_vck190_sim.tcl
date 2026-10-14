@@ -23,7 +23,7 @@
 #
 #   PART 1  project bootstrap: environment gate, create project, target part
 #   PART 2  source manifest: core RTL via safe_add_files
-#   PART 3  (pending) testbench + VHDL-2008 properties + stimulus staging
+#   PART 3  testbench + VHDL-2008 properties + stimulus staging
 #   PART 4  (pending) launch_simulation + waveform layout
 #
 # USAGE (from the Vivado TCL console on chococat):
@@ -196,7 +196,6 @@ if {$n_added != $n_expected} {
 
 puts ""
 puts "PART 2 complete: $n_added core files added."
-puts "PART 3 (testbench + stimulus staging) not yet present in this script."
 
 ################################################################################
 # PART 3 -- testbench, VHDL-2008 properties, stimulus staging
@@ -258,7 +257,196 @@ puts "  OK staged [file tail $lut_file] -> $xsim_dir"
 puts ""
 puts "PART 3 complete: testbench set as top, stimulus staged."
 
-
 ################################################################################
-# PART 4 -- simulation launch + waveform layout                (to be added)
+# PART 4 -- simulation launch + waveform layout
 ################################################################################
+# The waveform layout is the ZCU102 layout, unchanged: the bench and DUT
+# hierarchy crossed to this platform intact, so every probe path still holds.
+# Groups appear in SIGNAL-FLOW order. The normalizer groups live in
+# waves_normalizer.tcl beside this script (copied from haifuraiya/sim/ -- a
+# LAYOUT file, not a source file, so the no-copy rule doesn't apply; it may
+# diverge freely as this platform grows Versal-specific probes).
+ 
+puts "\nLaunching simulation..."
+launch_simulation
+ 
+puts "\n========================================"
+puts "Simulation launched. Check the xsim console output for test"
+puts "PASS/FAIL summary, or:"
+puts "  - 'ALL TESTS PASSED' note -> green"
+puts "  - 'TESTS FAILED' error    -> investigate"
+puts "========================================"
+ 
+# --- waveform layout: signal-flow order ---------------------------------------
+set TB   /tb_haifuraiya_channelizer_axi
+set RX   $TB/u_rx/u_rx
+set CHAN $RX/u_chan
+set DEM  $RX/u_demod
+set FS   $RX/u_fsync
+ 
+# --- bench progress ---------------------------------------------------------
+add_wave_group {TB_Control}
+add_wave -into {TB_Control} -radix unsigned $TB/frames_observed
+add_wave -into {TB_Control} -radix unsigned $TB/n_target_samps
+add_wave -into {TB_Control} -radix unsigned $TB/n_soft_beats
+add_wave -into {TB_Control} -radix unsigned $TB/n_soft_frames
+add_wave -into {TB_Control} $TB/running
+ 
+# --- control plane: channelizer enable --------------------------------------
+add_wave_group {Control_Plane_Channelizer}
+add_wave -into {Control_Plane_Channelizer} -radix hex $TB/s_axi_ctrl_awaddr
+add_wave -into {Control_Plane_Channelizer} $TB/s_axi_ctrl_awvalid
+add_wave -into {Control_Plane_Channelizer} -radix hex $TB/s_axi_ctrl_wdata
+add_wave -into {Control_Plane_Channelizer} $TB/s_axi_ctrl_wvalid
+add_wave -into {Control_Plane_Channelizer} $TB/s_axi_ctrl_bvalid
+ 
+# --- control plane: demod init bracket --------------------------------------
+add_wave_group {Control_Plane_Demod}
+add_wave -into {Control_Plane_Demod} -radix hex $TB/s_axi_demod_awaddr
+add_wave -into {Control_Plane_Demod} $TB/s_axi_demod_awvalid
+add_wave -into {Control_Plane_Demod} $TB/s_axi_demod_awready
+add_wave -into {Control_Plane_Demod} -radix hex $TB/s_axi_demod_wdata
+add_wave -into {Control_Plane_Demod} $TB/s_axi_demod_wvalid
+add_wave -into {Control_Plane_Demod} $TB/s_axi_demod_wready
+add_wave -into {Control_Plane_Demod} $TB/s_axi_demod_bvalid
+add_wave -into {Control_Plane_Demod} $DEM/init
+add_wave -into {Control_Plane_Demod} $DEM/rx_enable
+ 
+# --- channelizer INPUT stream -----------------------------------------------
+#   WATCH tready: if tvalid sits high while tready stays low, p_stim is stalled
+#   because the core is not accepting samples.
+add_wave_group {Channelizer_Input}
+add_wave -into {Channelizer_Input}            $TB/s_axis_data_tvalid
+add_wave -into {Channelizer_Input}            $TB/s_axis_data_tready
+add_wave -into {Channelizer_Input} -radix hex $TB/s_axis_data_tdata
+ 
+# --- CHANNEL NUMBERING: the k -> (N-k) relabel fix --------------------------
+#   For a bin-5 tone the tone beat should read: int=59, int_r=5, eq_chan=5.
+#   DC (0) and Nyquist (32) are fixed points -- they do NOT move.
+add_wave_group {Channel_Numbering}
+add_wave -into {Channel_Numbering} -radix unsigned $CHAN/chan_idx_int
+add_wave -into {Channel_Numbering} -radix unsigned $CHAN/chan_idx_int_r
+add_wave -into {Channel_Numbering} -radix unsigned $CHAN/eq_chan
+add_wave -into {Channel_Numbering} $CHAN/chan_valid
+add_wave -into {Channel_Numbering} $CHAN/chan_valid_r
+add_wave -into {Channel_Numbering} $CHAN/eq_valid
+ 
+# --- channelizer OUTPUT stream: where the energy lands + TLAST ---------------
+add_wave_group {Channelizer_Output}
+add_wave -into {Channelizer_Output}                 $RX/chans_tvalid
+add_wave -into {Channelizer_Output} -radix unsigned $RX/chans_tdest
+add_wave -into {Channelizer_Output} -radix hex      $RX/chans_tdata
+add_wave -into {Channelizer_Output}                 $RX/chans_tlast
+add_wave -into {Channelizer_Output}                 $CHAN/chan_last
+ 
+# --- the one channel demux'd to the demod -----------------------------------
+add_wave_group {Demod_Input}
+add_wave -into {Demod_Input}                 $RX/rx_svalid
+add_wave -into {Demod_Input} -radix hex      $RX/chan_i_reg
+add_wave -into {Demod_Input} -radix hex      $RX/chan_q_reg
+ 
+# --- normalizer + register-map groups (separate layout file, as on ZCU102) ---
+set waves_norm [file join [file dirname [info script]] waves_normalizer.tcl]
+if {[file exists $waves_norm]} {
+    source $waves_norm
+    puts "  OK sourced waves_normalizer.tcl"
+} else {
+    puts "  SKIP waves_normalizer.tcl (not found beside this script -- copy it"
+    puts "       from haifuraiya/sim/ if the normalizer groups are wanted)"
+}
+ 
+# --- elastic store -----------------------------------------------------------
+add_wave_group {Elastic_Store}
+add_wave -into {Elastic_Store}                 $DEM/rx_svalid
+add_wave -into {Elastic_Store} -radix unsigned $DEM/st_wr_ptr_rd
+add_wave -into {Elastic_Store} -radix unsigned $DEM/st_fill_ptr
+add_wave -into {Elastic_Store} -radix unsigned $DEM/st_fill_lead
+add_wave -into {Elastic_Store} -radix unsigned $DEM/st_occ
+add_wave -into {Elastic_Store}                 $DEM/store_hold
+add_wave -into {Elastic_Store}                 $DEM/st_fill_pend
+add_wave -into {Elastic_Store}                 $DEM/st_starve
+add_wave -into {Elastic_Store}                 $DEM/st_stomp
+ 
+# --- symbol engine: the timing loop ------------------------------------------
+add_wave_group {MLSE_Engine}
+add_wave -into {MLSE_Engine} -radix unsigned $DEM/engine/pos
+add_wave -into {MLSE_Engine} -radix unsigned $DEM/engine/k
+add_wave -into {MLSE_Engine} -radix dec      $DEM/engine/freq
+add_wave -into {MLSE_Engine}                 $DEM/e_valid
+add_wave -into {MLSE_Engine} -radix dec      $DEM/e_y1r
+add_wave -into {MLSE_Engine} -radix dec      $DEM/e_y2r
+ 
+# --- MLSE: per-survivor phase (the four thetas should cluster at lock) -------
+add_wave_group {MLSE_Trellis}
+add_wave -into {MLSE_Trellis} -radix unsigned $DEM/th0
+add_wave -into {MLSE_Trellis} -radix unsigned $DEM/th1
+add_wave -into {MLSE_Trellis} -radix unsigned $DEM/th2
+add_wave -into {MLSE_Trellis} -radix unsigned $DEM/th3
+add_wave -into {MLSE_Trellis} -radix unsigned $DEM/dbg_best
+add_wave -into {MLSE_Trellis}                 $DEM/m_busy
+ 
+# --- symbol lock detector ----------------------------------------------------
+set SL $DEM/u_symlock
+add_wave_group {Symbol_Lock}
+add_wave -into {Symbol_Lock}                 $DEM/sl_locked
+add_wave -into {Symbol_Lock} -radix unsigned $SL/ratio_pct
+add_wave -into {Symbol_Lock}                 $SL/window_full
+add_wave -into {Symbol_Lock} -radix unsigned $SL/s_num
+add_wave -into {Symbol_Lock} -radix unsigned $SL/s_den
+add_wave -into {Symbol_Lock} -radix unsigned $SL/fill
+add_wave -into {Symbol_Lock} -radix unsigned $SL/wlog_r
+add_wave -into {Symbol_Lock} -radix unsigned $DEM/sl_e_early
+add_wave -into {Symbol_Lock} -radix unsigned $DEM/sl_e_late
+add_wave -into {Symbol_Lock}                 $DEM/sl_e_err_v
+add_wave -into {Symbol_Lock} -radix dec      $DEM/sym_clk_offset
+ 
+# --- CFO chain ----------------------------------------------------------------
+add_wave_group {CFO}
+set CFO $RX/u_cfo
+add_wave -into {CFO} -radix dec      $RX/cfo_word
+add_wave -into {CFO}                 $CFO/en
+add_wave -into {CFO}                 $CFO/out_valid
+add_wave -into {CFO} -radix unsigned $CFO/phase
+add_wave -into {CFO} -radix dec      $CFO/i_out
+add_wave -into {CFO} -radix dec      $CFO/q_out
+set AFC $RX/u_demod/u_afc
+add_wave -into {CFO} -radix dec      $AFC/est_hz
+add_wave -into {CFO} -radix unsigned $AFC/state_o
+add_wave -into {CFO} -radix unsigned $AFC/quality
+add_wave -into {CFO}                 $AFC/cfo_locked
+ 
+# --- bit decisions: the ACTUAL demod output ----------------------------------
+add_wave_group {Bit_Decisions}
+add_wave -into {Bit_Decisions}            $DEM/rx_data
+add_wave -into {Bit_Decisions} -radix dec $DEM/rx_data_soft
+add_wave -into {Bit_Decisions}            $DEM/rx_dvalid
+add_wave -into {Bit_Decisions}            $DEM/demod_lock
+ 
+# --- frame sync ---------------------------------------------------------------
+add_wave_group {Frame_Sync}
+add_wave -into {Frame_Sync}                 $RX/frame_sync_locked
+add_wave -into {Frame_Sync} -radix unsigned $RX/frames_received
+add_wave -into {Frame_Sync} $FS/debug_corr_peak
+add_wave -into {Frame_Sync} $FS/debug_correlation
+add_wave -into {Frame_Sync} $FS/debug_state
+add_wave -into {Frame_Sync} $FS/debug_consecutive_good
+add_wave -into {Frame_Sync} $FS/debug_missed_syncs
+add_wave -into {Frame_Sync} $FS/rx_bit
+add_wave -into {Frame_Sync} $FS/rx_bit_valid
+add_wave -into {Frame_Sync} $FS/demod_sync_lock
+add_wave -into {Frame_Sync} $FS/demod_sync_lock_d
+add_wave -into {Frame_Sync} $FS/debug_soft_current
+add_wave -into {Frame_Sync} $FS/debug_soft_quantized
+add_wave -into {Frame_Sync} $FS/corr_prev
+add_wave -into {Frame_Sync} $FS/energy_prev
+ 
+# --- scoreboard + CFO-applied probes ------------------------------------------
+add_wave $TB/sb_tvalid
+add_wave $TB/sb_tdata
+add_wave $TB/sb_tlast
+add_wave $RX/cfo_applied
+ 
+run all
+ 
+puts ""
+puts "PART 4 complete: simulation ran to the bench's own finish."
