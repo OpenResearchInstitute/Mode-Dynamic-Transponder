@@ -2,8 +2,8 @@
 
 A polyphase channelizer implementation in VHDL for the AMSAT-UK FunCube+
 Mode-Dynamic-Transponder (MDT), designed for spectrum monitoring and
-successive interference cancellation (SIC) signal processing — and for
-the parallel ground-station channelizer that complements it.
+successive interference cancellation (SIC) signal processing, and for
+the parallel ground-station channelizer that complements it. 
 
 ## Overview
 
@@ -16,7 +16,8 @@ toolchains, and build flows.
 | Subproject | Channels | Sample rate | Hardware target | Application |
 |---|---|---|---|---|
 | **MDT-SIC** | 4 | 40 ksps | iCE40UP5K + STM32H753ZI | FunCube+ satellite payload (spectrum monitoring + SIC) |
-| **Haifuraiya** | 64 | 10 Msps | ZCU102 + ADRV9002 | Opulent Voice FDMA ground station |
+| **Haifuraiya** | 64 | 10 Msps | ZCU102 + ADRV9002 | Opulent Voice FDMA ground station, terrestrial |
+| **Haifuraiya** | 64 | 10 Msps | VCK190 + Teledyne ADC and DAC | Opulent Voice FDMA ground station, radiation tolerant |
 
 ## Getting started
 
@@ -24,13 +25,8 @@ Pick the subproject that matches your target:
 
 - For the iCE40 + STM32 satellite payload, see [`mdt_sic/README.md`](mdt_sic/README.md)
 - For the ZCU102 + ADRV9002 ground-station channelizer, see [`haifuraiya/README.md`](haifuraiya/README.md)
+- For the VCK190 + Teledyne parts, see [`haifuraiya/platforms/vck190/VCK190_USER_GUIDE.md`](haifuraiya/platforms/vck190/VCK190_USER_GUIDE.md)
 - To regenerate filter coefficients, see [`docs/README.md`](docs/README.md)
-
-For cross-cutting build targets that span both subprojects:
-
-```bash
-make help
-```
 
 ## What is a polyphase channelizer?
 
@@ -61,7 +57,7 @@ satellite communications, and spectrum analyzers.
 The same conceptual structure is implemented at two scales: a 4-channel
 serial-MAC variant for the cubesat payload (resource-constrained
 iCE40UP5K) and a 64-channel parallel-MAC variant for the ground station
-(resource-rich Zynq UltraScale+). The shared Python reference
+(resource-rich Zynq UltraScale+, Versal). The shared Python reference
 implementation in [`docs/polyphase_channelizer.ipynb`](docs/polyphase_channelizer.ipynb)
 exports the filter coefficients for both designs.
 
@@ -77,6 +73,7 @@ Mode-Dynamic-Transponder/
 │                      See mdt_sic/README.md
 └── haifuraiya/        ZCU102 + ADRV9002 64-channel channelizer subproject
                        See haifuraiya/README.md
+     └── platforms/vck190/       See VCK190_USER_GUIDE.md
 ```
 
 ## Related projects
@@ -92,7 +89,7 @@ This is an Open Research Institute project. Contributions are welcome.
 1. Fork the repository
 2. Create a feature branch
 3. Submit a pull request
-4. Have fun
+4. Have fun!
 
 For questions or discussion, join the
 [ORI community channels](https://openresearch.institute/getting-started).
@@ -110,6 +107,7 @@ See LICENSE for details.
 - Martin Ling for the hardware design reference
 - Daniel Estévez EA4GPZ for the pm-remez library
 - F5OEO for filter design feedback
+- Teledyne for radiation tolerant parts and design advice
 
 ---
 
