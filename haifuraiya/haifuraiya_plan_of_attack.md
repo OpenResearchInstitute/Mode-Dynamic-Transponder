@@ -40,7 +40,192 @@ Quick orientation when you come back to this doc weeks later:
 | ✅ | **Eb/N0 conventions reconciled** | **Sweep harness axis = CODED bit; opv_stim = INFO bit; delta 3.01 dB @ R=1/2. PROJECT CONVENTION: info-bit. Records relabeled in analysis (not re-run); all differences (incl. the 5.8 dB) convention-invariant. C/N stated in the 156.25 kHz channel. `sim/rx_link_budget.py`: staircase, translator (matches opv_stim to 0.01 dB), theory curves, 7-figure embedded tutorial, honest money figure.** |
 | ✅ | **Full receive chain synthesized standalone** | **`sim/synth_full.tcl`: whole rx chain, one design, aclk @ 100 MHz: WNS +0.499, TNS 0, 0/397,292 failing. 42% LUT, 6.8% BRAM (62 = the two demod sine ROMs), 63% DSP (demod contributes 22). Critical path = engine TED decide chain (known; next cut scoped).** |
 | ✅ | **pluto_msk dependency severed** | **`frame_sync_detector_soft.vhd` promoted to `rtl/rx/` (provenance: pluto_msk branch `haifuraiya-normalized-fsync`); cxx-faithful Costas rework preserved on `cxx-faithful-demod` (was uncommitted in a detached-HEAD nested submodule -- rescued). component.xml v0.4 coreRev 3: Costas out, MLSE trio + normalizer mux + fsync + `rtl/coeffs/lut16q_hex.txt` in.** |
+
+| ⏳ | **Phase 4 PL: AFC (cfo_afc) Noise-Induced Bias and Runaway Findings and Fix Plan** | **est_hz just doesn't act right.** | 
+**Date:** 2026-10-16/17 (investigation on chococat, on the new VCK190 simulation platform)
+**Status:** Characterized. Fixes ranked, not yet implemented.
+**Affects:** `rtl/rx/cfo_afc.vhd` on both platforms. The flying ZCU102 bitstream
+(VERSION 0x00060600) carries the same block and fails the same way in simulation.
+
+---
+
+The automatic frequency control (AFC) estimator is accurate when noiseless and
+progressively worsens pretty bad as the in-channel carrier-to-noise ratio falls.
+Unbiased with wander at Eb/N0 = 14 dB, episodic out-of-budget
+excursions at 12 dB, a persistent ~+400 Hz false equilibrium with eventual
+runaway at 10 dB, and no equilibrium at all (outlier capture, churn) at 8 dB.
+Because the applied correction tracks the estimate continuously, with no
+clamp, no awareness of frame-sync state, and a lock indicator that cannot
+detect any of these failures, the AFC converts its own estimation error into
+receiver-wide frame loss. The payload operates near the FEC threshold
+(~4.5 dB Eb/N0) by design. This block as built is the limiting element of
+the receiver's noise floor.
+
+Everything else investigated this week was ruled out with measurements
+
+### Operating-point sweep (3-frame runs, VCK190 xsim, seed 1, stimulus:
+`opv_stim.py --preamble --clock-offset-ppm 11.5 --fc 781250 --carrier-offset 500`,
+demod sees est_hz = 509 Hz)
+
+| Eb/N0 (dB) | C/N in 156.25 kHz channel (dB) | frames | settled est_hz | character |
+|---|---|---|---|---|
+| infinity (no --ebn0) | infinity | 3/3 | 501?515 | ±7 Hz limit cycle, unbiased; AFC exact |
+| 14 | 6.4 | 3/3 | 328 to 707 | midpoint ~518, unbiased; peak residual -198/+181 Hz grazes the +/-212 Hz theta budget |
+| 12 | 4.4 | 3/3 | 378 to 782; long dwell 380 to 580 | center is good but episodic excursions EXCEED budget (782 to 273 Hz); ended mid-excursion at 782 |
+| 10 | 2.4 | 19/25 (25-frame run) | 850 to 950 creeping around | persistent +400 Hz false equilibrium; escalating sync misses; runaway after final unlock |
+| 8 | 0.4 | 0/3 (1 of 3 syncs detected) | none | outlier capture at -2300, HELD asserted on it at 14.3 ms; churn spanning -2300 to +1050 with no equilibrium (ended +1050 at 150 ms); recovery slower than preamble so no good |
+
+Notes: 3-frame rows measure initial equilibrium over 160 ms and are lower
+bounds on badness (the 10 dB long run shows additional slow creep). Sync-loss
+statistics from 3-frame runs are thin (4 sync opportunities each).
+
+### 25-frame run at Eb/N0 = 10 dB (the rediscovery run)
+
+- Missed syncs at 241 ms (1, flywheel held), 481 ms (2 unlock at 561.8 ms),
+  801 ms (unlock at 881.8 ms). Each unlock costs exactly 160 ms = 4 frames
+  (frame-sync FSM re-verify). 19/25 frames delivered, all 19 pristine
+  (soft-bit p10 at rail; 1.2% mid-codes).
+- est_hz baseline ~850 to 950 from first lock, creeping to 1253 by 881.8 ms,
+  then open runaway to 6886 by end of signal. cfo_word = est_hz continuously
+  (auto mode applies live).
+- AFC state HELD (state_o = 3) and quality 5496 to 7252 throughout, including
+  the entire runaway. So the metrics look good but it's borked. 
+- Delivered frames all-or-nothing (clean or absent): failure is acquisition/
+  gating via CFO residual, not demod quality degradation.
+
+### Lock-indicator blindness (measured)
+
+- 8 dB run: HELD asserted at 14.3 ms on a sign-inverted outlier (-2300 vs
+  truth +509) and never released through 90+ ms of churn, two missed sync
+  words, and swings of +/- 600 Hz.
+- Mechanism: HELD entry/exit judges estimate *stability* (enter <200 Hz,
+  exit >400 Hz of estimate movement per 64-symbol 1.2 ms window). A churn of
+  ~600 Hz per 10 ms to 100 Hz/window never trips the exit. The hysteresis that
+  prevents state flapping also structurally certifies "stably wrong" and
+  "slowly walking" as locked.
+- quality (q_win) is windowed correlation magnitude: it measures signal
+  presence, not estimate validity, and the normalizer holds channel amplitude
+  near constant. At 10 dB it read ~7000 (healthy) during the entire runaway.
+- Related prior finding (SL-C, 2026-10-14): the v6 symbol lock detector
+  asserts lock on AWGN-only input at the 25% threshold. The receiver can read
+  sym_locked=1, cfo_locked=1, quality of 7000 while delivering zero frames.
+
+## Mechanism
+
+The AFC is decision-directed: per symbol it selects the dominant tone
+correlator (implicitly deciding the data) and integrates that tone's
+delta-phase. Decision-directed estimators have an SNR threshold below which
+selection errors correlated with the very noise being measured stop
+averaging out and produce systematic pull. Errors arrive in bursts, giving
+episodic bias that merges into a persistent false equilibrium as C/N falls,
+and ultimately outlier capture (threshold effect per Rife & Boorstyn 1974).
+The loop then makes it worse. we have an integrator with unlimited authority,
+applied to the rotator instantly, with no input from frame sync (the
+receiver's one place where it can get fixed), no clamp to the physical offset 
+budget, no slew limit, and no snap-back on unlock. The runaway at 10 dB is 
+positive feedback. This is not great. 
+
+Context: the rotator/theta-tracker partition allocates +/- 212 Hz of residual
+to the per-survivor phase tracker (`cfo_rotator.vhd` header). Bias of ~+400 Hz
+at 10 dB exceeds the entire allocation and wander at 14 dB munges it. 
+
+## what is not the problem
+
+- **Timing loop / TED (V-bank, C++-reference law):** SYM_CLK_OFFSET read 2137
+  (Q24 smp/sym) vs 2225 expected for the injected +11.5 ppm and tracked
+  correctly over 1.04 s. The DEFCON-era comb signature did not reproduce.
+- **Elastic store:** st_starve = st_stomp = 0 for the entire 25-frame run;
+  write pointer advanced exactly 400,000 samples in 640 ms (625/ms).
+  Occupancy rhythm (store_hold low every 17.6/19.2 µs alternating = 11/12
+  channel samples) is the healthy 11.53 samples-per-symbol fill cadence.
+- **CFO rotator calibration:** C_HZ_TO_INC = 6872 = round(2^32/625000),
+  error 0.0012%. Applied Hz axis is true!
+- **Frequency plan and sign chain end-to-end** (incl. channelizer conjugation
+  and the 11.5 ppm resample's +9 Hz): noiseless run settled 501 to 515 vs
+  truth 509, 3/3 frames. Looked nice.
+- **Frame sync:** behaved correctly given its inputs at every operating
+  point; misses track CFO residual as expected (catch at corr 776,621 with
+  ~384 Hz residual; miss at 401,407 mid-churn).
+- **Channelizer / demod input:** channel power constant (grader windows
+  ~81M ±2%); 19 delivered frames pristine.
+
+## Retired approaches (do not re-propose)
+
+- **de Buda squared-line (1972) carrier recovery:** tried earlier in the
+  project; did not work. Consistent with known weaknesses. Squaring loss
+  collapses line SNR quadratically at low C/N (buried at our operating
+  point), and long same-symbol runs starve a line (de Buda Sec. VII; noted
+  in opv_stim.py docstring). The MLSE generation replaced it. It's so 
+  tempting to go back to it because it's really pretty easy to understand
+  and explain and describe.
+
+## Fix plan, ranked
+
+- **F1 Clamp authority to the physical prior.** The TX offset budget is
+  +/- 25 ppm-class (a few kHz at the channel). est_q16 and/or the applied word
+  shall saturate at that bound. 
+- **F2 Frame-sync-aware servo: freeze on lock, snap back on unlock.**
+  While frame_sync_locked = 1, freeze the integrator or drop to a
+  near-zero-bandwidth gear (sync itself is proof the current word is
+  adequate); checkpoint est at each verified sync; on unlock, snap back to
+  the checkpoint instead of free-running. Uses existing signals! This alone
+  turns the 10 dB runaway into a bounded behavior. 
+- **F3 Replace the lock/quality metric.** Watch estimate validity, not
+  amplitude/stability: candidates are discriminator-output consistency,
+  decision-margin statistics (|m1 m2| distribution), and above all the
+  downstream sync state. Applies equally to the SL-C symbol-lock-on-noise
+  gap. Telemetry (Bouro, and eventually payload housekeeping) must report
+  validity, not stability. Stability is overrated.
+- **F4 Data-aided acquisition on the preamble (redesign, when scheduled).**
+  During the 40 ms preamble the differential pattern is known a priori, so
+  tone selection can be supplied rather than decided? The bias mechanism
+  does not exist in data-aided mode at any SNR. Acquire data-aided, hand
+  off, then minimal-authority tracking during payload (same philosophy as
+  the demod init bracket: configure held, release onto known-good state).
+
+## Verification plan
+
+1. **Re-confirm the Manual Mode** 25 frames at Eb/N0 = 10 dB
+   with CFO_CTRL manual, CFO_MANUAL = +500 (bench lines exist, commented).
+   Expected 25/25 and formally proves (again) the AFC is the sole cause of frame loss.
+2. **Bench instrumentation:** add change-gated est_hz capture (est_hz.txt)
+   alongside the existing four output files; extend grade_long_run.py to
+   emit settled band, dwell center, excursion count past +/- 212 Hz, and
+   time-above-budget. (Also: f1_error debug tap is dead  because it never 
+   changed for the entire set of sims. Reconnect or remove.)
+3. **Post-fix acceptance:** repeat the sweep (infinity, 14, 12, 10, 8 dB,
+   seed 1): require |settled est of 509| and wander within the theta budget
+   at 10 dB, bounded behavior at 8; 25/25 at 10 dB in auto mode; add the
+   sweep (3-frame form) and SL-C (no lock on AWGN-only channel) to the
+   regression suite. Basically do all the tests again that made the table. 
+4. **Seed sensitivity:** one repeat at 10 dB with seed 2 and see what happens.
+
+## Separate Bugs that we Found
+
+- **AXI B-channel timeout:** post-run write to demod 0x0AC never returned
+  bvalid (25-frame run and bench died in post-checks). Same AW/W/B fragility
+
+## References that were Helpful
+
+- D. C. Rife and R. R. Boorstyn, "Single-Tone Parameter Estimation from
+  Discrete-Time Observations," IEEE Transactions on Information Theory,
+  vol. 20, no. 5, 1974 the estimator threshold effect (outlier-dominated
+  error below critical SNR).
+- F. D. Natali, "AFC Tracking Algorithms," IEEE Transactions on
+  Communications, Aug. 1984 discriminator families, S-curves, bias
+  behavior.
+- H. Meyr, M. Moeneclaey, S. Fechtel, *Digital Communication Receivers:
+  Synchronization, Channel Estimation, and Signal Processing*, Wiley 1998 
+  synchronizer hierarchies, lock detectors, decision-directed vs
+  non-data-aided tradeoffs.
+- U. Mengali, A. N. D'Andrea, *Synchronization Techniques for Digital
+  Receivers*, Plenum 1997 data-aided feedforward frequency estimation
+  (basis for F4).
+- R. de Buda, 1972 retired for this project (see above); cited for the
+  record and really cool.
+
 | ⏳ | Phase 5+: production credentials | meta-adi-xilinx hardcodes root password `analog`. Plan: override via meta-ori bbappend with authorized_keys + `PermitRootLogin without-password`, disable debug-tweaks. ADI's own README at `third_party/meta-adi/meta-adi-xilinx/README.md:146` documents the override mechanism. |
+
 | 🎯 | **Next session focus** | **(a) Land regressions D (system bench identity 6/6 + synth_full WNS family) → pull pluto_msk submodule (E). (b) Sweep tail: petalinux pair, patch archive → docs/patches/, old/ adjudication; push. (c) `make haifuraiya-xsa-integrated` with the v0.4/coreRev-3 manifest (expect IP upgrade prompt + checksum warning, both benign) → PetaLinux → board. (d) opv-decode -3 native on the A53; then Eb/N0 ladder on hardware. (e) liboriinit 1T1R calibration patch still owed from Phase 4 Ground.** |
 | ❓ | HD.CLK_SRC OOC clock prop | Unresolved; cosmetic for now |
 

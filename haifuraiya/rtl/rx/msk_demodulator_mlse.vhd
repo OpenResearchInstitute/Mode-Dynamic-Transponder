@@ -400,6 +400,14 @@ begin
       window_full   => sl_window_full );
 
   u_afc : entity work.cfo_afc
+    generic map (
+      G_EST_CLAMP_HZ => 3000 )  -- F1 (2026-10-17): clamp to physical TX-offset
+                                -- prior at 5.66 GHz: +/-0.25 ppm discipline
+                                -- (1.5 kHz) + RX/Doppler (0.2 kHz) + measured
+                                -- estimator wander (0.4 kHz) + margin.
+                                -- Default 20000 is the default in cfo_afc.vhd, 
+                                -- And this is too large. 
+                                -- See plan-of-attack, AFC findings.
     port map (
       clk        => clk,
       rst        => init,
