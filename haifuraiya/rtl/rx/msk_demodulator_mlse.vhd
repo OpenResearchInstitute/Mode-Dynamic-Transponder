@@ -77,6 +77,14 @@ entity msk_demodulator_mlse is
     -- SUPERVISION).  Default '0' = unsupervised (legacy benches).
     afc_fsync_freeze : in  std_logic := '0';
     afc_frozen       : out std_logic;              -- live freeze status
+    -- F4 (2026-10-18): sync-anchored data-aided measurement (cfo_sync_da)
+    -- drives the AFC servo while the decision-directed path is frozen.
+    -- rx_top drives afc_da_ena with NOT CFO_CTRL(2); outputs are telemetry.
+    afc_da_ena       : in  std_logic := '0';
+    afc_sync_seen    : in  std_logic := '0';       -- fsync sync_verified
+    afc_da_ferr      : out signed(15 downto 0);    -- last measurement (Hz)
+    afc_da_valid     : out std_logic;              -- 1-clk accept strobe
+    afc_da_mag       : out unsigned(15 downto 0);  -- |Z| gauge at accept
     afc_est_hz       : out signed(15 downto 0);
     afc_state        : out unsigned(2 downto 0);
     afc_quality      : out unsigned(15 downto 0);
@@ -194,6 +202,10 @@ architecture rtl of msk_demodulator_mlse is
   signal sl_e_err_v : std_logic;
   signal sl_locked  : std_logic;
   signal afc_locked_i : std_logic;
+  -- F4: data-aided measurement path (cfo_sync_da -> cfo_afc servo)
+  signal da_ferr_i    : signed(15 downto 0);
+  signal da_valid_i   : std_logic;
+  signal da_mag_i     : unsigned(15 downto 0);
 
 begin
 
@@ -423,12 +435,34 @@ begin
       alpha_trk  => afc_alpha_trk,
       alpha_acq  => afc_alpha_acq,
       fsync_locked => afc_fsync_freeze,   -- F2: frame-sync freeze gate
+      da_ferr    => da_ferr_i,            -- F4: data-aided servo input
+      da_valid   => da_valid_i,
+      da_ena     => afc_da_ena,
       est_hz     => afc_est_hz,
       state_o    => afc_state,
       quality    => afc_quality,
       cfo_locked => afc_locked_i,
       frozen_o   => afc_frozen            -- F2: live freeze status
     );
+
+  -- F4: sync-anchored data-aided carrier measurement.  Consumes the SAME
+  -- per-symbol tone correlations as the coarse AFC; emits one unbiased
+  -- residual measurement per detected sync word (cfo_sync_da.vhd header).
+  u_sync_da : entity work.cfo_sync_da
+    port map (
+      clk        => clk,
+      rst        => init,
+      y_valid    => e_valid,
+      y1_re      => e_y1r, y1_im => e_y1i,
+      y2_re      => e_y2r, y2_im => e_y2i,
+      sync_seen  => afc_sync_seen,
+      da_ferr_hz => da_ferr_i,
+      da_valid   => da_valid_i,
+      da_mag     => da_mag_i );
+
+  afc_da_ferr  <= da_ferr_i;
+  afc_da_valid <= da_valid_i;
+  afc_da_mag   <= da_mag_i;
 
   -- per-symbol fine tracker: the C++ AFC law (opv_demod.hpp 388-402),
   -- consuming the same per-symbol tone correlations as the coarse AFC.

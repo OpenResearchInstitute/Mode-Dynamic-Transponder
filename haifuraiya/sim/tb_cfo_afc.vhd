@@ -13,6 +13,10 @@
 --     with the supervision in place.
 -- T6  F2 release: fsync_locked drops; servo resumes from the checkpoint in
 --     the HELD gear and converges on the drifted carrier (+2600+/-60).
+-- T7  F4 data-aided authority: with the decision-directed path frozen,
+--     da measurements (constant +400 residual injected 4x) move est by
+--     alpha=1/4 each: +100/pulse, +400 total; with da_ena = '0' a pulse
+--     changes nothing.
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -35,6 +39,9 @@ architecture sim of tb_cfo_afc is
     signal lck : std_logic;
     signal fsync : std_logic := '0';   -- F2 freeze drive
     signal frz   : std_logic;          -- F2 freeze status
+    signal daf   : signed(15 downto 0) := (others => '0');  -- F4 drive
+    signal dav   : std_logic := '0';
+    signal dae   : std_logic := '0';
     signal running : std_logic := '1';
     signal fails : natural := 0;
 begin
@@ -50,6 +57,7 @@ begin
                   y1_re => y1r, y1_im => y1i, y2_re => y2r, y2_im => y2i,
                   alpha_trk => a_trk, alpha_acq => a_acq,
                   fsync_locked => fsync,
+                  da_ferr => daf, da_valid => dav, da_ena => dae,
                   est_hz => est, state_o => st, quality => q,
                   cfo_locked => lck, frozen_o => frz);
 
@@ -153,6 +161,34 @@ begin
         chk(st = 3, "T6 HELD after release");
         chk(abs(to_integer(est) - 2600) < 60,
             "T6 est resumed from checkpoint and converged to +2600");
+
+        -- T7: F4 data-aided updates while the dd path is frozen.
+        -- Re-freeze on the converged +2600 carrier, then inject constant
+        -- +400 Hz da measurements: est must step +100 per pulse (alpha 1/4)
+        -- while the dd discriminator (still seeing the real residual) stays
+        -- masked.  The closed-loop model keeps running throughout.
+        fsync <= '1';
+        for k in 1 to 2 loop sym(300000.0); end loop;
+        est_frozen := to_integer(est);
+        dae <= '1';
+        daf <= to_signed(400, 16);
+        for p in 1 to 4 loop
+            dav <= '1'; wait until rising_edge(clk); dav <= '0';
+            for k in 1 to 8 loop sym(300000.0); end loop;
+            wait for 0 ns;
+        end loop;
+        report "T7 est=" & integer'image(to_integer(est)) &
+               " from=" & integer'image(est_frozen) severity note;
+        chk(abs(to_integer(est) - (est_frozen + 400)) <= 4,
+            "T7 four +400 da pulses moved est by +400 (alpha 1/4 each)");
+        -- defeat: da_ena low, pulse ignored
+        dae <= '0';
+        est_frozen := to_integer(est);
+        dav <= '1'; wait until rising_edge(clk); dav <= '0';
+        for k in 1 to 8 loop sym(300000.0); end loop;
+        chk(to_integer(est) = est_frozen,
+            "T7 da_ena=0 defeats data-aided updates");
+        fsync <= '0';
 
         if fails = 0 then report "ALL TESTS PASS" severity note;
         else report integer'image(fails) & " FAILURES" severity failure;

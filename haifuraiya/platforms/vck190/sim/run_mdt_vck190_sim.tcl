@@ -170,6 +170,7 @@ safe_add_files sources_1 {
     ../../../rtl/rx/sym_lock_detector.vhd
     ../../../rtl/rx/cfo_rotator.vhd
     ../../../rtl/rx/cfo_afc.vhd
+    ../../../rtl/rx/cfo_sync_da.vhd
     ../../../rtl/rx/msk_demodulator_mlse.vhd
     ../../../rtl/rx/lut16q_pkg.vhd
     ../../../rtl/rx/frame_sync_detector_soft.vhd
@@ -186,7 +187,7 @@ safe_add_files sources_1 {
 # core manifest means a missing submodule or a moved file, so stop and look,
 # don't let elaboration discover it later when things blow up.
 set n_added [llength [get_files -of_objects [get_filesets sources_1]]]
-set n_expected 31
+set n_expected 32
 if {$n_added != $n_expected} {
     puts "*** ERROR: expected $n_expected core files, got $n_added."
     puts "***        Scroll up for SKIP lines. Most likely cause: sim"
@@ -443,6 +444,8 @@ add_wave -into {Frame_Sync} $FS/energy_prev
 add_wave -into {Frame_Sync} /tb_haifuraiya_channelizer_axi/u_rx/u_rx/afc_frozen_s
 add_wave -into {Frame_Sync} /tb_haifuraiya_channelizer_axi/u_rx/u_rx/fsync_lck_s
 add_wave -into {Frame_Sync} /tb_haifuraiya_channelizer_axi/u_rx/u_rx/afc_freeze_s
+add_wave -into {Frame_Sync} /tb_haifuraiya_channelizer_axi/u_rx/u_rx/da_ferr_s
+add_wave -into {Frame_Sync} /tb_haifuraiya_channelizer_axi/u_rx/u_rx/da_valid_s
 
 # --- scoreboard + CFO-applied probes ------------------------------------------
 add_wave $TB/sb_tvalid

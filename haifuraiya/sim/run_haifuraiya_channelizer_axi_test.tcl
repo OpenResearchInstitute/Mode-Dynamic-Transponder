@@ -78,6 +78,7 @@ safe_add_files sources_1 {
     ../rtl/rx/sym_lock_detector.vhd
     ../rtl/rx/cfo_rotator.vhd
     ../rtl/rx/cfo_afc.vhd
+    ../rtl/rx/cfo_sync_da.vhd
     ../rtl/rx/msk_demodulator_mlse.vhd
     ../rtl/rx/lut16q_pkg.vhd
     ../rtl/rx/frame_sync_detector_soft.vhd

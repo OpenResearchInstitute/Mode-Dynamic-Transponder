@@ -104,6 +104,19 @@ entity cfo_afc is
         -- the unsupervised behavior for benches/tops that do not wire it.
         fsync_locked : in  std_logic := '0';
 
+        -- F4 (2026-10-18): sync-anchored DATA-AIDED measurements from
+        -- cfo_sync_da.  While the decision-directed path is frozen
+        -- (fsync_locked), these are the ONLY authority over est: one
+        -- unbiased residual measurement per detected sync word,
+        -- integrated at alpha 1/4 (fixed; the measurement sigma of
+        -- ~84 Hz at 10 dB averages to ~35 Hz steady state).  da_ena
+        -- is driven by NOT CFO_CTRL(2) in rx_top -- armed by default,
+        -- register-defeatable for A/B.  Defaults keep legacy behavior
+        -- for benches/tops that do not wire them.
+        da_ferr    : in  signed(15 downto 0) := (others => '0');
+        da_valid   : in  std_logic := '0';
+        da_ena     : in  std_logic := '0';
+
         -- outputs
         est_hz     : out signed(15 downto 0);   -- antenna frame, to rotator
         state_o    : out unsigned(2 downto 0);  -- CFO_STATE encoding
@@ -179,6 +192,9 @@ architecture rtl of cfo_afc is
     -- first working build (caea5be, 2026-02-02).  Audited against
     -- opv-cxx-demod HEAD 0a71fa5, 2026-10-17/18.)
     signal est_snap           : signed(35 downto 0) := (others => '0');
+    -- F4: latched pending data-aided measurement (applied at next P_SERVO)
+    signal da_pend            : std_logic := '0';
+    signal da_f               : signed(15 downto 0) := (others => '0');
 
 begin
 
@@ -224,7 +240,15 @@ begin
                 q_acc <= (others=>'0'); q_win <= (others=>'0');
                 q_cnt <= (others=>'0');
                 good_cnt <= (others=>'0'); lost_cnt <= (others=>'0');
+                da_pend <= '0'; da_f <= (others=>'0');
             else
+                -- F4: catch a data-aided measurement whenever it arrives
+                -- (cfo_sync_da strobes once per detected sync); applied at
+                -- the next P_SERVO visit below.
+                if da_valid = '1' then
+                    da_pend <= '1';
+                    da_f    <= da_ferr;
+                end if;
                 if st = S_IDLE then
                     st <= S_SEARCH;
                 end if;
@@ -368,6 +392,27 @@ begin
                                 est_q16 <= -C_EST_CLAMP_Q16;
                             else
                                 est_q16 <= resize(mx, 36);
+                            end if;
+                        end if;
+
+                        -- F4: data-aided update -- the only path allowed to
+                        -- move est while the decision-directed path is
+                        -- frozen.  da_f is a RESIDUAL measurement (the y's
+                        -- are post-rotator), so the same integrating-servo
+                        -- form applies: est += residual * alpha, alpha = 1/4
+                        -- (shift 2 in Q16: left 16, right 2 = left 14).
+                        if da_pend = '1' then
+                            da_pend <= '0';
+                            if da_ena = '1' then
+                                adj := shift_left(resize(da_f, 36), 14);
+                                mx  := resize(est_q16, 48) + resize(adj, 48);
+                                if mx > resize(C_EST_CLAMP_Q16, 48) then
+                                    est_q16 <= C_EST_CLAMP_Q16;
+                                elsif mx < -resize(C_EST_CLAMP_Q16, 48) then
+                                    est_q16 <= -C_EST_CLAMP_Q16;
+                                else
+                                    est_q16 <= resize(mx, 36);
+                                end if;
                             end if;
                         end if;
 

@@ -223,6 +223,12 @@ architecture rtl of haifuraiya_rx_top is
     signal fsync_lck_s  : std_logic := '0';
     signal afc_freeze_s : std_logic := '0';
     signal afc_frozen_s : std_logic;
+    -- F4 (2026-10-18): data-aided measurement enable + telemetry (waves)
+    signal da_ena_s     : std_logic := '0';
+    signal da_ferr_s    : signed(15 downto 0);
+    signal da_valid_s   : std_logic;
+    signal da_mag_s     : unsigned(15 downto 0);
+    signal sync_ver_s   : std_logic;   -- fsync accepted-sync strobe
     signal dbg_pos_s  : unsigned(47 downto 0);
     signal dbg_ted_s  : signed(16 downto 0);
     signal dbg_freq_s : signed(31 downto 0);
@@ -425,6 +431,12 @@ begin
     afc_freeze_s      <= fsync_lck_s and (not cfo_ctrl(1));
     frame_sync_locked <= fsync_lck_s;
 
+    -- F4 (2026-10-18): sync-anchored data-aided measurements own the word
+    -- while the decision-directed path is frozen.  CFO_CTRL(2) = '1'
+    -- defeats them (A/B / characterization); default register value
+    -- leaves them armed.
+    da_ena_s <= not cfo_ctrl(2);
+
     u_slew : entity work.cfo_slew
         port map (
             clk        => aclk,
@@ -534,6 +546,11 @@ begin
             afc_alpha_acq    => unsigned(cfo_ctrl(23 downto 16)),
             afc_fsync_freeze => afc_freeze_s,   -- F2
             afc_frozen       => afc_frozen_s,   -- F2 status (waves)
+            afc_da_ena       => da_ena_s,       -- F4
+            afc_sync_seen    => sync_ver_s,     -- F4: fsync strobe
+            afc_da_ferr      => da_ferr_s,      -- F4 telemetry (waves)
+            afc_da_valid     => da_valid_s,
+            afc_da_mag       => da_mag_s,
             afc_est_hz       => afc_est_s,
             afc_state        => afc_st_u,
             afc_quality      => afc_q_u,
@@ -632,6 +649,7 @@ begin
 
             frame_sync_locked      => fsync_lck_s,   -- F2: internal copy;
                                                      -- port driven above
+            sync_verified          => sync_ver_s,    -- F4: accepted-sync strobe
             frames_received        => frames_received,
             frame_sync_errors      => open,
             frame_buffer_overflow  => open,
