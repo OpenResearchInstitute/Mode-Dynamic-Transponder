@@ -46,6 +46,27 @@
 -- packing): [15:8] trk (default 10 ~ C++ 0.001), [23:16] acq (default 6
 -- = 16x, provisional per decision 2).  Register-adjustable, no rebuild.
 --
+-- FRAME-SYNC SUPERVISION, F2 (2026-10-18; plan-of-attack AFC campaign):
+--   While the downstream frame sync is locked, integration FREEZES.
+--   Rationale: delivered frames are the receiver's one near-ground-truth
+--   -- sync lock is proof the current word is adequate -- while the
+--   decision-directed discriminator below its SNR threshold is NOT
+--   trustworthy (Rife & Boorstyn 1974; measured: persistent ~+400 Hz
+--   false equilibrium at Eb/N0 = 10 dB that crept past the +/-212 Hz
+--   theta budget and cost 6 of 25 frames; manual-CFO conviction run
+--   2026-10-18 delivered 25/25 on the same stimulus).  Because the
+--   integrator is the only writer of est, the frozen word IS the
+--   checkpoint: release resumes from the last value that was delivering
+--   frames (the plan's snap-back, satisfied by construction).  Genuine
+--   drift still gets tracked: it accumulates until syncs miss, frame
+--   sync unlocks, and the servo resumes in the gear the state machine
+--   is in.  This transcribes the REFERENCE's philosophy -- the C++ has
+--   gated its AFC+timing integrators on signal lock since 2026-02-27
+--   (tracking_enabled_, opv_demod.hpp 388) and clamps at +/-2000 Hz --
+--   adapted to this receiver's 10x tighter residual budget by gating on
+--   frame sync (stronger than symbol lock, which asserts on noise:
+--   SL-C 2026-10-14) and freezing on GOOD signal rather than absent.
+--
 -- BUDGET: worst path ~45 clocks/symbol of 1845 available.
 -- STYLE: VHDL-93; declaration initializers mirror the reset branch.
 -------------------------------------------------------------------------------
@@ -76,11 +97,20 @@ entity cfo_afc is
         alpha_trk  : in  unsigned(7 downto 0);
         alpha_acq  : in  unsigned(7 downto 0);
 
+        -- F2: freeze integration while the frame sync downstream is
+        -- locked (header: FRAME-SYNC SUPERVISION).  Driven in rx_top by
+        -- frame_sync_locked AND NOT CFO_CTRL(1), so the fix is armed by
+        -- default and register-defeatable for A/B.  Default '0' keeps
+        -- the unsupervised behavior for benches/tops that do not wire it.
+        fsync_locked : in  std_logic := '0';
+
         -- outputs
         est_hz     : out signed(15 downto 0);   -- antenna frame, to rotator
         state_o    : out unsigned(2 downto 0);  -- CFO_STATE encoding
         quality    : out unsigned(15 downto 0); -- windowed |dom| gauge
-        cfo_locked : out std_logic
+        cfo_locked : out std_logic;
+        frozen_o   : out std_logic              -- '1': servo would integrate
+                                                -- but is frozen by fsync_locked
     );
 end entity cfo_afc;
 
@@ -140,9 +170,14 @@ architecture rtl of cfo_afc is
     -- < 200 Hz), not per-symbol ferr: the raw discriminator is
     -- intrinsically spiky on real data (measured 2026-07-21: servo
     -- converged tightly on -5000 while a ferr-based consecutive gate
-    -- never fired). The C++ has no lock gate at all -- one gear, free
-    -- integration -- so this criterion is ours; it watches the quantity
-    -- the flag actually claims.
+    -- never fired). This dwell criterion is ours; it watches the
+    -- quantity the flag actually claims.  (HISTORY: this comment once
+    -- read "the C++ has no lock gate at all -- one gear, free
+    -- integration."  That was true of the reference when transcribed
+    -- and is STALE: the C++ gained a tracking_enabled_ gate on
+    -- 2026-02-27 (f023b76) and has clamped at +/-2000 Hz since its
+    -- first working build (caea5be, 2026-02-02).  Audited against
+    -- opv-cxx-demod HEAD 0a71fa5, 2026-10-17/18.)
     signal est_snap           : signed(35 downto 0) := (others => '0');
 
 begin
@@ -150,6 +185,10 @@ begin
     est_hz     <= resize(shift_right(est_q16, 16), 16);
     quality    <= q_win;
     cfo_locked <= '1' when st = S_HELD else '0';
+    -- F2 status: asserted exactly when the freeze is suppressing an
+    -- integration the state machine would otherwise perform
+    frozen_o   <= '1' when fsync_locked = '1' and
+                           (st = S_CORRECTING or st = S_HELD) else '0';
 
     with st select state_o <=
         to_unsigned(0, 3) when S_IDLE,
@@ -306,7 +345,16 @@ begin
                         ferr_hz_v := resize(cz * to_signed(G_SYMBOL_RATE, 18), 36);
                         -- ferr in Q16 Hz (cz Q16 turns * R Hz/turn)
 
-                        if st = S_CORRECTING or st = S_HELD then
+                        -- F2: fsync_locked suppresses integration (header:
+                        -- FRAME-SYNC SUPERVISION).  est is untouched while
+                        -- frozen -- the integrator is its only writer -- so
+                        -- the frozen value is the checkpoint, and release
+                        -- resumes from it.  The state walk below keeps
+                        -- running: quality still tracks signal presence,
+                        -- and a frozen-stable estimate promoting
+                        -- CORRECTING -> HELD is correct (it IS stable).
+                        if (st = S_CORRECTING or st = S_HELD)
+                           and fsync_locked = '0' then
                             if st = S_HELD then
                                 shv := signed(resize(alpha_trk, 8));
                             else

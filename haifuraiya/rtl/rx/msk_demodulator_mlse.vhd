@@ -71,6 +71,12 @@ entity msk_demodulator_mlse is
     -- rotator mux and the CFO status registers (map v6 0x0B0/0x0B4/0x0C0)
     afc_alpha_trk    : in  unsigned(7 downto 0);
     afc_alpha_acq    : in  unsigned(7 downto 0);
+    -- F2 (2026-10-18): frame-sync supervision of the AFC servo.  rx_top
+    -- drives this with frame_sync_locked AND NOT CFO_CTRL(1); while high
+    -- the AFC integrator freezes (cfo_afc.vhd header: FRAME-SYNC
+    -- SUPERVISION).  Default '0' = unsupervised (legacy benches).
+    afc_fsync_freeze : in  std_logic := '0';
+    afc_frozen       : out std_logic;              -- live freeze status
     afc_est_hz       : out signed(15 downto 0);
     afc_state        : out unsigned(2 downto 0);
     afc_quality      : out unsigned(15 downto 0);
@@ -416,10 +422,12 @@ begin
       y2_re      => e_y2r, y2_im => e_y2i,
       alpha_trk  => afc_alpha_trk,
       alpha_acq  => afc_alpha_acq,
+      fsync_locked => afc_fsync_freeze,   -- F2: frame-sync freeze gate
       est_hz     => afc_est_hz,
       state_o    => afc_state,
       quality    => afc_quality,
-      cfo_locked => afc_locked_i
+      cfo_locked => afc_locked_i,
+      frozen_o   => afc_frozen            -- F2: live freeze status
     );
 
   -- per-symbol fine tracker: the C++ AFC law (opv_demod.hpp 388-402),

@@ -439,7 +439,11 @@ add_wave -into {Frame_Sync} $FS/debug_soft_current
 add_wave -into {Frame_Sync} $FS/debug_soft_quantized
 add_wave -into {Frame_Sync} $FS/corr_prev
 add_wave -into {Frame_Sync} $FS/energy_prev
- 
+
+add_wave -into {Frame_Sync} /tb_haifuraiya_channelizer_axi/u_rx/u_rx/afc_frozen_s
+add_wave -into {Frame_Sync} /tb_haifuraiya_channelizer_axi/u_rx/u_rx/fsync_lck_s
+add_wave -into {Frame_Sync} /tb_haifuraiya_channelizer_axi/u_rx/u_rx/afc_freeze_s
+
 # --- scoreboard + CFO-applied probes ------------------------------------------
 add_wave $TB/sb_tvalid
 add_wave $TB/sb_tdata
