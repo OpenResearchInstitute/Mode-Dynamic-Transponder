@@ -75,6 +75,14 @@ entity msk_demodulator_mlse is
     afc_state        : out unsigned(2 downto 0);
     afc_quality      : out unsigned(15 downto 0);
     afc_locked       : out std_logic;
+    -- preamble carrier measurement (cfo_pre_da): the estimate_offset()
+    -- equivalent -- measures the carrier on the preamble and presets the
+    -- AFC before the first sync word.  afc_pre_ena (NOT CFO_CTRL(3) in
+    -- rx_top) gates it for A/B; outputs are telemetry for the waves.
+    afc_pre_ena      : in  std_logic := '1';
+    afc_pre_ferr     : out signed(15 downto 0);
+    afc_pre_valid    : out std_logic;
+    afc_pre_mag      : out unsigned(15 downto 0);
     sl_pct_lock      : in  unsigned(7 downto 0);   -- percent, default 25 (C++)
     sl_pct_unlock    : in  unsigned(7 downto 0);   -- percent, default 50 (C++)
     sl_window_log2   : in  unsigned(3 downto 0);
@@ -188,6 +196,11 @@ architecture rtl of msk_demodulator_mlse is
   signal sl_e_err_v : std_logic;
   signal sl_locked  : std_logic;
   signal afc_locked_i : std_logic;
+  -- preamble measurement -> AFC preset
+  signal pre_ferr_i   : signed(15 downto 0);
+  signal pre_valid_i  : std_logic;
+  signal pre_mag_i    : unsigned(15 downto 0);
+  signal pre_set_v_i  : std_logic;
 
 begin
 
@@ -416,11 +429,34 @@ begin
       y2_re      => e_y2r, y2_im => e_y2i,
       alpha_trk  => afc_alpha_trk,
       alpha_acq  => afc_alpha_acq,
+      pre_set    => pre_ferr_i,
+      pre_set_v  => pre_set_v_i,
       est_hz     => afc_est_hz,
       state_o    => afc_state,
       quality    => afc_quality,
       cfo_locked => afc_locked_i
     );
+
+  -- PREAMBLE CARRIER MEASUREMENT (cfo_pre_da): the estimate_offset()
+  -- port.  Consumes the same per-symbol tone correlations as the AFC;
+  -- self-gates on its coherent-window magnitude floor (no sync strobe
+  -- exists before the first frame).  Its measurement presets the AFC
+  -- (above) while unlocked; afc_pre_ena defeats it for A/B.
+  u_pre_da : entity work.cfo_pre_da
+    port map (
+      clk         => clk,
+      rst         => init,
+      y_valid     => e_valid,
+      y1_re       => e_y1r, y1_im => e_y1i,
+      y2_re       => e_y2r, y2_im => e_y2i,
+      pre_ferr_hz => pre_ferr_i,
+      pre_valid   => pre_valid_i,
+      pre_mag     => pre_mag_i );
+
+  pre_set_v_i   <= pre_valid_i and afc_pre_ena;
+  afc_pre_ferr  <= pre_ferr_i;
+  afc_pre_valid <= pre_valid_i;
+  afc_pre_mag   <= pre_mag_i;
 
   -- per-symbol fine tracker: the C++ AFC law (opv_demod.hpp 388-402),
   -- consuming the same per-symbol tone correlations as the coarse AFC.

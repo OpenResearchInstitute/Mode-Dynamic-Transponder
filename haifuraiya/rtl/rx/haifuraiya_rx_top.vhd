@@ -226,6 +226,11 @@ architecture rtl of haifuraiya_rx_top is
     signal afc_st_u   : unsigned(2 downto 0);
     signal afc_q_u    : unsigned(15 downto 0);
     signal afc_lck    : std_logic;
+    -- preamble preset: enable (CFO_CTRL(3)) + telemetry
+    signal pre_ena_s   : std_logic := '1';
+    signal pre_ferr_s  : signed(15 downto 0);
+    signal pre_valid_s : std_logic;
+    signal pre_mag_s   : unsigned(15 downto 0);
     signal rot_q      : signed(15 downto 0);
     
     -- intermediate signal for the signed ports
@@ -407,6 +412,10 @@ begin
     -- experiments inherit the gentleness.
     cfo_word <= signed(cfo_manual) when cfo_ctrl(0) = '0'
                 else afc_est_s;         -- step 2 LANDED: the AFC drives auto
+
+    -- preamble preset (estimate_offset equivalent): armed by default,
+    -- CFO_CTRL(3) = '1' defeats it for A/B characterization.
+    pre_ena_s <= not cfo_ctrl(3);
     afc_held_s <= '1' when afc_st_u = to_unsigned(3, 3) else '0';
 
     u_slew : entity work.cfo_slew
@@ -516,6 +525,10 @@ begin
 
             afc_alpha_trk    => unsigned(cfo_ctrl(15 downto 8)),
             afc_alpha_acq    => unsigned(cfo_ctrl(23 downto 16)),
+            afc_pre_ena      => pre_ena_s,     -- preamble preset (A/B via CFO_CTRL(3))
+            afc_pre_ferr     => pre_ferr_s,    -- telemetry (waves)
+            afc_pre_valid    => pre_valid_s,
+            afc_pre_mag      => pre_mag_s,
             afc_est_hz       => afc_est_s,
             afc_state        => afc_st_u,
             afc_quality      => afc_q_u,

@@ -176,7 +176,8 @@ ENTITY frame_sync_detector_soft IS
         -- (Robey, Fuhrmann, Kelly & Nitzberg, "A CFAR adaptive matched filter
         -- detector", IEEE Trans. AES 28(1), 1992.)
         MIN_SYNC_ENERGY    : INTEGER := 24*512;
-        FLYWHEEL_TOLERANCE : NATURAL := 2;
+        FLYWHEEL_TOLERANCE : NATURAL := 3;  -- 2026-10-20: matches the C++
+                                            -- SYNC_MISS_LIMIT = 3 (parity)
         LOCK_FRAMES        : NATURAL := 3;
         BUFFER_DEPTH       : NATURAL := 11;
         SOFT_WIDTH         : NATURAL := 3

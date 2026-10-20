@@ -76,6 +76,21 @@ entity cfo_afc is
         alpha_trk  : in  unsigned(7 downto 0);
         alpha_acq  : in  unsigned(7 downto 0);
 
+        -- PREAMBLE PRESET (2026-10-20): the fabric equivalent of the C++
+        -- estimate_offset() + set_freq_offset() -- the one piece the
+        -- original port omitted.  cfo_pre_da measures the carrier on the
+        -- preamble (before the first sync word) and pulses pre_set_v with
+        -- the measured antenna-frame offset in pre_set.  While NOT locked
+        -- (st /= S_HELD) this directly loads the estimate: acquisition is
+        -- a measurement, not a loop crawling in from cold.  Once locked,
+        -- the slow tracking loop owns the word and presets are ignored.
+        -- A preamble after signal loss (st walked back out of HELD) re-
+        -- presets -- so this is NOT a boot-only event; it rides the same
+        -- anti-wedge structure as the state machine.  Default off keeps
+        -- legacy behavior for benches/tops that do not drive it.
+        pre_set    : in  signed(15 downto 0) := (others => '0');
+        pre_set_v  : in  std_logic := '0';
+
         -- outputs
         est_hz     : out signed(15 downto 0);   -- antenna frame, to rotator
         state_o    : out unsigned(2 downto 0);  -- CFO_STATE encoding
@@ -144,6 +159,27 @@ architecture rtl of cfo_afc is
     -- integration -- so this criterion is ours; it watches the quantity
     -- the flag actually claims.
     signal est_snap           : signed(35 downto 0) := (others => '0');
+    -- preamble preset: latched pending until the next P_SERVO
+    signal pset_pend          : std_logic := '0';
+    signal pset_v             : signed(15 downto 0) := (others => '0');
+    -- ACQUISITION HANDOFF (2026-10-20, found in-system): the C++ runs
+    -- estimate_offset() FIRST and alone, sets the carrier, THEN tracks.
+    -- In fabric both run at once, and the decision-directed loop was
+    -- racing to its biased cold-acquisition value (~982 Hz, measured)
+    -- and reaching HELD before the preamble measurement landed -- which
+    -- then locked the preset out.  in_acq enforces the C++ ordering: it
+    -- is '1' while the preamble is present (re-armed on every preamble
+    -- measurement, dropped G_PRE_TAIL symbols after the last one), and
+    -- while '1' ONLY the preamble preset moves est (accumulating, the
+    -- integrating-servo form) and the decision-directed integrator is
+    -- held.  When '0' (payload: the preamble self-gates off), the slow
+    -- decision-directed loop tracks from the carrier the preamble set.
+    -- Re-arms on any later preamble -> standing re-acquisition.
+    constant G_PRE_TAIL       : natural := 300;  -- > one 256-sym window
+    -- in_acq starts '0' (decision-directed loop free, as the base design and
+    -- the no-preamble benches expect); a preamble measurement raises it.
+    signal in_acq             : std_logic := '0';
+    signal pre_to             : unsigned(8 downto 0) := (others => '0');
 
 begin
 
@@ -185,9 +221,31 @@ begin
                 q_acc <= (others=>'0'); q_win <= (others=>'0');
                 q_cnt <= (others=>'0');
                 good_cnt <= (others=>'0'); lost_cnt <= (others=>'0');
+                pset_pend <= '0'; pset_v <= (others=>'0');
+                in_acq <= '0'; pre_to <= (others=>'0');
             else
                 if st = S_IDLE then
                     st <= S_SEARCH;
+                end if;
+
+                -- ACQUISITION timer (counts SYMBOLS via y_valid): while in_acq
+                -- the preamble OWNS est and the decision-directed integrator
+                -- is held off (no race).  pre_to counts down G_PRE_TAIL
+                -- symbols after the last preamble measurement; at zero the
+                -- preamble is over and the slow loop takes over.  Decrement
+                -- first, then re-arm, so a measurement this symbol wins.
+                if y_valid = '1' and pre_to /= 0 then
+                    pre_to <= pre_to - 1;
+                    if pre_to = 1 then
+                        in_acq <= '0';
+                    end if;
+                end if;
+                -- catch a preamble measurement; re-arm acquisition
+                if pre_set_v = '1' then
+                    pset_pend <= '1';
+                    pset_v    <= pre_set;
+                    in_acq    <= '1';
+                    pre_to    <= to_unsigned(G_PRE_TAIL, pre_to'length);
                 end if;
 
                 case ph is
@@ -306,7 +364,35 @@ begin
                         ferr_hz_v := resize(cz * to_signed(G_SYMBOL_RATE, 18), 36);
                         -- ferr in Q16 Hz (cz Q16 turns * R Hz/turn)
 
-                        if st = S_CORRECTING or st = S_HELD then
+                        -- ACQUISITION vs TRACKING -- the estimate_offset()
+                        -- ordering, enforced so the two never fight:
+                        --   in_acq = '1' (preamble present): the PREAMBLE
+                        --     owns est.  Its measurement is a RESIDUAL (the
+                        --     y's are post-rotator), so est ACCUMULATES it --
+                        --     est += residual -- exactly the integrating-servo
+                        --     form, at full weight.  One measurement drives
+                        --     est to the true carrier and the next (residual
+                        --     ~0) leaves it there.  The decision-directed
+                        --     integrator is HELD OFF, so it cannot race to its
+                        --     biased cold value.
+                        --   in_acq = '0' (payload): the slow decision-directed
+                        --     loop tracks from the carrier the preamble set;
+                        --     preamble measurements (if any leak through) are
+                        --     ignored.
+                        if in_acq = '1' then
+                            if pset_pend = '1' then
+                                pset_pend <= '0';
+                                adj := shift_left(resize(pset_v, 36), 16);
+                                mx  := resize(est_q16, 48) + resize(adj, 48);
+                                if mx > resize(C_EST_CLAMP_Q16, 48) then
+                                    est_q16 <= C_EST_CLAMP_Q16;
+                                elsif mx < -resize(C_EST_CLAMP_Q16, 48) then
+                                    est_q16 <= -C_EST_CLAMP_Q16;
+                                else
+                                    est_q16 <= resize(mx, 36);
+                                end if;
+                            end if;
+                        elsif st = S_CORRECTING or st = S_HELD then
                             if st = S_HELD then
                                 shv := signed(resize(alpha_trk, 8));
                             else
