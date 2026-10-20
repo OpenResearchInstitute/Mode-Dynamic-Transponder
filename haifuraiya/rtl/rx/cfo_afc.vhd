@@ -401,9 +401,22 @@ begin
                         -- are post-rotator), so the same integrating-servo
                         -- form applies: est += residual * alpha, alpha = 1/4
                         -- (shift 2 in Q16: left 16, right 2 = left 14).
+                        -- OUTLIER REJECTION (2026-10-19, measured in-system:
+                        -- first F4 run converged 859 -> ~470 on honest
+                        -- -375/-342 measurements, then ONE -1750 outlier --
+                        -- a wrong-window ring pick, 20 sigma beyond the
+                        -- 84 Hz measurement noise -- yanked the word to 32,
+                        -- above the slip cliff, killing the very syncs the
+                        -- measurement needs.  A residual larger than any
+                        -- physically plausible one is a bad window, not
+                        -- information: reject and HOLD (a rejected
+                        -- measurement is a missed measurement -- F2
+                        -- semantics, the word simply keeps).
                         if da_pend = '1' then
                             da_pend <= '0';
-                            if da_ena = '1' then
+                            if da_ena = '1' and
+                               da_f <=  to_signed(600, 16) and
+                               da_f >= to_signed(-600, 16) then
                                 adj := shift_left(resize(da_f, 36), 14);
                                 mx  := resize(est_q16, 48) + resize(adj, 48);
                                 if mx > resize(C_EST_CLAMP_Q16, 48) then

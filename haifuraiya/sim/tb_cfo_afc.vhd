@@ -188,6 +188,19 @@ begin
         for k in 1 to 8 loop sym(300000.0); end loop;
         chk(to_integer(est) = est_frozen,
             "T7 da_ena=0 defeats data-aided updates");
+        -- outlier rejection: a +/-1750 Hz "measurement" (wrong-window
+        -- pick, 20 sigma) must be rejected -- word holds
+        dae <= '1';
+        daf <= to_signed(1750, 16);
+        dav <= '1'; wait until rising_edge(clk); dav <= '0';
+        for k in 1 to 8 loop sym(300000.0); end loop;
+        chk(to_integer(est) = est_frozen,
+            "T7 outlier (+1750) rejected, est holds");
+        daf <= to_signed(-1750, 16);
+        dav <= '1'; wait until rising_edge(clk); dav <= '0';
+        for k in 1 to 8 loop sym(300000.0); end loop;
+        chk(to_integer(est) = est_frozen,
+            "T7 outlier (-1750) rejected, est holds");
         fsync <= '0';
 
         if fails = 0 then report "ALL TESTS PASS" severity note;
