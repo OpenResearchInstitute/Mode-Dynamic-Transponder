@@ -46,27 +46,6 @@
 -- packing): [15:8] trk (default 10 ~ C++ 0.001), [23:16] acq (default 6
 -- = 16x, provisional per decision 2).  Register-adjustable, no rebuild.
 --
--- FRAME-SYNC SUPERVISION, F2 (2026-10-18; plan-of-attack AFC campaign):
---   While the downstream frame sync is locked, integration FREEZES.
---   Rationale: delivered frames are the receiver's one near-ground-truth
---   -- sync lock is proof the current word is adequate -- while the
---   decision-directed discriminator below its SNR threshold is NOT
---   trustworthy (Rife & Boorstyn 1974; measured: persistent ~+400 Hz
---   false equilibrium at Eb/N0 = 10 dB that crept past the +/-212 Hz
---   theta budget and cost 6 of 25 frames; manual-CFO conviction run
---   2026-10-18 delivered 25/25 on the same stimulus).  Because the
---   integrator is the only writer of est, the frozen word IS the
---   checkpoint: release resumes from the last value that was delivering
---   frames (the plan's snap-back, satisfied by construction).  Genuine
---   drift still gets tracked: it accumulates until syncs miss, frame
---   sync unlocks, and the servo resumes in the gear the state machine
---   is in.  This transcribes the REFERENCE's philosophy -- the C++ has
---   gated its AFC+timing integrators on signal lock since 2026-02-27
---   (tracking_enabled_, opv_demod.hpp 388) and clamps at +/-2000 Hz --
---   adapted to this receiver's 10x tighter residual budget by gating on
---   frame sync (stronger than symbol lock, which asserts on noise:
---   SL-C 2026-10-14) and freezing on GOOD signal rather than absent.
---
 -- BUDGET: worst path ~45 clocks/symbol of 1845 available.
 -- STYLE: VHDL-93; declaration initializers mirror the reset branch.
 -------------------------------------------------------------------------------
@@ -97,33 +76,11 @@ entity cfo_afc is
         alpha_trk  : in  unsigned(7 downto 0);
         alpha_acq  : in  unsigned(7 downto 0);
 
-        -- F2: freeze integration while the frame sync downstream is
-        -- locked (header: FRAME-SYNC SUPERVISION).  Driven in rx_top by
-        -- frame_sync_locked AND NOT CFO_CTRL(1), so the fix is armed by
-        -- default and register-defeatable for A/B.  Default '0' keeps
-        -- the unsupervised behavior for benches/tops that do not wire it.
-        fsync_locked : in  std_logic := '0';
-
-        -- F4 (2026-10-18): sync-anchored DATA-AIDED measurements from
-        -- cfo_sync_da.  While the decision-directed path is frozen
-        -- (fsync_locked), these are the ONLY authority over est: one
-        -- unbiased residual measurement per detected sync word,
-        -- integrated at alpha 1/4 (fixed; the measurement sigma of
-        -- ~84 Hz at 10 dB averages to ~35 Hz steady state).  da_ena
-        -- is driven by NOT CFO_CTRL(2) in rx_top -- armed by default,
-        -- register-defeatable for A/B.  Defaults keep legacy behavior
-        -- for benches/tops that do not wire them.
-        da_ferr    : in  signed(15 downto 0) := (others => '0');
-        da_valid   : in  std_logic := '0';
-        da_ena     : in  std_logic := '0';
-
         -- outputs
         est_hz     : out signed(15 downto 0);   -- antenna frame, to rotator
         state_o    : out unsigned(2 downto 0);  -- CFO_STATE encoding
         quality    : out unsigned(15 downto 0); -- windowed |dom| gauge
-        cfo_locked : out std_logic;
-        frozen_o   : out std_logic              -- '1': servo would integrate
-                                                -- but is frozen by fsync_locked
+        cfo_locked : out std_logic
     );
 end entity cfo_afc;
 
@@ -183,28 +140,16 @@ architecture rtl of cfo_afc is
     -- < 200 Hz), not per-symbol ferr: the raw discriminator is
     -- intrinsically spiky on real data (measured 2026-07-21: servo
     -- converged tightly on -5000 while a ferr-based consecutive gate
-    -- never fired). This dwell criterion is ours; it watches the
-    -- quantity the flag actually claims.  (HISTORY: this comment once
-    -- read "the C++ has no lock gate at all -- one gear, free
-    -- integration."  That was true of the reference when transcribed
-    -- and is STALE: the C++ gained a tracking_enabled_ gate on
-    -- 2026-02-27 (f023b76) and has clamped at +/-2000 Hz since its
-    -- first working build (caea5be, 2026-02-02).  Audited against
-    -- opv-cxx-demod HEAD 0a71fa5, 2026-10-17/18.)
+    -- never fired). The C++ has no lock gate at all -- one gear, free
+    -- integration -- so this criterion is ours; it watches the quantity
+    -- the flag actually claims.
     signal est_snap           : signed(35 downto 0) := (others => '0');
-    -- F4: latched pending data-aided measurement (applied at next P_SERVO)
-    signal da_pend            : std_logic := '0';
-    signal da_f               : signed(15 downto 0) := (others => '0');
 
 begin
 
     est_hz     <= resize(shift_right(est_q16, 16), 16);
     quality    <= q_win;
     cfo_locked <= '1' when st = S_HELD else '0';
-    -- F2 status: asserted exactly when the freeze is suppressing an
-    -- integration the state machine would otherwise perform
-    frozen_o   <= '1' when fsync_locked = '1' and
-                           (st = S_CORRECTING or st = S_HELD) else '0';
 
     with st select state_o <=
         to_unsigned(0, 3) when S_IDLE,
@@ -240,15 +185,7 @@ begin
                 q_acc <= (others=>'0'); q_win <= (others=>'0');
                 q_cnt <= (others=>'0');
                 good_cnt <= (others=>'0'); lost_cnt <= (others=>'0');
-                da_pend <= '0'; da_f <= (others=>'0');
             else
-                -- F4: catch a data-aided measurement whenever it arrives
-                -- (cfo_sync_da strobes once per detected sync); applied at
-                -- the next P_SERVO visit below.
-                if da_valid = '1' then
-                    da_pend <= '1';
-                    da_f    <= da_ferr;
-                end if;
                 if st = S_IDLE then
                     st <= S_SEARCH;
                 end if;
@@ -369,16 +306,7 @@ begin
                         ferr_hz_v := resize(cz * to_signed(G_SYMBOL_RATE, 18), 36);
                         -- ferr in Q16 Hz (cz Q16 turns * R Hz/turn)
 
-                        -- F2: fsync_locked suppresses integration (header:
-                        -- FRAME-SYNC SUPERVISION).  est is untouched while
-                        -- frozen -- the integrator is its only writer -- so
-                        -- the frozen value is the checkpoint, and release
-                        -- resumes from it.  The state walk below keeps
-                        -- running: quality still tracks signal presence,
-                        -- and a frozen-stable estimate promoting
-                        -- CORRECTING -> HELD is correct (it IS stable).
-                        if (st = S_CORRECTING or st = S_HELD)
-                           and fsync_locked = '0' then
+                        if st = S_CORRECTING or st = S_HELD then
                             if st = S_HELD then
                                 shv := signed(resize(alpha_trk, 8));
                             else
@@ -392,40 +320,6 @@ begin
                                 est_q16 <= -C_EST_CLAMP_Q16;
                             else
                                 est_q16 <= resize(mx, 36);
-                            end if;
-                        end if;
-
-                        -- F4: data-aided update -- the only path allowed to
-                        -- move est while the decision-directed path is
-                        -- frozen.  da_f is a RESIDUAL measurement (the y's
-                        -- are post-rotator), so the same integrating-servo
-                        -- form applies: est += residual * alpha, alpha = 1/4
-                        -- (shift 2 in Q16: left 16, right 2 = left 14).
-                        -- OUTLIER REJECTION (2026-10-19, measured in-system:
-                        -- first F4 run converged 859 -> ~470 on honest
-                        -- -375/-342 measurements, then ONE -1750 outlier --
-                        -- a wrong-window ring pick, 20 sigma beyond the
-                        -- 84 Hz measurement noise -- yanked the word to 32,
-                        -- above the slip cliff, killing the very syncs the
-                        -- measurement needs.  A residual larger than any
-                        -- physically plausible one is a bad window, not
-                        -- information: reject and HOLD (a rejected
-                        -- measurement is a missed measurement -- F2
-                        -- semantics, the word simply keeps).
-                        if da_pend = '1' then
-                            da_pend <= '0';
-                            if da_ena = '1' and
-                               da_f <=  to_signed(600, 16) and
-                               da_f >= to_signed(-600, 16) then
-                                adj := shift_left(resize(da_f, 36), 14);
-                                mx  := resize(est_q16, 48) + resize(adj, 48);
-                                if mx > resize(C_EST_CLAMP_Q16, 48) then
-                                    est_q16 <= C_EST_CLAMP_Q16;
-                                elsif mx < -resize(C_EST_CLAMP_Q16, 48) then
-                                    est_q16 <= -C_EST_CLAMP_Q16;
-                                else
-                                    est_q16 <= resize(mx, 36);
-                                end if;
                             end if;
                         end if;
 

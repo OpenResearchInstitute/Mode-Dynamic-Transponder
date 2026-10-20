@@ -242,13 +242,6 @@ architecture rtl of haifuraiya_demod_regs is
     signal reg_sl_pct_lock      : std_logic_vector(7 downto 0) := x"19";  -- 25
     signal reg_sl_pct_unlock    : std_logic_vector(7 downto 0) := x"32";  -- 50
     -- CFO_CTRL fields (packing ratified 2026-07-20): b0 auto (default 1),
-    -- b1 F2 FREEZE DEFEAT (2026-10-18; default 0 = frame-sync freeze
-    -- ARMED: the AFC integrator holds while frame sync is locked --
-    -- cfo_afc.vhd header, FRAME-SYNC SUPERVISION.  Write b1=1 only for
-    -- A/B / characterization runs of the unsupervised servo),
-    -- b2 F4 DATA-AIDED DEFEAT (2026-10-18; default 0 = sync-anchored
-    -- data-aided measurements ARMED: cfo_sync_da drives the servo while
-    -- frozen -- cfo_sync_da.vhd header.  Write b2=1 only for A/B),
     -- [15:8] alpha_trk SHIFT (gain 2^-n; 10 -> 2^-10 = 0.000977, the
     -- nearest power of two to the C++ afc_alpha 0.001 -- 2.3% low,
     -- register-adjustable), [23:16] alpha_acq SHIFT (6 -> 16x track,

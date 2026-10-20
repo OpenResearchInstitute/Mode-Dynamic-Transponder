@@ -207,11 +207,6 @@ ENTITY frame_sync_detector_soft IS
         frames_received       : OUT std_logic_vector(31 DOWNTO 0);
         frame_sync_errors     : OUT std_logic_vector(31 DOWNTO 0);
         frame_buffer_overflow : OUT std_logic;
-        -- F4 (2026-10-18): 1-clk strobe on every ACCEPTED sync word (both
-        -- the HUNTING peak and the LOCKED-position verify).  Gates the
-        -- sync-anchored data-aided carrier measurement (cfo_sync_da.vhd):
-        -- this detector does the detection; that block does the measuring.
-        sync_verified         : OUT std_logic;
 
         -- Control
         demod_sync_lock       : IN std_logic;
@@ -360,7 +355,6 @@ ARCHITECTURE rtl OF frame_sync_detector_soft IS
 
     -- Status
     SIGNAL lock_status       : std_logic := '0';
-    SIGNAL sync_ver_i        : std_logic := '0';   -- F4 strobe (1 clk)
     SIGNAL acquiring_lock    : std_logic := '1';
     SIGNAL consecutive_good  : natural range 0 to LOCK_FRAMES := 0;
     SIGNAL missed_sync_count : natural range 0 to FLYWHEEL_TOLERANCE+1 := 0;
@@ -535,7 +529,6 @@ BEGIN
     debug_corr_peak   <= corr_peak;
     debug_bit_count   <= std_logic_vector(bits_received);
     debug_missed_syncs      <= std_logic_vector(to_unsigned(missed_sync_count, 4));
-    sync_verified           <= sync_ver_i;   -- F4
     debug_consecutive_good  <= std_logic_vector(to_unsigned(consecutive_good, 4));
     debug_soft_current      <= soft_r;
     debug_soft_quantized    <= quantize(soft_r, signed(quant_thr_1_i), signed(quant_thr_2_i), signed(quant_thr_3_i));
@@ -666,8 +659,6 @@ BEGIN
                     dv_i <= dv_i - 1;
                 END IF;
             END IF;
-
-            sync_ver_i <= '0';   -- F4 strobe: 1 clk, set in accept branches
 
             IF reset = '1' THEN
                 state            <= HUNTING;
@@ -802,7 +793,6 @@ BEGIN
 
                                 frame_byte_count <= 0;
                                 frame_start_ptr  <= wr_ptr;
-                                sync_ver_i       <= '1';   -- F4: sync accepted
 
                                 IF consecutive_good < LOCK_FRAMES - 1 THEN
                                     consecutive_good <= consecutive_good + 1;
@@ -904,7 +894,6 @@ BEGIN
                                        signed(locked_threshold_i) * engy_v THEN
                                     -- Sync found at expected position.
                                     missed_sync_count <= 0;
-                                    sync_ver_i        <= '1';  -- F4 strobe
 
                                     IF acquiring_lock = '1' THEN
                                         IF consecutive_good < LOCK_FRAMES - 1 THEN

@@ -215,20 +215,6 @@ architecture rtl of haifuraiya_rx_top is
     signal seed_pulse : std_logic;
     signal fine_owns  : std_logic := '0';  -- retained for readback compat; no longer in path
     signal dm_ovfl_s, dm_lag_s : std_logic;
-    -- F2 (2026-10-18): frame-sync supervision of the AFC.  fsync_lck_s is
-    -- the readable copy of the frame_sync_locked out port (VHDL-93 out
-    -- ports are write-only inside the architecture); afc_freeze_s is the
-    -- gated freeze -- armed by default, defeatable via CFO_CTRL(1) for
-    -- A/B runs; afc_frozen_s is the live status for waveform/telemetry.
-    signal fsync_lck_s  : std_logic := '0';
-    signal afc_freeze_s : std_logic := '0';
-    signal afc_frozen_s : std_logic;
-    -- F4 (2026-10-18): data-aided measurement enable + telemetry (waves)
-    signal da_ena_s     : std_logic := '0';
-    signal da_ferr_s    : signed(15 downto 0);
-    signal da_valid_s   : std_logic;
-    signal da_mag_s     : unsigned(15 downto 0);
-    signal sync_ver_s   : std_logic;   -- fsync accepted-sync strobe
     signal dbg_pos_s  : unsigned(47 downto 0);
     signal dbg_ted_s  : signed(16 downto 0);
     signal dbg_freq_s : signed(31 downto 0);
@@ -423,20 +409,6 @@ begin
                 else afc_est_s;         -- step 2 LANDED: the AFC drives auto
     afc_held_s <= '1' when afc_st_u = to_unsigned(3, 3) else '0';
 
-    -- F2 (2026-10-18): while frame sync is locked, delivered frames prove
-    -- the current word adequate and the below-threshold estimator is not
-    -- to be trusted -- freeze the AFC integrator (cfo_afc.vhd header:
-    -- FRAME-SYNC SUPERVISION).  CFO_CTRL(1) = '1' defeats the freeze
-    -- (A/B / characterization); default register value leaves it armed.
-    afc_freeze_s      <= fsync_lck_s and (not cfo_ctrl(1));
-    frame_sync_locked <= fsync_lck_s;
-
-    -- F4 (2026-10-18): sync-anchored data-aided measurements own the word
-    -- while the decision-directed path is frozen.  CFO_CTRL(2) = '1'
-    -- defeats them (A/B / characterization); default register value
-    -- leaves them armed.
-    da_ena_s <= not cfo_ctrl(2);
-
     u_slew : entity work.cfo_slew
         port map (
             clk        => aclk,
@@ -544,13 +516,6 @@ begin
 
             afc_alpha_trk    => unsigned(cfo_ctrl(15 downto 8)),
             afc_alpha_acq    => unsigned(cfo_ctrl(23 downto 16)),
-            afc_fsync_freeze => afc_freeze_s,   -- F2
-            afc_frozen       => afc_frozen_s,   -- F2 status (waves)
-            afc_da_ena       => da_ena_s,       -- F4
-            afc_sync_seen    => sync_ver_s,     -- F4: fsync strobe
-            afc_da_ferr      => da_ferr_s,      -- F4 telemetry (waves)
-            afc_da_valid     => da_valid_s,
-            afc_da_mag       => da_mag_s,
             afc_est_hz       => afc_est_s,
             afc_state        => afc_st_u,
             afc_quality      => afc_q_u,
@@ -647,9 +612,7 @@ begin
             hunting_threshold_i    => fs_hunt_thresh,
             locked_threshold_i     => fs_verify_thresh,
 
-            frame_sync_locked      => fsync_lck_s,   -- F2: internal copy;
-                                                     -- port driven above
-            sync_verified          => sync_ver_s,    -- F4: accepted-sync strobe
+            frame_sync_locked      => frame_sync_locked,
             frames_received        => frames_received,
             frame_sync_errors      => open,
             frame_buffer_overflow  => open,
