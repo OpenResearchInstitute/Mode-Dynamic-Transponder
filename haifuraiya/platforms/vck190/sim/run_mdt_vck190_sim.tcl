@@ -170,6 +170,7 @@ safe_add_files sources_1 {
     ../../../rtl/rx/sym_lock_detector.vhd
     ../../../rtl/rx/cfo_rotator.vhd
     ../../../rtl/rx/cfo_afc.vhd
+    ../../../rtl/rx/cfo_pre_da.vhd
     ../../../rtl/rx/msk_demodulator_mlse.vhd
     ../../../rtl/rx/lut16q_pkg.vhd
     ../../../rtl/rx/frame_sync_detector_soft.vhd
@@ -186,7 +187,7 @@ safe_add_files sources_1 {
 # core manifest means a missing submodule or a moved file, so stop and look,
 # don't let elaboration discover it later when things blow up.
 set n_added [llength [get_files -of_objects [get_filesets sources_1]]]
-set n_expected 31
+set n_expected 32
 if {$n_added != $n_expected} {
     puts "*** ERROR: expected $n_expected core files, got $n_added."
     puts "***        Scroll up for SKIP lines. Most likely cause: sim"
@@ -414,7 +415,16 @@ add_wave -into {CFO} -radix dec      $AFC/est_hz
 add_wave -into {CFO} -radix unsigned $AFC/state_o
 add_wave -into {CFO} -radix unsigned $AFC/quality
 add_wave -into {CFO}                 $AFC/cfo_locked
- 
+add_wave -into {CFO}                 $AFC/in_acq
+# --- PREAMBLE carrier measurement (cfo_pre_da): the acquisition owner.
+#   pre_valid_s strobing in the first 40 ms = the preamble is being measured.
+#   pre_ferr_s = the measured carrier (expect ~509).  pre_mag_s = window
+#   magnitude (if pre_valid never strobes, compare pre_mag_s to the 2^33
+#   floor -- that tells us the detection threshold, not the design).
+add_wave -into {CFO} -radix dec      $RX/pre_ferr_s
+add_wave -into {CFO}                 $RX/pre_valid_s
+add_wave -into {CFO} -radix unsigned $RX/pre_mag_s
+
 # --- bit decisions: the ACTUAL demod output ----------------------------------
 add_wave_group {Bit_Decisions}
 add_wave -into {Bit_Decisions}            $DEM/rx_data
