@@ -51,7 +51,7 @@ We have a tcl script runner that calls up a VHDL test bench.
 
 `run_mdt_vck190_sim.tcl`
 
-To use it, create the stimulus file first. 
+To use it, create the stimulus file first. Here's an example:
 
 ```
  python3 opv_stim.py --preamble --clock-offset-ppm 11.5 \
@@ -61,9 +61,22 @@ To use it, create the stimulus file first.
 
 This sets up a 40 ms preamble and then makes six 40 ms frames. There is 
 some resampling from the ppm offset, to give our circuits something to do!
-It's on channel 5 (781250 Hz offset). 
+It's on channel 5 (781250 Hz offset). There are additional arguments. See 
+the source code for additional options and what they do.
 
 With noise and CFO in the stimulus, the soft codes should leave the rails and 
 populate the middle values, `cfo_word` and `est_hz` in the CFO group should 
 move towards `--carrier-offset`, and `sym_clk_offset` in Symbol_Lock should 
 settle near the ppm we injected.
+
+We grade the resulting output files from our simulations by using a Python
+script. Here's how we use it:
+
+```
+cd ~/vck190/Mode-Dynamic-Transponder/haifuraiya/sim
+python3 ~/Downloads/grade_payload_ber.py ~/vck190/Mode-Dynamic-Transponder/haifuraiya/platforms/vck190/sim/mdt_vck190_sim_project/mdt_vck190_sim.sim/sim_1/behav/xsim --stim-dir .
+python3 ~/Downloads/grade_payload_ber.py ~/vck190/Mode-Dynamic-Transponder/haifuraiya/platforms/vck190/sim/mdt_vck190_sim_2burst_project/mdt_vck190_sim_2burst.sim/sim_1/behav/xsim --stim-dir .
+```
+
+Action item: move the script into the simulations directory since it has earned
+it's keep. 
