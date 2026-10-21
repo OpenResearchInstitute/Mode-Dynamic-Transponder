@@ -30,6 +30,21 @@
 --                                    valid 0..ACCUM_WIDTH-16, default 16
 --   0x018  POWER_ALPHA1         RW   first-stage EMA alpha, ALPHA_W bits used
 --   0x01C  POWER_ALPHA2         RW   second-stage EMA alpha, ALPHA_W bits used
+--   0x020  NORM_SQUELCH         RW   normalizer squelch floor, POWER_WIDTH bits
+--                                    used, same units as CHANNEL_POWER.  A
+--                                    channel whose power is below it is QUIET:
+--                                    the normalizer holds its gain, and the
+--                                    quiet bit travels with the channel's
+--                                    samples (m_axis_chans_tuser).  Set from
+--                                    the CHANNEL_POWER readback of an empty
+--                                    channel, about 2x that floor.  Default
+--                                    655360 = 2x the floor measured in the
+--                                    system bench (opv_stim 10 dB recipe,
+--                                    OUTPUT_SHIFT 14 as the board runs it:
+--                                    noise-only ~320k, signal+noise ~1.15M).
+--                                    The old 65536 constant sat 5x BELOW
+--                                    that floor and never fired.  Units
+--                                    scale with OUTPUT_SHIFT (x4 per step).
 --   0x100  CHANNEL_POWER[0]     RO   per-channel power_squared, 30 bits used
 --   0x104  CHANNEL_POWER[1]     RO   "
 --   ...
@@ -100,6 +115,7 @@ entity axi_lite_regs is
         output_shift    : out unsigned(4 downto 0);  -- 0..24 sane range
         power_alpha1    : out std_logic_vector(ALPHA_W - 1 downto 0);
         power_alpha2    : out std_logic_vector(ALPHA_W - 1 downto 0);
+        norm_squelch    : out std_logic_vector(POWER_WIDTH - 1 downto 0);
 
         ---------------------------------------------------------------------
         -- Inputs from the wrapper (status / telemetry)
@@ -153,6 +169,11 @@ architecture rtl of axi_lite_regs is
         std_logic_vector(to_unsigned(4096, ALPHA_W));
     signal reg_power_alpha2  : std_logic_vector(ALPHA_W - 1 downto 0) :=
         std_logic_vector(to_unsigned(64, ALPHA_W));
+    -- NORM_SQUELCH: see the map comment.  655360 = 2x the in-channel noise
+    -- floor measured in the system bench (OUTPUT_SHIFT 14) on the opv_stim
+    -- 10 dB recipe.
+    signal reg_norm_squelch  : std_logic_vector(POWER_WIDTH - 1 downto 0) :=
+        std_logic_vector(to_unsigned(655360, POWER_WIDTH));
 
     ---------------------------------------------------------------------------
     -- Address constants
@@ -165,6 +186,7 @@ architecture rtl of axi_lite_regs is
     constant ADDR_OUTPUT_SHIFT  : std_logic_vector(11 downto 0) := x"014";
     constant ADDR_ALPHA1        : std_logic_vector(11 downto 0) := x"018";
     constant ADDR_ALPHA2        : std_logic_vector(11 downto 0) := x"01C";
+    constant ADDR_NORM_SQUELCH  : std_logic_vector(11 downto 0) := x"020";
     constant ADDR_POWER_BASE    : std_logic_vector(11 downto 0) := x"100";
     constant ADDR_POWER_TOP     : std_logic_vector(11 downto 0) := x"1FC";
 
@@ -217,6 +239,7 @@ begin
     output_shift <= reg_output_shift;
     power_alpha1 <= reg_power_alpha1;
     power_alpha2 <= reg_power_alpha2;
+    norm_squelch <= reg_norm_squelch;
 
     ---------------------------------------------------------------------------
     -- WRITE PATH
@@ -246,6 +269,7 @@ begin
                 reg_output_shift         <= to_unsigned(DATA_WIDTH, 5);
                 reg_power_alpha1         <= std_logic_vector(to_unsigned(4096, ALPHA_W));
                 reg_power_alpha2         <= std_logic_vector(to_unsigned(64, ALPHA_W));
+                reg_norm_squelch         <= std_logic_vector(to_unsigned(655360, POWER_WIDTH));
                 reg_overflow_sticky      <= '0';
                 reg_backpressure_sticky  <= '0';
             else
@@ -297,6 +321,8 @@ begin
                                 reg_power_alpha1 <= s_axi_wdata(ALPHA_W - 1 downto 0);
                             when ADDR_ALPHA2 =>
                                 reg_power_alpha2 <= s_axi_wdata(ALPHA_W - 1 downto 0);
+                            when ADDR_NORM_SQUELCH =>
+                                reg_norm_squelch <= s_axi_wdata(POWER_WIDTH - 1 downto 0);
                             when others =>
                                 null;  -- writes to RO addresses are ignored
                         end case;
@@ -385,6 +411,9 @@ begin
                                 when ADDR_ALPHA2 =>
                                     r_data_int <= (others => '0');
                                     r_data_int(ALPHA_W - 1 downto 0) <= reg_power_alpha2;
+                                when ADDR_NORM_SQUELCH =>
+                                    r_data_int <= (others => '0');
+                                    r_data_int(POWER_WIDTH - 1 downto 0) <= reg_norm_squelch;
                                 when others =>
                                     r_data_int <= (others => '0');
                             end case;

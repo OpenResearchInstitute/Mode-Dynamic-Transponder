@@ -182,6 +182,7 @@ architecture rtl of haifuraiya_rx_top is
     signal chans_tready : std_logic;
     signal chans_tdest  : std_logic_vector(7 downto 0);
     signal chans_tlast  : std_logic;
+    signal chans_tuser  : std_logic_vector(0 downto 0);   -- quiet sideband
 
     -- demux'd target channel
     signal chan_i_reg : std_logic_vector(CHAN_I_W-1 downto 0) := (others => '0');
@@ -231,6 +232,21 @@ architecture rtl of haifuraiya_rx_top is
     signal pre_ferr_s  : signed(15 downto 0);
     signal pre_valid_s : std_logic;
     signal pre_mag_s   : unsigned(15 downto 0);
+    -- acquire-then-track boundary: latches at the first frame-sync lock and
+    -- shuts the preamble measurement off (payload must never preset).
+    signal fsync_locked_i : std_logic;
+    signal fs_state_i     : std_logic_vector(2 downto 0);  -- detector state (readable copy of dbg_fs_state)
+    signal acq_done_s     : std_logic := '0';
+    -- SIGNAL PRESENCE (2026-10-20): the normalizer's quiet bit for the
+    -- target channel, and a dwell counter of consecutive quiet samples.
+    -- One full frame of quiet (G_QUIET_REARM channel samples at 625 kHz =
+    -- 40 ms) means the transmitter is OFF, not fading or losing sync, and
+    -- acquisition is re-armed for the next transmitter's preamble.
+    constant G_QUIET_REARM : natural := 25000;
+    signal chan_quiet_s   : std_logic := '0';
+    signal quiet_cnt      : unsigned(15 downto 0) := (others => '0');
+    signal quiet_frame_s  : std_logic := '0';
+    signal fs_state_d     : std_logic_vector(2 downto 0) := "001";  -- for the HUNTING-exit edge
     signal rot_q      : signed(15 downto 0);
     
     -- intermediate signal for the signed ports
@@ -317,6 +333,7 @@ begin
             m_axis_chans_tready => chans_tready,
             m_axis_chans_tdest  => chans_tdest,
             m_axis_chans_tlast  => chans_tlast,
+            m_axis_chans_tuser  => chans_tuser,
 
             s_axi_ctrl_awaddr  => s_axi_ctrl_awaddr,
             s_axi_ctrl_awvalid => s_axi_ctrl_awvalid,
@@ -367,6 +384,7 @@ begin
                     chan_i_reg <= chans_tdata(15 downto 0);   -- I = TDATA[15:0]
                     chan_q_reg <= chans_tdata(31 downto 16);  -- Q = TDATA[31:16] (debug tap only)
                     rx_svalid  <= '1';
+                    chan_quiet_s <= chans_tuser(0);           -- squelch verdict for THIS channel
                 end if;
             end if;
         end if;
@@ -413,9 +431,74 @@ begin
     cfo_word <= signed(cfo_manual) when cfo_ctrl(0) = '0'
                 else afc_est_s;         -- step 2 LANDED: the AFC drives auto
 
-    -- preamble preset (estimate_offset equivalent): armed by default,
-    -- CFO_CTRL(3) = '1' defeats it for A/B characterization.
-    pre_ena_s <= not cfo_ctrl(3);
+    -- Acquire-then-track boundary: the preamble measurement is ARMED during
+    -- acquisition and shut OFF permanently at the FIRST SYNC PEAK, so it can
+    -- never fire on random PAYLOAD data (whose windows would feed garbage
+    -- carrier estimates into the servo -- and, with the servo now frozen
+    -- after the preamble, nothing would ever correct them).  The first sync
+    -- peak is the frame sync detector leaving HUNTING ("001"), which happens
+    -- on the first frame's sync word (~40 ms), NOT frame_sync_locked, which
+    -- waits for LOCK_FRAMES consecutive syncs (~160 ms) and would leave the
+    -- first two payload frames exposed.  The detector's flywheel is
+    -- untouched; this only reads its state.  Before the first peak the
+    -- signal is the preamble; after, payload -- one latch separates them,
+    -- regardless of the measurement's magnitude floor.  CFO_CTRL(3)='1'
+    -- defeats the preamble measurement entirely (A/B).
+    -- RE-ARM (2026-10-20): a fire-once acquisition cannot serve a channel
+    -- that different transmitters use in turn, each with its own carrier.
+    -- The transmitter going OFF is what ends a transmission -- not a
+    -- frame-sync miss (the detector hunts with the carrier held), and not a
+    -- fade (shorter than a frame).  The normalizer's squelch verdict for
+    -- the target channel, continuous for one frame, is "off": acq_done
+    -- clears, the preamble measurement is re-enabled, and the next
+    -- preamble (at whatever carrier) re-trains the word.  Any live sample
+    -- restarts the dwell.
+    quiet_dwell_proc : process(aclk)
+    begin
+        if rising_edge(aclk) then
+            if reset_h = '1' then
+                quiet_cnt     <= (others => '0');
+                quiet_frame_s <= '0';
+            elsif rx_svalid = '1' then
+                if chan_quiet_s = '1' then
+                    if quiet_cnt = to_unsigned(G_QUIET_REARM, quiet_cnt'length) then
+                        quiet_frame_s <= '1';
+                    else
+                        quiet_cnt <= quiet_cnt + 1;
+                    end if;
+                else
+                    quiet_cnt     <= (others => '0');
+                    quiet_frame_s <= '0';
+                end if;
+            end if;
+        end if;
+    end process;
+
+    -- acq_done SETS on the detector's HUNTING-exit EDGE (a sync peak found
+    -- while hunting), not on the LOCKED level: after a re-arm the detector
+    -- may still be flywheeling in LOCKED from the previous transmission,
+    -- and a level test would shut the preamble measurement off before the
+    -- new preamble is measured.  It CLEARS on init or a frame of quiet.
+    acq_lock_proc : process(aclk)
+    begin
+        if rising_edge(aclk) then
+            fs_state_d <= fs_state_i;
+            if demod_init = '1' or quiet_frame_s = '1' then
+                acq_done_s <= '0';
+            elsif fs_state_d = "001" and fs_state_i /= "001" then
+                acq_done_s <= '1';
+            end if;
+        end if;
+    end process;
+    -- The preamble measurement runs ONLY on a LIVE channel (2026-10-20, found
+    -- on the two-burst stimulus): below the squelch floor the normalizer
+    -- clamps its gain at the floor value, so pure noise comes out near
+    -- signal level and cfo_pre_da's blind lag-4 sum random-walks up to its
+    -- magnitude floor -- it fired on the leading 100 ms of noise and railed
+    -- the word.  Not quiet, not yet acquired, not disabled -> measure.
+    pre_ena_s <= (not cfo_ctrl(3)) and (not acq_done_s) and (not chan_quiet_s);
+    frame_sync_locked <= fsync_locked_i;
+    dbg_fs_state      <= fs_state_i;
     afc_held_s <= '1' when afc_st_u = to_unsigned(3, 3) else '0';
 
     u_slew : entity work.cfo_slew
@@ -599,7 +682,12 @@ begin
     u_fsync : entity work.frame_sync_detector_soft
         generic map (
             HUNTING_THRESHOLD => 115000,   -- was 60000 in libreSDR
-            LOCKED_THRESHOLD  => 68000    -- was 36000 in libreSDR
+            LOCKED_THRESHOLD  => 68000     -- was 36000 in libreSDR
+            -- LOCK_FRAMES stays at the default 3: the flywheel must see
+            -- three consecutive good syncs before declaring lock.  One good
+            -- sync is NOT a lock.  (The acquire/track boundary does NOT use
+            -- the lock flag -- it uses the detector's internal LOCKED state,
+            -- which it enters on the first peak; see acq_lock_proc above.)
         )
         port map (
             clk   => aclk,
@@ -625,7 +713,7 @@ begin
             hunting_threshold_i    => fs_hunt_thresh,
             locked_threshold_i     => fs_verify_thresh,
 
-            frame_sync_locked      => frame_sync_locked,
+            frame_sync_locked      => fsync_locked_i,
             frames_received        => frames_received,
             frame_sync_errors      => open,
             frame_buffer_overflow  => open,
@@ -645,7 +733,7 @@ begin
             --debug_soft_quantized   => open, --remapped
             debug_byte_v           => open,
 
-            debug_state          => dbg_fs_state,
+            debug_state          => fs_state_i,
             debug_correlation    => sig_fs_corr,
             debug_corr_peak      => sig_fs_corr_peak,
             debug_soft_quantized => dbg_fs_soft_q

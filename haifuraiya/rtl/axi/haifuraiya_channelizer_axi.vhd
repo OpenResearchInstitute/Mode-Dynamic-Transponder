@@ -88,6 +88,11 @@ entity haifuraiya_channelizer_axi is
         m_axis_chans_tready : in  std_logic;
         m_axis_chans_tdest  : out std_logic_vector(7 downto 0);
         m_axis_chans_tlast  : out std_logic;
+        -- QUIET sideband (2026-10-20): '1' = this beat's channel was below the
+        -- NORM_SQUELCH floor (transmitter off, as the normalizer judges it).
+        -- Aligned with tvalid/tdest.  The receiver uses it to tell a
+        -- transmission ending from a frame-sync miss.
+        m_axis_chans_tuser  : out std_logic_vector(0 downto 0);
 
         ---------------------------------------------------------------------
         -- AXI-Lite slave: control and telemetry
@@ -242,13 +247,15 @@ architecture rtl of haifuraiya_channelizer_axi is
     constant NORM_AUTO    : std_logic := '1';
     constant NORM_UNITY   : std_logic_vector(15 downto 0) := x"0400";     -- 1.000 Q6.10
     constant NORM_TARGET  : std_logic_vector(15 downto 0) := std_logic_vector(to_unsigned(9000, 16));
-    constant NORM_SQUELCH : std_logic_vector(30 downto 0) := std_logic_vector(to_unsigned(65536, 31));
+    -- NORM_SQUELCH is now the 0x020 register (default 655360); see axi_lite_regs.
+    signal   ctrl_norm_squelch : std_logic_vector(POWER_WIDTH - 1 downto 0);
 
     signal norm_valid : std_logic;
     signal norm_chan  : unsigned(5 downto 0);
     signal norm_last  : std_logic;
     signal norm_i, norm_q : signed(DATA_WIDTH - 1 downto 0);
     signal norm_power : std_logic_vector(POWER_WIDTH - 1 downto 0);
+    signal norm_quiet : std_logic;
 
     -- chan_last delayed to align with the EQ output (1 dispatch + 3 EQ cycles)
     signal chan_last_d : std_logic_vector(3 downto 0) := (others => '0');
@@ -461,10 +468,10 @@ end process p_dispatch_align;
             power => norm_power,
             gain_mode   => NORM_AUTO,      -- '0' = bypass, '1' = normalize
             gain_target => NORM_TARGET,
-            squelch_thr => NORM_SQUELCH,
+            squelch_thr => ctrl_norm_squelch,   -- 0x020 NORM_SQUELCH register
             gain_manual => NORM_UNITY,     -- unity: bit-exact identity
             out_valid => norm_valid, out_chan => norm_chan, out_last => norm_last,
-            out_i => norm_i, out_q => norm_q,
+            out_i => norm_i, out_q => norm_q, out_quiet => norm_quiet,
             gain_current => open, gain_sat => open);
 
     ---------------------------------------------------------------------------
@@ -483,6 +490,7 @@ end process p_dispatch_align;
                 m_axis_chans_tdata  <= (others => '0');
                 m_axis_chans_tdest  <= (others => '0');
                 m_axis_chans_tlast  <= '0';
+                m_axis_chans_tuser  <= "0";
             else
                 -- chan_re_q / chan_im_q updated this cycle from data that
                 -- arrived as chan_valid='1' one cycle ago.
@@ -490,6 +498,7 @@ end process p_dispatch_align;
                 m_axis_chans_tdata  <= std_logic_vector(norm_q) & std_logic_vector(norm_i);
                 m_axis_chans_tdest  <= "00" & std_logic_vector(norm_chan);
                 m_axis_chans_tlast  <= norm_last;
+                m_axis_chans_tuser(0) <= norm_quiet;
             end if;
         end if;
     end process p_axis_out;
@@ -629,6 +638,7 @@ end process p_dispatch_align;
             output_shift   => ctrl_output_shift,
             power_alpha1   => ctrl_alpha1,
             power_alpha2   => ctrl_alpha2,
+            norm_squelch   => ctrl_norm_squelch,
 
             ready_in            => stat_ready,
             overflow_pulse      => stat_overflow_pulse,

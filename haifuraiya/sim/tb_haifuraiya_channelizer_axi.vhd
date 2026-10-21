@@ -78,6 +78,7 @@ architecture sim of tb_haifuraiya_channelizer_axi is
     constant ADDR_OUTPUT_SHIFT  : integer := 16#014#;
     constant ADDR_ALPHA1        : integer := 16#018#;
     constant ADDR_ALPHA2        : integer := 16#01C#;
+    constant ADDR_NORM_SQUELCH  : integer := 16#020#;
     constant ADDR_POWER_BASE    : integer := 16#100#;
 
     ---------------------------------------------------------------------------
@@ -796,6 +797,26 @@ u_rx : entity work.haifuraiya_rx_axi
         -- Restore default
         axi_write(ADDR_OUTPUT_SHIFT, DATA_WIDTH);
         --axi_write(ADDR_OUTPUT_SHIFT, 4); -- do not shift away our entire value
+
+        ---------------------------------------------------------------------
+        -- Test 3b: NORM_SQUELCH register (0x020) default / write / read /
+        -- restore.  The default is what the rest of this bench runs with.
+        ---------------------------------------------------------------------
+        report "--- Test 3b: NORM_SQUELCH write/read ---";
+        axi_read(ADDR_NORM_SQUELCH, rdata);
+        if rdata = 655360 then
+            pass("NORM_SQUELCH default = 655360");
+        else
+            fail("NORM_SQUELCH default expected 655360, got " & integer'image(rdata));
+        end if;
+        axi_write(ADDR_NORM_SQUELCH, 123456);
+        axi_read(ADDR_NORM_SQUELCH, rdata);
+        if rdata = 123456 then
+            pass("NORM_SQUELCH writeable (123456 read back)");
+        else
+            fail("NORM_SQUELCH=123456 readback got " & integer'image(rdata));
+        end if;
+        axi_write(ADDR_NORM_SQUELCH, 655360);
 
         ---------------------------------------------------------------------
         -- Test 4: STATUS readable, ready bit should be high

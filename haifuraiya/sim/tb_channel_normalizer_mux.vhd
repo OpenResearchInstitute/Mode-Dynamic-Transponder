@@ -30,6 +30,10 @@
 --       carrying only receiver noise is not amplified to full scale.
 --   A7  ZERO-POWER GUARD. power=0 and squelch_thr=0 must not produce X, must not
 --       divide by zero, must not wrap.
+--   A9  QUIET BIT (2026-10-20). out_quiet = '1' exactly when the beat's power
+--       was below squelch_thr, '0' at and above it, and it travels with the
+--       beat (same latency as out_valid).  This is the receiver's "transmitter
+--       off" sensor; the comparison is the same one that floors the gain.
 --   A8  NO STATE. The block is a pure function of (in_i, in_q, power). Present
 --       the same beat twice, far apart in time, with unrelated traffic between:
 --       the output must be identical. If this fails, someone added state.
@@ -88,6 +92,7 @@ architecture sim of tb_channel_normalizer_mux is
     signal out_i, out_q : signed(DATA_W-1 downto 0);
     signal gain_current : std_logic_vector(GAIN_W-1 downto 0);
     signal gain_sat     : std_logic;
+    signal out_quiet    : std_logic;
 
     signal errs : integer := 0;
     signal lat_meas : integer := -1;
@@ -135,7 +140,7 @@ begin
             gain_mode => gain_mode, gain_target => gain_target,
             squelch_thr => squelch_thr, gain_manual => gain_manual,
             out_valid => out_valid, out_chan => out_chan, out_last => out_last,
-            out_i => out_i, out_q => out_q,
+            out_i => out_i, out_q => out_q, out_quiet => out_quiet,
             gain_current => gain_current, gain_sat => gain_sat);
 
     main : process
@@ -362,6 +367,49 @@ begin
             report "A7 PASS: power=0 with squelch_thr=0 produces no X";
         end if;
         squelch_thr <= std_logic_vector(to_unsigned(C_SQUELCH, POWER_W));
+
+        -----------------------------------------------------------------------
+        -- A9 quiet bit: '1' strictly below squelch_thr, '0' at/above, aligned.
+        -----------------------------------------------------------------------
+        e0 := errs;
+        wait until rising_edge(clk);
+        beat(1000, -1000, C_SQUELCH - 1, 3, '0');
+        if out_quiet /= '1' then fail("A9: power = squelch-1 must be QUIET", errs); end if;
+        beat(1000, -1000, C_SQUELCH, 3, '0');
+        if out_quiet /= '0' then fail("A9: power = squelch must NOT be quiet", errs); end if;
+        beat(1000, -1000, 0, 3, '0');
+        if out_quiet /= '1' then fail("A9: power = 0 must be QUIET", errs); end if;
+        beat(1000, -1000, 25000000, 3, '0');
+        if out_quiet /= '0' then fail("A9: strong channel must NOT be quiet", errs); end if;
+        -- alignment: a quiet beat followed back-to-back by a live one on the
+        -- next clock; the verdicts must emerge in order with their beats.
+        in_i <= to_signed(1000, DATA_W); in_q <= to_signed(0, DATA_W);
+        power <= std_logic_vector(to_unsigned(C_SQUELCH / 2, POWER_W));
+        in_chan <= to_unsigned(9, CHAN_W); in_last <= '0'; in_valid <= '1';
+        wait until rising_edge(clk);
+        power <= std_logic_vector(to_unsigned(C_SQUELCH * 2, POWER_W));
+        in_chan <= to_unsigned(10, CHAN_W);
+        wait until rising_edge(clk);
+        in_valid <= '0';
+        nclk := 0;
+        loop
+            wait until rising_edge(clk);
+            nclk := nclk + 1;
+            exit when out_valid = '1';
+            if nclk > 10 then fail("A9: no out_valid for the back-to-back pair", errs); exit; end if;
+        end loop;
+        if to_integer(out_chan) /= 9 or out_quiet /= '1' then
+            fail("A9: first of the pair (chan 9, quiet) not aligned with its verdict", errs);
+        end if;
+        wait until rising_edge(clk);
+        if out_valid /= '1' or to_integer(out_chan) /= 10 or out_quiet /= '0' then
+            fail("A9: second of the pair (chan 10, live) not aligned with its verdict", errs);
+        end if;
+        for k in 1 to LATENCY loop wait until rising_edge(clk); end loop;
+        if errs = e0 then
+            report "A9 PASS: out_quiet is '1' strictly below SQUELCH_THR, '0' at/above,"
+                 & " and travels with its beat";
+        end if;
 
         -----------------------------------------------------------------------
         -- A8 the block has NO STATE. Same beat twice, unrelated traffic between.

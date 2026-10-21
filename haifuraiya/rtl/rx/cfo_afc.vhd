@@ -46,6 +46,13 @@
 -- packing): [15:8] trk (default 10 ~ C++ 0.001), [23:16] acq (default 6
 -- = 16x, provisional per decision 2).  Register-adjustable, no rebuild.
 --
+-- PREAMBLE (pre_set/pre_set_v from cfo_pre_da): TRAIN, THEN HOLD.
+--   While the preamble is present (in_acq) its data-aided measurement
+--   owns est (accumulating residuals).  After the preamble, est is
+--   FROZEN for the burst: the decision-directed loop above runs ONLY
+--   when no preamble has ever been seen (seen_pre = '0').  Rationale at
+--   the P_SERVO branch.  A later preamble re-arms and re-trains.
+--
 -- BUDGET: worst path ~45 clocks/symbol of 1845 available.
 -- STYLE: VHDL-93; declaration initializers mirror the reset branch.
 -------------------------------------------------------------------------------
@@ -172,14 +179,19 @@ architecture rtl of cfo_afc is
     -- measurement, dropped G_PRE_TAIL symbols after the last one), and
     -- while '1' ONLY the preamble preset moves est (accumulating, the
     -- integrating-servo form) and the decision-directed integrator is
-    -- held.  When '0' (payload: the preamble self-gates off), the slow
-    -- decision-directed loop tracks from the carrier the preamble set.
+    -- held.  When '0' (payload: the preamble self-gates off), est is
+    -- frozen at the carrier the preamble set (see seen_pre).
     -- Re-arms on any later preamble -> standing re-acquisition.
     constant G_PRE_TAIL       : natural := 300;  -- > one 256-sym window
     -- in_acq starts '0' (decision-directed loop free, as the base design and
     -- the no-preamble benches expect); a preamble measurement raises it.
     signal in_acq             : std_logic := '0';
     signal pre_to             : unsigned(8 downto 0) := (others => '0');
+    -- seen_pre: a preamble measurement has driven acquisition at least once.
+    -- After that the decision-directed loop is OFF for good (est frozen
+    -- between preambles).  The decision-directed gears exist only for a cold
+    -- start with no preamble (benches, base design behaviour).
+    signal seen_pre           : std_logic := '0';
 
 begin
 
@@ -223,6 +235,7 @@ begin
                 good_cnt <= (others=>'0'); lost_cnt <= (others=>'0');
                 pset_pend <= '0'; pset_v <= (others=>'0');
                 in_acq <= '0'; pre_to <= (others=>'0');
+                seen_pre <= '0';
             else
                 if st = S_IDLE then
                     st <= S_SEARCH;
@@ -245,6 +258,7 @@ begin
                     pset_pend <= '1';
                     pset_v    <= pre_set;
                     in_acq    <= '1';
+                    seen_pre  <= '1';
                     pre_to    <= to_unsigned(G_PRE_TAIL, pre_to'length);
                 end if;
 
@@ -375,10 +389,9 @@ begin
                         --     ~0) leaves it there.  The decision-directed
                         --     integrator is HELD OFF, so it cannot race to its
                         --     biased cold value.
-                        --   in_acq = '0' (payload): the slow decision-directed
-                        --     loop tracks from the carrier the preamble set;
-                        --     preamble measurements (if any leak through) are
-                        --     ignored.
+                        --   in_acq = '0' (payload): est is frozen at the
+                        --     carrier the preamble set; preamble measurements
+                        --     (if any leak through) are ignored.
                         if in_acq = '1' then
                             if pset_pend = '1' then
                                 pset_pend <= '0';
@@ -392,7 +405,26 @@ begin
                                     est_q16 <= resize(mx, 36);
                                 end if;
                             end if;
-                        elsif st = S_CORRECTING or st = S_HELD then
+                        elsif seen_pre = '0' and
+                              (st = S_CORRECTING or st = S_HELD) then
+                            -- DECISION-DIRECTED loop: ONLY when no preamble
+                            -- has ever been seen (cold start, no-preamble
+                            -- benches: the base design's behaviour).
+                            --
+                            -- TRAIN ON THE PREAMBLE, THEN HOLD (2026-10-20).
+                            -- Once the preamble has set the carrier (seen_pre)
+                            -- the estimate is FROZEN for the rest of the
+                            -- burst.  Measured, both here and in the C++
+                            -- reference on a correctly calibrated 10 dB
+                            -- stimulus: the decision-directed discriminator on
+                            -- random payload at Es/N0 = 7 dB carries a
+                            -- +100..270 Hz bias and +/-200..400 Hz wander,
+                            -- which walks the estimate out of the coherent
+                            -- MLSE slip cliff (~195 Hz).  A slower gain
+                            -- shrinks the wander, not the bias.  The preamble
+                            -- measurement (+/-25 Hz) is inside the cliff; the
+                            -- only way to stay there is to not move.  A later
+                            -- preamble re-arms in_acq and re-trains.
                             if st = S_HELD then
                                 shv := signed(resize(alpha_trk, 8));
                             else

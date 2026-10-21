@@ -245,7 +245,12 @@ def main():
              "emulating a transmitter crystal running fast (+) or slow (-). "
              "Field reference: free-running Pluto vs ADRV9002 measured "
              "~11.5 ppm on 2026-07-21; C++ demod holds 25 ppm losslessly.)")
-    ap.add_argument("--carrier-offset", type=float, default=0.0)
+    ap.add_argument("--carrier-offset", type=str, default="0.0",
+        help="carrier offset from --fc in Hz. ONE value applies to every burst. "
+             "A comma-separated LIST gives each burst its own offset, in order "
+             "(e.g. 500,-300 = burst 1 at +500, burst 2 at -300: two different "
+             "transmitters); the last value repeats if there are more bursts "
+             "than values. Needs --bursts > 1 to matter.")
     ap.add_argument("--fd", type=float, default=None)
     ap.add_argument("--amp", type=float, default=9000.0)
     ap.add_argument("--message", type=str, default=EASTER_EGG, help="easter-egg payload text")
@@ -267,16 +272,21 @@ def main():
     a = ap.parse_args()
     fd = a.fd if a.fd is not None else a.baud / 4.0
     MESSAGE = a.message
-    center = a.fc + a.carrier_offset
+    offsets = [float(v) for v in a.carrier_offset.split(",")]
+    center = a.fc + offsets[0]
     if a.bursts > 1 or a.preamble or a.idle_ms > 0:
         tl = build_burst_timeline(a.frames, a.bursts, a.preamble, a.idle_ms, a.fs, a.baud)
         chunks = []
+        burst = 0
         for kind, payload in tl:
             if kind == 'idle':
                 chunks.append(np.zeros(payload, dtype=complex))   # TX OFF. Noise added later.
             else:
-                sc, _ = modulate_diff(payload, a.fs, a.baud, fd, a.amp, center)
+                # each burst is its own transmitter: its own carrier offset
+                off_b = offsets[min(burst, len(offsets) - 1)]
+                sc, _ = modulate_diff(payload, a.fs, a.baud, fd, a.amp, a.fc + off_b)
                 chunks.append(sc)
+                burst += 1
         s = np.concatenate(chunks); ns = len(s)
         bits = np.concatenate([p for k, p in tl if k == 'bits'])
     else:
@@ -335,7 +345,11 @@ def main():
     _pl = _tile(MESSAGE, FRAME_BYTES)
     print(f"  message    : {MESSAGE!r}")
     print(f"  payload[0:16]: {' '.join(f'{b:02X}' for b in _pl[:16])} = {_pl[:16].decode('ascii','replace')!r}")
-    print(f"  fs={a.fs/1e3:.1f}k baud={a.baud:.0f} fd={fd:.0f}  center=fc {a.fc:.0f}+offset {a.carrier_offset:.0f}={center:.0f} Hz  amp={a.amp:.0f}")
+    print(f"  fs={a.fs/1e3:.1f}k baud={a.baud:.0f} fd={fd:.0f}  center=fc {a.fc:.0f}+offset {offsets[0]:.0f}={center:.0f} Hz  amp={a.amp:.0f}")
+    if len(offsets) > 1:
+        print("  carrier    : per burst " + ", ".join(
+              f"burst {b+1}: {a.fc + offsets[min(b, len(offsets)-1)]:.0f} Hz ({offsets[min(b, len(offsets)-1)]:+.0f})"
+              for b in range(a.bursts)))
     if a.ebn0 is None:
         print("  noise      : NONE. Every symbol is confidently decided, so the 3-bit")
         print("               soft quantiser will sit on its rails (codes 0 and 7).")

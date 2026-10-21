@@ -125,6 +125,13 @@ entity channel_normalizer_mux is
         out_last    : out std_logic;
         out_i       : out signed(DATA_W - 1 downto 0);
         out_q       : out signed(DATA_W - 1 downto 0);
+        -- QUIET: this beat's channel power was below squelch_thr when the beat
+        -- entered (the same comparison that floors the gain).  Travels with
+        -- the beat, aligned with out_valid/out_chan, so a consumer can tell
+        -- "transmitter off" from "signal present" per channel without its own
+        -- power detector.  (2026-10-20: the receiver re-arms carrier
+        -- acquisition on a frame of continuous quiet.)
+        out_quiet   : out std_logic;
 
         -- telemetry
         gain_current : out std_logic_vector(GAIN_W - 1 downto 0);
@@ -200,6 +207,7 @@ architecture rtl of channel_normalizer_mux is
     signal pi_i, pi_q : i_arr := (others => (others => '0'));
     signal pi_c       : c_arr := (others => (others => '0'));
     signal pi_v, pi_l : std_logic_vector(1 to LATENCY-1) := (others => '0');
+    signal pi_qt      : std_logic_vector(1 to LATENCY-1) := (others => '0');  -- quiet, aligned
 
     -- gain computation pipeline
     signal s1_p    : unsigned(POWER_W-1 downto 0) := (others => '0');
@@ -242,6 +250,7 @@ begin
             if rst = '1' then
                 pi_i(1) <= (others => '0'); pi_q(1) <= (others => '0');
                 pi_c(1) <= (others => '0'); pi_v(1) <= '0'; pi_l(1) <= '0';
+                pi_qt(1) <= '0';
                 s1_p <= (others => '0');
             else
                 pi_i(1) <= in_i;  pi_q(1) <= in_q;
@@ -250,8 +259,10 @@ begin
                 -- and the gain would be meaningless.
                 if unsigned(power) < unsigned(squelch_thr) then
                     s1_p <= unsigned(squelch_thr);
+                    pi_qt(1) <= '1';
                 else
                     s1_p <= unsigned(power);
+                    pi_qt(1) <= '0';
                 end if;
                 if unsigned(squelch_thr) = 0 and unsigned(power) = 0 then
                     s1_p <= to_unsigned(1, POWER_W);
@@ -273,10 +284,12 @@ begin
             if rst = '1' then
                 pi_i(2) <= (others => '0'); pi_q(2) <= (others => '0');
                 pi_c(2) <= (others => '0'); pi_v(2) <= '0'; pi_l(2) <= '0';
+                pi_qt(2) <= '0';
                 s2_e <= 0; s2_idx <= 0;
             else
                 pi_i(2) <= pi_i(1); pi_q(2) <= pi_q(1);
                 pi_c(2) <= pi_c(1); pi_v(2) <= pi_v(1); pi_l(2) <= pi_l(1);
+                pi_qt(2) <= pi_qt(1);
 
                 e := 0;
                 for k in 0 to POWER_W-1 loop
@@ -305,11 +318,13 @@ begin
             if rst = '1' then
                 pi_i(3) <= (others => '0'); pi_q(3) <= (others => '0');
                 pi_c(3) <= (others => '0'); pi_v(3) <= '0'; pi_l(3) <= '0';
+                pi_qt(3) <= '0';
                 s3_rom <= (others => '0');
                 s3_sh  <= ROM_FRAC - GAIN_FRAC;
             else
                 pi_i(3) <= pi_i(2); pi_q(3) <= pi_q(2);
                 pi_c(3) <= pi_c(2); pi_v(3) <= pi_v(2); pi_l(3) <= pi_l(2);
+                pi_qt(3) <= pi_qt(2);
                 s3_rom <= INVSQRT_ROM(s2_idx);
                 s3_sh  <= ROM_FRAC + (s2_e / 2) - GAIN_FRAC;
             end if;
@@ -328,10 +343,12 @@ begin
             if rst = '1' then
                 pi_i(4) <= (others => '0'); pi_q(4) <= (others => '0');
                 pi_c(4) <= (others => '0'); pi_v(4) <= '0'; pi_l(4) <= '0';
+                pi_qt(4) <= '0';
                 s4_gain <= to_unsigned(2**GAIN_FRAC, GAIN_W);
             else
                 pi_i(4) <= pi_i(3); pi_q(4) <= pi_q(3);
                 pi_c(4) <= pi_c(3); pi_v(4) <= pi_v(3); pi_l(4) <= pi_l(3);
+                pi_qt(4) <= pi_qt(3);
 
                 prod := unsigned(gain_target) * s3_rom;
                 g    := shift_right(prod + shift_left(to_unsigned(1, 2*GAIN_W), s3_sh - 1),
@@ -359,6 +376,7 @@ begin
             if rst = '1' then
                 out_i <= (others => '0'); out_q <= (others => '0');
                 out_valid <= '0'; out_chan <= (others => '0'); out_last <= '0';
+                out_quiet <= '0';
                 sat_r <= '0';
             else
                 pi := pi_i(4) * signed('0' & std_logic_vector(s4_gain));
@@ -368,6 +386,7 @@ begin
                 out_valid <= pi_v(4);
                 out_chan  <= pi_c(4);
                 out_last  <= pi_l(4);
+                out_quiet <= pi_qt(4);
                 -- VHDL-93: no conditional signal assignment inside a process.
                 if saturated(pi, GAIN_FRAC) or saturated(pq, GAIN_FRAC) then
                     sat_r <= '1';

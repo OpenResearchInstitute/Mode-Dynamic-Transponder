@@ -416,6 +416,28 @@ add_wave -into {CFO} -radix unsigned $AFC/state_o
 add_wave -into {CFO} -radix unsigned $AFC/quality
 add_wave -into {CFO}                 $AFC/cfo_locked
 add_wave -into {CFO}                 $AFC/in_acq
+add_wave -into {CFO}                 $AFC/seen_pre
+add_wave -into {CFO}                 $RX/acq_done_s
+add_wave -into {CFO}                 $RX/pre_ena_s
+# --- SIGNAL PRESENCE / RE-ARM (2026-10-20): chan_quiet_s = the normalizer's
+#   squelch verdict for the target channel (1 = below NORM_SQUELCH, 0x020, default 655360).
+#   quiet_cnt counts consecutive quiet samples; quiet_frame_s fires after one
+#   frame (25000) of quiet and CLEARS acq_done_s -> pre_ena_s goes back up ->
+#   the next preamble re-trains est_hz.  Expect: quiet_frame_s high in the
+#   gaps, acq_done_s dropping there, rising again at the next burst's first
+#   sync peak.
+add_wave -into {CFO}                 $RX/chan_quiet_s
+add_wave -into {CFO} -radix unsigned $RX/quiet_cnt
+add_wave -into {CFO}                 $RX/quiet_frame_s
+#   The squelch's own inputs, at the channelizer wrapper: the floor in force
+#   (0x020, expect 655360), the power the normalizer compares (channel at the
+#   EQ output that beat; target channel on noise ~320k, with signal ~1.15M at OUTPUT_SHIFT 14), and
+#   the verdict.  If chan_quiet_s disagrees with these, the bit is misrouted;
+#   if these disagree with the model, the floor is miscalibrated.
+add_wave -into {CFO} -radix unsigned $RX/u_chan/ctrl_norm_squelch
+add_wave -into {CFO} -radix unsigned $RX/u_chan/norm_power
+add_wave -into {CFO}                 $RX/u_chan/norm_quiet
+add_wave -into {CFO} -radix unsigned $RX/u_chan/u_norm/s4_gain
 # --- PREAMBLE carrier measurement (cfo_pre_da): the acquisition owner.
 #   pre_valid_s strobing in the first 40 ms = the preamble is being measured.
 #   pre_ferr_s = the measured carrier (expect ~509).  pre_mag_s = window

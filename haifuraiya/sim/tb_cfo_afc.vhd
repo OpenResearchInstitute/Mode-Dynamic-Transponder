@@ -115,13 +115,14 @@ begin
         chk(st = 3, "T4 reacquired without restart (anti-wedge)");
         chk(abs(to_integer(est) - 2000) < 60, "T4 est converged to +2000");
 
-        -- ===== CLOSED-LOOP ACQUISITION HANDOFF (the real system behavior) ===
+        -- ===== TRAIN ON THE PREAMBLE, THEN HOLD (the real system behavior) ==
         -- These tests model what actually happens in the system: the preamble
         -- measurement is a RESIDUAL (offset - est, post-rotator), fed as
-        -- pre_set; est must ACCUMULATE it and the decision-directed loop must
-        -- be held off while the preamble is present (in_acq), then take over.
-        -- The isolated inject tests (old T5-T7) could not show the race that
-        -- broke in-system; these do.
+        -- pre_set; est must ACCUMULATE it, the decision-directed loop must be
+        -- held off while the preamble is present (in_acq), and after the
+        -- preamble est must be FROZEN -- the decision-directed loop never
+        -- runs again (measured 2026-10-20: on payload at Es/N0 7 dB it is
+        -- biased and wanders out of the MLSE slip cliff, here and in the C++).
 
         -- T5: COLD ACQUISITION OWNED BY THE PREAMBLE.  Reset, then even while
         -- the decision-directed loop WOULD run, periodic preamble measurements
@@ -154,21 +155,37 @@ begin
         chk(abs(to_integer(est) - 500) < 20, "T5 est held at +500 through preamble");
         chk(st = 3, "T5 HELD by end of preamble");
 
-        -- T6: HANDOFF TO TRACKING.  Stop the preamble measurements (payload
-        -- begins).  After G_PRE_TAIL symbols in_acq drops and the slow loop
-        -- owns the word; est must STAY ~500 (no drift away on handoff).
+        -- T6: HOLD.  Stop the preamble measurements (payload begins).  After
+        -- G_PRE_TAIL symbols in_acq drops; est must STAY at 500 exactly --
+        -- nothing is allowed to move it (payload symbols keep arriving).
         for k in 1 to 500 loop sym(300000.0); end loop;
-        report "T6 post-handoff est=" & integer'image(to_integer(est)) &
+        report "T6 post-preamble est=" & integer'image(to_integer(est)) &
                " state=" & integer'image(to_integer(st)) severity note;
-        chk(abs(to_integer(est) - 500) < 40, "T6 est stable after handoff to tracking");
+        chk(abs(to_integer(est) - 500) < 20, "T6 est held after the preamble ends");
+        chk(st = 3, "T6 HELD (cfo_locked) after the preamble ends");
 
-        -- T7: TRACKING WORKS after handoff -- a real carrier step (no presets)
-        -- is followed by the slow loop (proves the loop is live, not frozen).
+        -- T7: FROZEN.  A carrier step on payload (no preamble) must NOT be
+        -- followed: the decision-directed loop is off for good.  (The old T7
+        -- asserted the opposite -- that the slow loop tracked a +300 Hz
+        -- step.  That tracking is what walked est out of the cliff.)
         offset := 800.0;
         for k in 1 to 6000 loop sym(300000.0); end loop;
         report "T7 est=" & integer'image(to_integer(est)) &
                " state=" & integer'image(to_integer(st)) severity note;
-        chk(abs(to_integer(est) - 800) < 80, "T7 slow loop tracked a +300 Hz step after handoff");
+        chk(abs(to_integer(est) - 500) < 20, "T7 est frozen through a payload carrier step");
+
+        -- T8: RE-TRAIN.  A later preamble (new burst at the new offset)
+        -- re-arms acquisition and moves est to the new carrier.
+        for w in 1 to 4 loop
+            pset <= to_signed(800 - to_integer(est), 16);
+            pset_v <= '1'; wait until rising_edge(clk); pset_v <= '0';
+            for k in 1 to 256 loop sym(300000.0); end loop;
+        end loop;
+        for k in 1 to 500 loop sym(300000.0); end loop;
+        report "T8 est=" & integer'image(to_integer(est)) &
+               " state=" & integer'image(to_integer(st)) severity note;
+        chk(abs(to_integer(est) - 800) < 20, "T8 later preamble re-trains est to +800");
+        chk(st = 3, "T8 HELD after re-train");
 
         if fails = 0 then report "ALL TESTS PASS" severity note;
         else report integer'image(fails) & " FAILURES" severity failure;
