@@ -188,18 +188,79 @@ architecture rtl of msk_symbol_engine is
   -- MAC accumulators (16x16 products over <=12 samples: 36 bits is ample)
   signal a1r, a1i, a2r, a2i : signed(39 downto 0);
 
-  -- per-window results: (y1r,y1i,y2r,y2i) x {early,center,late},
-  -- plus the previous symbol's triple for the 2T bank
+  -- per-window results: (y1r,y1i,y2r,y2i) x {early,center,late}
   type yset_t is array (0 to 3) of signed(23 downto 0);
   type wset_t is array (0 to 2) of yset_t;
-  signal ycur, yprev : wset_t;
-  signal prev_valid  : std_logic := '0';
-  signal kprev_odd   : std_logic := '0';
+  signal ycur : wset_t;
 
-  -- TED pipeline: bank magnitudes registered between compute and decide
-  type mag4_r is array (0 to 3) of signed(27 downto 0);
-  signal ae_r, ac_r, al_r : mag4_r := (others => (others => '0'));
-  signal have_bank : std_logic := '0';
+  -- TIMING ERROR DETECTOR: the C++ reference's (opv_demod.hpp,
+  -- track_correlations), transcribed 2026-10-21:
+  --     ya  = (|Y1|^2 > |Y2|^2) ? Y1 : Y2            on-time, dominant tone
+  --     dy  = Y_late - Y_early                       same tone
+  --     err = Re(ya * conj(dy)) / |ya|^2
+  -- It replaces the 2T "V-bank" detector (four combinations of
+  -- consecutive-symbol correlations, amax+3/8min magnitudes,
+  -- (L-E)/(L+E)).  Measured (ted_model.py, 2026-10-21): the V-bank's
+  -- S-curve on random payload has half the reference's gain in one
+  -- symbol-counter parity, is sign-REVERSED in the other (parity vs the
+  -- transmitter is a coin flip at acquisition), and reverses again beyond
+  -- |tau| ~ 0.3 symbol; on an 11.5 ppm clock the integrator reached only
+  -- -1476 of the -2225 (Q24) needed, then turned around (xsim readback,
+  -- 25-frame run: BER 0.2% -> 3.2% across one second).  The reference's
+  -- detector is odd-symmetric, identical on preamble and payload, has no
+  -- parity and no bank; the same loop law, registers and windows hold an
+  -- 11.5 ppm clock to <0.04 symbol at 10 dB in the model.
+  -- Pipeline: S_TED_A picks the dominant tone (energies), registers
+  -- ya, dy and den = |ya|^2; S_TED_B forms num = Re(ya conj(dy)), the
+  -- early/late amplitude exports, and launches the existing divider on
+  -- (|num| << 15) / den with saturation when |num| >= den.
+  signal ya_r, ya_i   : signed(23 downto 0) := (others => '0');
+  signal dy_r, dy_i   : signed(24 downto 0) := (others => '0');
+  signal den_r        : unsigned(47 downto 0) := (others => '0');
+  signal ae_amp, al_amp : signed(27 downto 0) := (others => '0');
+  signal have_bank    : std_logic := '0';   -- '1' once the first triple is in
+  -- common right-shift applied to num and den before the 47-bit divider
+  -- (the ratio is scale-invariant); |y| ~ 2^20 typical -> den ~ 2^40.
+  constant C_TED_NORM_SHR : natural := 16;
+
+  -- TONE-ARM RELATIVE PHASE RE-REFERENCE (2026-10-22).  The two tone
+  -- correlations are taken against ABSOLUTE-time LOs: y1 carries
+  -- exp(-j 2pi fd t_k), y2 carries exp(+j 2pi fd t_k) at the window start
+  -- t_k.  The MLSE's V-bank (Q_k = y2 * (-1)^k) assumes their relative
+  -- phase advances by exactly pi per symbol, which is true only when the
+  -- windows sit on the nominal grid t_k = k*SPS (2 fd SPS / fs = 1/2
+  -- exactly).  Any displacement d = pos - k*SPS adds 2pi(2fd/fs)d of
+  -- relative phase the survivors cannot absorb (they track COMMON phase):
+  -- a TX clock offset makes d grow (11.5 ppm: 113 deg over one second,
+  -- measured BER 0.2% -> 3.4% across a 25-frame run), and an arbitrary TX
+  -- boundary phase makes it a constant (half a symbol = 90 deg: 3.7% BER
+  -- in the model at Eb/N0 10 dB vs 0.45%).  Re-referencing the exported
+  -- arms to the window start restores the V-bank's assumption at every
+  -- position: model BER flat 0.15-0.63% over the second (vbank_drift.py)
+  -- and 0.45% at every constant d (vbank_const.py).
+  -- The re-reference is split EQUALLY between the arms, as the C++
+  -- reference's symbol-indexed LOs (demodulate(): phase_f += SPS*inc,
+  -- independent of pos) do by construction:
+  --     y1 * exp(+j 2pi(fd/fs) d),   y2 * exp(-j 2pi(fd/fs) d)
+  -- The relative phase (all the MLSE needs) is the same as rotating y2
+  -- alone by the full angle; the common part is slow and the survivors'
+  -- phase words track it.  The split matters while the TIMING LOOP IS
+  -- SLEWING (capture after idle, when pos has wandered on noise): a
+  -- rotation of one arm alone by the full angle made that arm appear to
+  -- spin at 2fd*adj/SPS -- tens of Hz during capture -- and the preamble
+  -- carrier estimator (two-arm lag-4 sum) picked up half of it as carrier
+  -- (first xsim: est 572 for a +500 burst, -264 for a -300 burst, both
+  -- preambles arriving after 100 ms of idle).  With the equal split the
+  -- two arms see equal and opposite apparent rates and the two-arm sum
+  -- cancels to first order, exactly as in the reference.
+  -- arm_ph holds the HALF angle 2pi(fd/fs)d as a 32-bit turn fraction,
+  -- kept incrementally: += adj * G_INC32 / 2^16 per symbol (adj in Q16
+  -- samples), seeded from the reset position; one ROM read serves both
+  -- arms (conjugate for y2).  The TED and the lock detector keep the raw
+  -- arms (their statistics are rotation-invariant within an arm).
+  signal arm_ph    : unsigned(31 downto 0) := (others => '0');
+  constant C_ARM_PH0 : unsigned(31 downto 0) :=
+      to_unsigned(2 * G_INC32, 32);   -- reset pos = 2.0 smp: 2*G_INC32
 
   signal y_valid_i : std_logic := '0';
   signal done_i    : std_logic := '0';
@@ -255,48 +316,17 @@ begin
     variable xr, xi  : signed(15 downto 0);
     variable m1, m2, m3, m4 : signed(31 downto 0);
     -- TED variables
-    type mag4_t is array (0 to 3) of signed(27 downto 0);
-    variable Ae, Ac, Al : mag4_t;
-    variable sgp, sgc   : integer;
-    variable vr, vi     : signed(24 downto 0);
-    variable wbest      : integer;
-    variable mbest      : signed(27 downto 0);
-    variable err        : signed(31 downto 0);
+    variable e1, e2     : unsigned(47 downto 0);   -- tone energies |Y1|^2, |Y2|^2
+    variable num        : signed(49 downto 0);     -- Re(ya conj(dy))
+    variable numa       : unsigned(49 downto 0);   -- |num| >> C_TED_NORM_SHR
+    variable dena       : unsigned(47 downto 0);   -- den  >> C_TED_NORM_SHR
     variable ted        : signed(16 downto 0);
     variable adj        : signed(31 downto 0);
     variable fnew       : signed(33 downto 0);   -- retired by Q39 path
     variable fnew_full  : signed(39 downto 0);
+    variable rr, ri     : signed(40 downto 0);   -- rotated y2 (24x16 + 24x16)
+    variable dph        : signed(63 downto 0);   -- adj * 2*G_INC32
 
-    procedure bank(ya, yb : in yset_t; sa, sb : in integer;
-                   variable m : out mag4_t) is
-      variable q_ar, q_ai, q_br, q_bi : signed(24 downto 0);
-      variable a_r, a_i               : signed(24 downto 0);
-    begin
-      -- sign application by conditional negation: signed*integer in
-      -- numeric_std yields a double-width product (25*25 -> 50 bits),
-      -- which killed the first bank() call at runtime. Negation is what
-      -- the fabric builds anyway.
-      if sa = 1 then
-        q_ar := resize(ya(2), 25);   q_ai := resize(ya(3), 25);
-      else
-        q_ar := -resize(ya(2), 25);  q_ai := -resize(ya(3), 25);
-      end if;
-      if sb = 1 then
-        q_br := resize(yb(2), 25);   q_bi := resize(yb(3), 25);
-      else
-        q_br := -resize(yb(2), 25);  q_bi := -resize(yb(3), 25);
-      end if;
-      -- V11 = Y1a + Y1b
-      a_r := resize(ya(0),25) + resize(yb(0),25);
-      a_i := resize(ya(1),25) + resize(yb(1),25);
-      m(0) := abmag(a_r, a_i);
-      -- V00 = Qa - Qb
-      m(1) := abmag(q_ar - q_br, q_ai - q_bi);
-      -- V10 = Y1a - Qb
-      m(2) := abmag(resize(ya(0),25) - q_br, resize(ya(1),25) - q_bi);
-      -- V01 = Qa + Y1b
-      m(3) := abmag(q_ar + resize(yb(0),25), q_ai + resize(yb(1),25));
-    end procedure;
   begin
     if rising_edge(clk) then
       y_valid_i <= '0';
@@ -314,9 +344,10 @@ begin
         e_err_v   <= '0';
         k     <= (others => '0');
         widx  <= 0;
-        prev_valid <= '0';
+        have_bank  <= '0';
         done_i     <= '0';
         ph_base    <= (others => '0');
+        arm_ph     <= C_ARM_PH0;
       elsif hold = '0' then
         e_err_v <= '0';                      -- one-cycle strobe default
         case state is
@@ -410,6 +441,13 @@ begin
             ycur(widx)(3) <= resize(shift_right(a2i, 15), 24);
             if widx = 2 then
               widx  <= 0;
+              -- ROM is idle here: look up cos/sin(arm_ph) so the rotated
+              -- y2 can be exported next edge (same address/data cadence
+              -- as S_MAC_A -> S_MAC_B)
+              fold_phase(arm_ph(31 downto 16), vaddr, vcneg, vsneg);
+              rom_q  <= QROM(to_integer(vaddr));
+              cneg_d <= vcneg;
+              sneg_d <= vsneg;
               state <= S_TED_A;
             else
               widx  <= widx + 1;
@@ -417,27 +455,50 @@ begin
             end if;
 
           when S_TED_A =>
-            -- COMPUTE phase: emit Y, build the three banks, register
-            -- the twelve magnitudes; symbol bookkeeping that the banks
-            -- consumed (yprev, kprev_odd) also rotates here
-            y1_re <= ycur(1)(0);  y1_im <= ycur(1)(1);
-            y2_re <= ycur(1)(2);  y2_im <= ycur(1)(3);
+            -- COMPUTE phase: emit Y; pick the dominant on-time tone by
+            -- energy (reference: e1 > e2); register ya, dy = late - early
+            -- of that tone, den = |ya|^2, and the early/late amplitudes
+            -- for the symbol lock detector.
+            -- arms re-referenced to the window start (see arm_ph note):
+            --   y1 * exp(+j arm_ph) = (y1r c - y1i s) + j (y1i c + y1r s)
+            --   y2 * exp(-j arm_ph) = (y2r c + y2i s) + j (y2i c - y2r s)
+            -- c/s Q15 from the single ROM read issued in S_WIN_DONE
+            if cneg_d = '0' then c :=  signed(rom_q(31 downto 16));
+            else                 c := -signed(rom_q(31 downto 16));
+            end if;
+            if sneg_d = '0' then s :=  signed(rom_q(15 downto 0));
+            else                 s := -signed(rom_q(15 downto 0));
+            end if;
+            rr := resize(ycur(1)(0) * c, 41) - resize(ycur(1)(1) * s, 41);
+            ri := resize(ycur(1)(1) * c, 41) + resize(ycur(1)(0) * s, 41);
+            y1_re <= resize(shift_right(rr, 15), 24);
+            y1_im <= resize(shift_right(ri, 15), 24);
+            rr := resize(ycur(1)(2) * c, 41) + resize(ycur(1)(3) * s, 41);
+            ri := resize(ycur(1)(3) * c, 41) - resize(ycur(1)(2) * s, 41);
+            y2_re <= resize(shift_right(rr, 15), 24);
+            y2_im <= resize(shift_right(ri, 15), 24);
             sym_out <= k;          -- snapshot BEFORE increment
             y_valid_i <= '1';
-            if prev_valid = '1' then
-              if kprev_odd = '0' then sgp := -1; else sgp := 1; end if;
-              if k(0) = '0'      then sgc := -1; else sgc := 1; end if;
-              bank(yprev(0), ycur(0), sgp, sgc, Ae);
-              bank(yprev(1), ycur(1), sgp, sgc, Ac);
-              bank(yprev(2), ycur(2), sgp, sgc, Al);
-              for i in 0 to 3 loop
-                ae_r(i) <= Ae(i);  ac_r(i) <= Ac(i);  al_r(i) <= Al(i);
-              end loop;
+            e1 := unsigned(resize(ycur(1)(0) * ycur(1)(0), 48))
+                + unsigned(resize(ycur(1)(1) * ycur(1)(1), 48));
+            e2 := unsigned(resize(ycur(1)(2) * ycur(1)(2), 48))
+                + unsigned(resize(ycur(1)(3) * ycur(1)(3), 48));
+            if e1 > e2 then
+              ya_r <= ycur(1)(0);  ya_i <= ycur(1)(1);
+              dy_r <= resize(ycur(2)(0), 25) - resize(ycur(0)(0), 25);
+              dy_i <= resize(ycur(2)(1), 25) - resize(ycur(0)(1), 25);
+              den_r <= e1;
+              ae_amp <= abmag(resize(ycur(0)(0), 25), resize(ycur(0)(1), 25));
+              al_amp <= abmag(resize(ycur(2)(0), 25), resize(ycur(2)(1), 25));
+            else
+              ya_r <= ycur(1)(2);  ya_i <= ycur(1)(3);
+              dy_r <= resize(ycur(2)(2), 25) - resize(ycur(0)(2), 25);
+              dy_i <= resize(ycur(2)(3), 25) - resize(ycur(0)(3), 25);
+              den_r <= e2;
+              ae_amp <= abmag(resize(ycur(0)(2), 25), resize(ycur(0)(3), 25));
+              al_amp <= abmag(resize(ycur(2)(2), 25), resize(ycur(2)(3), 25));
             end if;
-            have_bank  <= prev_valid;
-            yprev      <= ycur;
-            prev_valid <= '1';
-            kprev_odd  <= k(0);
+            have_bank <= '1';
             state <= S_TED_B;
 
           when S_TED_B =>
@@ -446,37 +507,49 @@ begin
             -- normalized terms; measured 2026-07-20) and the x4
             -- acquisition gear are REMOVED: reference has neither.
             if have_bank = '1' then
-              wbest := 0; mbest := ac_r(0);
-              for i in 1 to 3 loop
-                if ac_r(i) > mbest then mbest := ac_r(i); wbest := i; end if;
-              end loop;
-              err := resize(al_r(wbest), 32) - resize(ae_r(wbest), 32);
+              -- reference numerator: Re(ya * conj(dy)) = ya_r*dy_r + ya_i*dy_i
+              num := resize(ya_r * dy_r, 50) + resize(ya_i * dy_i, 50);
               -- registered early/late export (same shift both: cancels in ratio)
-              if shift_right(ae_r(wbest), C_ERR_EXPORT_SHR) > 65535 then
+              if shift_right(ae_amp, C_ERR_EXPORT_SHR) > 65535 then
                 e_early_r <= (others => '1');
               else
                 e_early_r <= resize(unsigned(
-                    shift_right(ae_r(wbest), C_ERR_EXPORT_SHR)), 16);
+                    shift_right(ae_amp, C_ERR_EXPORT_SHR)), 16);
               end if;
-              if shift_right(al_r(wbest), C_ERR_EXPORT_SHR) > 65535 then
+              if shift_right(al_amp, C_ERR_EXPORT_SHR) > 65535 then
                 e_late_r <= (others => '1');
               else
                 e_late_r <= resize(unsigned(
-                    shift_right(al_r(wbest), C_ERR_EXPORT_SHR)), 16);
+                    shift_right(al_amp, C_ERR_EXPORT_SHR)), 16);
               end if;
               e_err_v <= '1';
-              -- divider setup: ted_q15 = (|L-E|<<15)/(L+E), sign separate
-              if err < 0 then
+              -- divider setup: ted_q15 = (|num| << 15) / den, sign separate.
+              -- Both scaled down together (ratio invariant) so the 47-bit
+              -- restoring divider fits; |num| >= den saturates to +/-1.0.
+              if num < 0 then
                 ted_neg <= '1';
-                div_acc <= resize(shift_left(resize(unsigned(-err), 47), 15), 47);
+                numa := shift_right(unsigned(-num), C_TED_NORM_SHR);
               else
                 ted_neg <= '0';
-                div_acc <= resize(shift_left(resize(unsigned(err), 47), 15), 47);
+                numa := shift_right(unsigned(num), C_TED_NORM_SHR);
               end if;
-              div_den <= resize(unsigned(resize(al_r(wbest), 32))
-                       + unsigned(resize(ae_r(wbest), 32)), 32);
-              div_q   <= (others => '0');
-              div_cnt <= to_unsigned(15, 4);
+              dena := shift_right(den_r, C_TED_NORM_SHR);
+              if dena = 0 then
+                dena := to_unsigned(1, 48);
+              end if;
+              if numa >= resize(dena, 50) or dena(47 downto 32) /= 0 then
+                -- saturate: quotient 32768 maps to +/-32767 in S_TED_C
+                -- (dena >= 2^32 cannot happen for 24-bit y; guard anyway)
+                div_acc <= (others => '0');
+                div_den <= (others => '1');
+                div_q   <= to_unsigned(32768, 16);
+                div_cnt <= (others => '0');
+              else
+                div_acc <= resize(shift_left(resize(numa, 47), 15), 47);
+                div_den <= resize(dena, 32);
+                div_q   <= (others => '0');
+                div_cnt <= to_unsigned(15, 4);
+              end if;
               state   <= S_TED_DIV;
             else
               -- no bank yet: advance position at nominal rate, no update
@@ -534,6 +607,13 @@ begin
             if adj < -131072 then adj := to_signed(-131072, 32); end if;
             pos <= unsigned(signed(pos)
                    + to_signed(G_SPS_Q16, 48) + resize(adj, 48));
+            -- tone-arm half-angle of the new position: the nominal step
+            -- (SPS) contributes exactly half a turn of RELATIVE phase,
+            -- which the MLSE's (-1)^k already carries, so only adj
+            -- accumulates here; modulo 2^32 turns, floor-truncated
+            -- (2^-32 turn/symbol bias)
+            dph := adj * to_signed(G_INC32, 32);
+            arm_ph <= arm_ph + unsigned(dph(47 downto 16));
             k   <= k + 1;
             state <= S_WIN_SETUP;
 
