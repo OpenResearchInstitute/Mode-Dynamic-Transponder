@@ -89,6 +89,11 @@ if {$n_added != 34} {
     error "source manifest short ($n_added/34) -- see SKIP lines (submodules initialized?)"
 }
 set_property file_type {VHDL 2008} [get_files -of_objects [get_filesets sources_1]]
+
+# module-reference tops must be plain VHDL (the flow's rule, not ours);
+# everything they instantiate stays VHDL 2008
+set_property file_type {VHDL} [get_files {haifuraiya_rx_axi.vhd axis_sample_pacer.vhd axis_softbit_widen.vhd}]
+
 update_compile_order -fileset sources_1
 
 # --- block design

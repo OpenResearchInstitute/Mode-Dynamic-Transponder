@@ -35,7 +35,19 @@ current_bd_design $bd_name
 #    controller on the board's DIMM, wires the PS NoC ports, and brings out
 #    one PL clock and one PL reset.
 # -----------------------------------------------------------------------------
-create_bd_cell -type ip -vlnv xilinx.com:ip:versal_cips:3.2 cips
+
+# create_bd_cell -type ip -vlnv xilinx.com:ip:versal_cips:3.2 cips # original line
+
+# Replaced above with:
+# We take the catalog's own versal_cips version (pinning 3.2 against a newer
+# catalog creates the cell LOCKED, and block automation then refuses it, which is
+# honestly kind of rude but ok fine)
+# This line fetches all the versions of CIPS and then sorts them in order of version
+# number and then picks the highest number. 
+set cips_vlnv [lindex [lsort -dictionary [get_ipdefs -all -filter {VLNV =~ "xilinx.com:ip:versal_cips:*"}]] end]
+puts "INFO: using $cips_vlnv"
+create_bd_cell -type ip -vlnv $cips_vlnv cips
+
 apply_bd_automation -rule xilinx.com:bd_rule:cips -config { \
     board_preset {Yes} \
     boot_config {Custom} \
@@ -165,13 +177,20 @@ connect_bd_intf_net [get_bd_intf_pins ctrl_sc/M02_AXI] [get_bd_intf_pins rx/s_ax
 #      axi_dma   0xA400_0000
 #      rx ctrl   0xA401_0000   (channelizer registers, 4 KB used)
 #      rx demod  0xA402_0000   (demod registers, 4 KB used)
+#  Offsets are given on the slave-side segments so Vivado’s mapped-segment 
+#  names don’t matter. The foreach prints the final map into the log. Neat!
 # -----------------------------------------------------------------------------
+set fpd [get_bd_addr_spaces cips/M_AXI_FPD]
+# control plane: fixed offsets, slave segments named by their own paths
+assign_bd_address -target_address_space $fpd -offset 0xA4000000 -range 64K [get_bd_addr_segs axi_dma/S_AXI_LITE/Reg]
+assign_bd_address -target_address_space $fpd -offset 0xA4010000 -range 64K [get_bd_addr_segs rx/s_axi_ctrl/*]
+assign_bd_address -target_address_space $fpd -offset 0xA4020000 -range 64K [get_bd_addr_segs rx/s_axi_demod/*]
+# everything else (the DMA's three masters onto the DDR) as Vivado sees fit
 assign_bd_address
-set_property offset 0xA4000000 [get_bd_addr_segs {cips/FPD_AXI_PL/SEG_axi_dma_Reg}]
-set_property offset 0xA4010000 [get_bd_addr_segs {cips/FPD_AXI_PL/SEG_rx_reg0}]
-set_property offset 0xA4020000 [get_bd_addr_segs {cips/FPD_AXI_PL/SEG_rx_reg1}]
-# (segment names for module-reference slaves are Vivado's; if they differ,
-#  list them with [get_bd_addr_segs] and fix the three lines above)
+# record the map in the log: this is what the device tree and opv_play will use
+foreach s [get_bd_addr_segs -of_objects $fpd] {
+    puts "INFO: M_AXI_FPD  $s  offset [get_property OFFSET $s]  range [get_property RANGE $s]"
+}
 
 regenerate_bd_layout
 validate_bd_design
