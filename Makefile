@@ -369,3 +369,6 @@ haifuraiya-check-xsa:
 	    exit 1; \
 	}
 	@echo "==> Imported XSA contains channelizer at 0x84A70000. OK."
+
+# VCK190 memory-loopback platform targets (additive; see haifuraiya/platforms/vck190/)
+include haifuraiya/platforms/vck190/vck190.mk
