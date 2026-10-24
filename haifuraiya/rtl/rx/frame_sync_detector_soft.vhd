@@ -278,6 +278,45 @@ ARCHITECTURE rtl OF frame_sync_detector_soft IS
     SIGNAL energy_prev : signed(31 DOWNTO 0) := (OTHERS => '0');
     CONSTANT MIN_ENERGY : signed(31 DOWNTO 0) := to_signed(MIN_SYNC_ENERGY, 32);
 
+    ----------------------------------------------------------------------------
+    -- Threshold percentages, CLAMPED and REGISTERED (2026-10-24, VCK190 port).
+    --
+    -- The lock decision is the NORMALISED test  100*corr >= pct*energy  (see
+    -- the comments at each comparison).  That form is the right one -- it is
+    -- a threshold on the SHAPE of the correlation, independent of signal
+    -- level, normaliser gain, OUTPUT_SHIFT and SNR, so it needs no retuning
+    -- from simulation to bench to over the air -- and the multiply it costs
+    -- is the price of that property.  But hunting_threshold_i and
+    -- locked_threshold_i are 32-bit register ports holding a PERCENT, 0..100,
+    -- and multiplying energy by all 32 bits built two cascaded DSP58s in the
+    -- same clock as the two 24-tap adder trees and the compare.  On the
+    -- XCVC1902 (-2MP) that path missed 10 ns by 0.11 ns at 100 MHz; on the
+    -- ZCU102 it closed with margin.  Same logic, different silicon.
+    --
+    -- Fix at the source, value-preserving: multiply by an 8-bit percent
+    -- instead.  Belt and braces: the 8-bit value is the 32-bit register
+    -- CLAMPED to 0..100 (negative -> 0, >100 -> 100), so the narrowing is
+    -- exact for every legal threshold and merely saturating for an illegal
+    -- one, rather than silently wrapping.  It is also REGISTERED, which
+    -- takes the AXI register port itself out of the decision path (the
+    -- threshold is quasi-static; one clock of latency on a register write
+    -- is invisible).  The comparisons below change only in which operand
+    -- they multiply by; the decision they make is identical.
+    ----------------------------------------------------------------------------
+    SIGNAL hunt_pct : signed(7 DOWNTO 0) := to_signed(HUNTING_THRESHOLD, 8);
+    SIGNAL lock_pct : signed(7 DOWNTO 0) := to_signed(LOCKED_THRESHOLD, 8);
+
+    FUNCTION clamp_pct(v : signed(31 DOWNTO 0)) RETURN signed IS
+    BEGIN
+        IF v < 0 THEN
+            RETURN to_signed(0, 8);
+        ELSIF v > 100 THEN
+            RETURN to_signed(100, 8);
+        ELSE
+            RETURN resize(v, 8);
+        END IF;
+    END FUNCTION;
+
     -- SYNC_BITS: taps in the correlation window = width of the sync word.
     -- The normalised correlation corr/energy is only defined over a FULL window;
     -- over a partially-filled window (single non-zero tap) it is trivially 1.0.
@@ -548,10 +587,16 @@ BEGIN
                 rx_bit_r       <= '0';
                 rx_bit_valid_r <= '0';
                 soft_r         <= (OTHERS => '0');
+                hunt_pct       <= to_signed(HUNTING_THRESHOLD, 8);
+                lock_pct       <= to_signed(LOCKED_THRESHOLD, 8);
             ELSE
                 rx_bit_r       <= rx_bit;
                 rx_bit_valid_r <= rx_bit_valid;
                 soft_r         <= s_axis_soft_tdata;
+                -- threshold percents: clamped to 0..100 and registered
+                -- (see the hunt_pct/lock_pct note in the declarations)
+                hunt_pct       <= clamp_pct(signed(hunting_threshold_i));
+                lock_pct       <= clamp_pct(signed(locked_threshold_i));
             END IF;
         END IF;
     END PROCESS input_reg_proc;
@@ -729,7 +774,7 @@ BEGIN
                     IF dv_busy = '0' AND demod_sync_lock = '1' AND demod_sync_lock_d = '1' AND
                        fill_v = SYNC_BITS AND
                        engy_v >= MIN_ENERGY AND
-                       to_signed(100, 32) * corr_v >= signed(hunting_threshold_i) * engy_v THEN
+                       to_signed(100, 32) * corr_v >= hunt_pct * engy_v THEN
                         dv_num  <= resize(to_signed(100, 32) * corr_v, 34);
                         dv_den  <= resize(engy_v, 34);
                         dv_q    <= (OTHERS => '0');
@@ -772,7 +817,7 @@ BEGIN
                                 -- signal level and every SNR. See calc_energy above.
                                 energy_prev >= MIN_ENERGY AND
                                 to_signed(100, 32) * corr_prev >=
-                                    signed(hunting_threshold_i) * energy_prev AND
+                                    hunt_pct * energy_prev AND
                                 corr_v    <=  corr_prev THEN
                                 state <= LOCKED;
 
@@ -892,7 +937,7 @@ BEGIN
                                 -- locked_threshold_i is now a PERCENT (0..100). 70 = 3.4 sigma.
                                 IF engy_v >= MIN_ENERGY AND
                                    to_signed(100, 32) * corr_v >=
-                                       signed(locked_threshold_i) * engy_v THEN
+                                       lock_pct * engy_v THEN
                                     -- Sync found at expected position.
                                     missed_sync_count <= 0;
 

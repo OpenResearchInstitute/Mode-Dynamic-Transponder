@@ -134,7 +134,8 @@ architecture rtl of msk_symbol_engine is
   end procedure;
 
   type state_t is (S_WIN_SETUP, S_MAC_A, S_MAC_B, S_WIN_DONE,
-                   S_TED_A, S_TED_B, S_TED_DIV, S_TED_C, S_ADVANCE, S_DONE);
+                   S_TED_A, S_TED_B, S_TED_DIV, S_TED_C, S_ADVANCE, S_ADVANCE2,
+                   S_DONE);
   signal state : state_t := S_WIN_SETUP;
 
   -- position and loop state
@@ -261,6 +262,19 @@ architecture rtl of msk_symbol_engine is
   signal arm_ph    : unsigned(31 downto 0) := (others => '0');
   constant C_ARM_PH0 : unsigned(31 downto 0) :=
       to_unsigned(2 * G_INC32, 32);   -- reset pos = 2.0 smp: 2*G_INC32
+  -- TIMING (VCK190 impl 2026-10-23, WNS -2.5 ns): the accumulate used to
+  -- sit in S_TED_C behind the divider quotient -> ted -> alpha product ->
+  -- integrator -> clamp -> 32x32 multiply -> add: 60 logic levels, two
+  -- cascaded DSP58s, in one 10 ns clock.  It is now a three-stage
+  -- pipeline on the states the engine already walks:
+  --   S_TED_C              adj_r  <= adj                     (registered)
+  --   S_WIN_SETUP, widx 0  dph_r  <= adj_r * G_INC32         (DSPs alone)
+  --   S_WIN_SETUP, widx 1  arm_ph <= arm_ph + dph_r >> 16    (adder alone)
+  -- arm_ph is not read until S_WIN_DONE of window 2, ~50 clocks later,
+  -- so the exported arms are bit-identical to the single-cycle form.
+  -- adj is clamped to +/-131072 (18 bits + sign).
+  signal adj_r     : signed(18 downto 0) := (others => '0');
+  signal dph_r     : signed(50 downto 0) := (others => '0');   -- 19 x 32 bits
 
   signal y_valid_i : std_logic := '0';
   signal done_i    : std_logic := '0';
@@ -302,7 +316,7 @@ begin
   -- logic gates on this, and a stale value releases the engine into
   -- unwritten memory (the symbol-1 zeros bug, session 8). At the
   -- y_valid sampling instant, live pos equals the old snapshot exactly
-  -- (pos updates at the end of the TED sequence, S_TED_C).
+  -- (pos updates at the end of the TED sequence, S_ADVANCE2).
   pos_q16   <= pos;
 
   process(clk)
@@ -325,7 +339,6 @@ begin
     variable fnew       : signed(33 downto 0);   -- retired by Q39 path
     variable fnew_full  : signed(39 downto 0);
     variable rr, ri     : signed(40 downto 0);   -- rotated y2 (24x16 + 24x16)
-    variable dph        : signed(63 downto 0);   -- adj * 2*G_INC32
 
   begin
     if rising_edge(clk) then
@@ -348,11 +361,19 @@ begin
         done_i     <= '0';
         ph_base    <= (others => '0');
         arm_ph     <= C_ARM_PH0;
+        adj_r      <= (others => '0');
+        dph_r      <= (others => '0');
       elsif hold = '0' then
         e_err_v <= '0';                      -- one-cycle strobe default
         case state is
 
           when S_WIN_SETUP =>
+            -- arm_ph pipeline, stages 2 and 3 (see the arm_ph note)
+            if widx = 0 then
+              dph_r <= adj_r * to_signed(G_INC32, 32);
+            elsif widx = 1 then
+              arm_ph <= arm_ph + unsigned(dph_r(47 downto 16));
+            end if;
             p_int := resize(pos(47 downto 16), 24);
             wlen  <= to_integer(resize(
                        resize(pos + to_unsigned(G_SPS_Q16, 48), 48)
@@ -554,6 +575,7 @@ begin
             else
               -- no bank yet: advance position at nominal rate, no update
               pos <= pos + to_unsigned(G_SPS_Q16, 48);
+              adj_r <= (others => '0');
               k   <= k + 1;
               state <= S_WIN_SETUP;
             end if;
@@ -598,26 +620,37 @@ begin
             -- Q24 readback view (0x0CC semantics unchanged), round-to-nearest
             freq <= resize(shift_right(fnew_full + C_RND15, 15), 32);
             dbg_ted_r <= ted;                  -- camera: TED as used this symbol
-            -- proportional + integrator, Q16 samples; round-to-nearest on
-            -- both slices (kills the arithmetic-shift -inf bias)
-            adj := resize(shift_right(ted * signed(resize(cfg_tim_alpha, 17))
-                                      + to_signed(16384, 34), 15), 32)
-                 + resize(shift_right(fnew_full + C_RND23, 23), 32);
-            if adj >  131072 then adj := to_signed( 131072, 32); end if;
-            if adj < -131072 then adj := to_signed(-131072, 32); end if;
-            pos <= unsigned(signed(pos)
-                   + to_signed(G_SPS_Q16, 48) + resize(adj, 48));
-            -- tone-arm half-angle of the new position: the nominal step
-            -- (SPS) contributes exactly half a turn of RELATIVE phase,
-            -- which the MLSE's (-1)^k already carries, so only adj
-            -- accumulates here; modulo 2^32 turns, floor-truncated
-            -- (2^-32 turn/symbol bias)
-            dph := adj * to_signed(G_INC32, 32);
-            arm_ph <= arm_ph + unsigned(dph(47 downto 16));
-            k   <= k + 1;
-            state <= S_WIN_SETUP;
+            -- TIMING (VCK190 impl 2026-10-23: quotient -> ted -> alpha
+            -- product -> integrator -> clamp -> 48-bit position add failed
+            -- 10 ns on 71 endpoints): the loop law continues over the next
+            -- two states.  This state owns the integrator; S_ADVANCE forms
+            -- adj from the REGISTERED ted (dbg_ted_r) and the UPDATED
+            -- integrator (freq_full, written on this edge -- the same value
+            -- fnew_full the single-cycle form used); S_ADVANCE2 adds it
+            -- into pos.  Same arithmetic in the same order, two clocks
+            -- later per symbol; nothing samples pos or adj in between.
+            state <= S_ADVANCE;
 
           when S_ADVANCE =>
+            -- proportional + integrator, Q16 samples; round-to-nearest on
+            -- both slices (kills the arithmetic-shift -inf bias)
+            ted := dbg_ted_r;
+            adj := resize(shift_right(ted * signed(resize(cfg_tim_alpha, 17))
+                                      + to_signed(16384, 34), 15), 32)
+                 + resize(shift_right(freq_full + C_RND23, 23), 32);
+            if adj >  131072 then adj := to_signed( 131072, 32); end if;
+            if adj < -131072 then adj := to_signed(-131072, 32); end if;
+            -- adj_r feeds the position add (next state) and the tone-arm
+            -- half-angle pipeline in S_WIN_SETUP: the nominal step (SPS)
+            -- contributes exactly half a turn of RELATIVE phase, which the
+            -- MLSE's (-1)^k already carries, so only adj accumulates there
+            adj_r <= resize(adj, 19);
+            state <= S_ADVANCE2;
+
+          when S_ADVANCE2 =>
+            pos <= unsigned(signed(pos)
+                   + to_signed(G_SPS_Q16, 48) + resize(adj_r, 48));
+            k   <= k + 1;
             state <= S_WIN_SETUP;
 
           when S_DONE =>

@@ -4,8 +4,10 @@ syn/*.log
 syn/*.jou
 syn/.Xil/
 sim/work_pacer/
+syn/*.xsa
 # PetaLinux project: build products and machine-specific state (keep config.project and project-spec/)
 petalinux/*/build/
 petalinux/*/images/
 petalinux/*/components/
 petalinux/*/.petalinux/
+

@@ -34,6 +34,6 @@
  * AXI-Lite slaves usually appears as ONE node with two reg entries, so this
  * gives /dev/uio0 with map0 = channelizer ctrl (0xA4010000) and map1 = demod
  * (0xA4020000); if pl.dtsi shows two nodes instead, bind both. */
-&rx_0 {
+&rx {
 	compatible = "generic-uio";
 };
