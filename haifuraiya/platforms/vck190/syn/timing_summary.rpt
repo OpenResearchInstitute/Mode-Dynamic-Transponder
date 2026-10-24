@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
 -----------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version      : Vivado v.2022.2 (lin64) Build 3671981 Fri Oct 14 04:59:54 MDT 2022
-| Date              : Sat Oct 24 09:56:17 2026
+| Date              : Sat Oct 24 16:00:08 2026
 | Host              : chococat running 64-bit Ubuntu 22.04.5 LTS
 | Command           : report_timing_summary -file /home/abraxas3d/vck190/Mode-Dynamic-Transponder/haifuraiya/platforms/vck190/syn/timing_summary.rpt
 | Design            : playback_wrapper
@@ -137,7 +137,7 @@ Table of Contents
 
     WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
     -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
-      0.488        0.000                      0               451003        0.013        0.000                      0               451003        0.000        0.000                       0                124967  
+      0.378        0.000                      0               451014        0.016        0.000                      0               451014        0.000        0.000                       0                124978  
 
 
 All user specified timing constraints are met.
@@ -167,7 +167,7 @@ ddr4_dimm1_sma_clk_clk_p   {0.000 2.500}          5.000           200.000
 
 Clock                          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
 -----                          -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
-clk_pl_0                         0.488        0.000                      0               451003        0.013        0.000                      0               451003        3.571        0.000                       0                124912  
+clk_pl_0                         0.378        0.000                      0               451014        0.016        0.000                      0               451014        3.571        0.000                       0                124923  
 ddr4_dimm1_sma_clk_clk_p                                                                                                                                                     2.109        0.000                       0                     1  
   bank1_clkout0                                                                                                                                                              0.000        0.000                       0                     3  
     pll_clktoxphy[0]                                                                                                                                                         0.054        0.000                       0                     9  
@@ -205,34 +205,34 @@ Path Group    From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing 
 From Clock:  clk_pl_0
   To Clock:  clk_pl_0
 
-Setup :            0  Failing Endpoints,  Worst Slack        0.488ns,  Total Violation        0.000ns
-Hold  :            0  Failing Endpoints,  Worst Slack        0.013ns,  Total Violation        0.000ns
+Setup :            0  Failing Endpoints,  Worst Slack        0.378ns,  Total Violation        0.000ns
+Hold  :            0  Failing Endpoints,  Worst Slack        0.016ns,  Total Violation        0.000ns
 PW    :            0  Failing Endpoints,  Worst Slack        3.571ns,  Total Violation        0.000ns
 ---------------------------------------------------------------------------------------------------
 
 
 Max Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             0.488ns  (required time - arrival time)
-  Source:                 playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/fc_d1_reg/C
-                            (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[21].half_b_reg[6]/CE
+Slack (MET) :             0.378ns  (required time - arrival time)
+  Source:                 playback_i/rx/U0/u_rx/u_demod/mlse/rom_q0_reg_bram_8/CLKBWRCLKL
+                            (rising edge-triggered cell RAMB36E5_INT clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]/D
                             (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk_pl_0
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk_pl_0 rise@10.000ns - clk_pl_0 rise@0.000ns)
-  Data Path Delay:        9.082ns  (logic 0.091ns (1.002%)  route 8.991ns (98.998%))
-  Logic Levels:           0  
-  Clock Path Skew:        -0.230ns (DCD - SCD + CPR)
-    Destination Clock Delay (DCD):    2.539ns = ( 12.539 - 10.000 ) 
-    Source Clock Delay      (SCD):    2.878ns
-    Clock Pessimism Removal (CPR):    0.109ns
+  Data Path Delay:        9.232ns  (logic 5.898ns (63.885%)  route 3.334ns (36.115%))
+  Logic Levels:           30  (DSP_A_B_DATA58=2 DSP_ALUADD=3 DSP_ALUMUX=3 DSP_M_DATA58=2 DSP_MULTIPLIER58=2 DSP_OUTPUT58=3 DSP_PREADD_DATA58=2 LOOKAHEAD8=4 LUT2=1 LUT5=3 LUT6=2 LUTCY1=2 LUTCY2=1)
+  Clock Path Skew:        -0.286ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.354ns = ( 12.354 - 10.000 ) 
+    Source Clock Delay      (SCD):    2.755ns
+    Clock Pessimism Removal (CPR):    0.115ns
   Clock Uncertainty:      0.111ns  (CJ)/2 + PE + PJ
     Clock Jitter             (CJ):    0.222ns
     Phase Error              (PE):    0.000ns
     Phase Jitter             (PJ):    0.000ns
-  Clock Net Delay (Source):      2.775ns (routing 0.677ns, distribution 2.098ns)
-  Clock Net Delay (Destination): 2.484ns (routing 0.615ns, distribution 1.869ns)
+  Clock Net Delay (Source):      2.652ns (routing 0.677ns, distribution 1.975ns)
+  Clock Net Delay (Destination): 2.299ns (routing 0.615ns, distribution 1.684ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -242,13 +242,103 @@ Slack (MET) :             0.488ns  (required time - arrival time)
                          net (fo=1, routed)           0.000     0.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.103     0.103 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X3Y2 (CLOCK_ROOT)    net (fo=125011, routed)      2.775     2.878    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
-    SLICE_X192Y163       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/fc_d1_reg/C
+    X3Y2 (CLOCK_ROOT)    net (fo=125022, routed)      2.652     2.755    playback_i/rx/U0/u_rx/u_demod/mlse/aclk
+    RAMB36_X2Y27         RAMB36E5_INT                                 r  playback_i/rx/U0/u_rx/u_demod/mlse/rom_q0_reg_bram_8/CLKBWRCLKL
   -------------------------------------------------------------------    -------------------
-    SLICE_X192Y163       FDRE (Prop_AFF_SLICEL_C_Q)
-                                                      0.091     2.969 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/fc_d1_reg/Q
-                         net (fo=5121, routed)        8.991    11.960    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/fc_d1
-    SLICE_X197Y220       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[21].half_b_reg[6]/CE
+    RAMB36_X2Y27         RAMB36E5_INT (Prop_RAMB36_CLKBWRCLKL_DOUTBDOUT[0])
+                                                      0.876     3.631 f  playback_i/rx/U0/u_rx/u_demod/mlse/rom_q0_reg_bram_8/DOUTBDOUT[0]
+                         net (fo=1, routed)           0.453     4.084    playback_i/rx/U0/u_rx/u_demod/mlse/rom_q0_reg_bram_8_n_131
+    SLICE_X117Y95        LUT6 (Prop_H6LUT_SLICEM_I5_O)
+                                                      0.141     4.225 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_73__127/O
+                         net (fo=1, routed)           0.154     4.379    playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_73__127_n_0
+    SLICE_X118Y95        LUT2 (Prop_C6LUT_SLICEL_I0_O)
+                                                      0.119     4.498 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_59__127/O
+                         net (fo=3, routed)           0.427     4.925    playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_59__127_n_0
+    SLICE_X127Y85        LUT5 (Prop_F5LUT_SLICEM_I3_O)
+                                                      0.141     5.066 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_53__127/O
+                         net (fo=5, routed)           0.213     5.279    playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_53__127_n_0
+    SLICE_X127Y85        LUT6 (Prop_E6LUT_SLICEM_I2_O)
+                                                      0.074     5.353 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_46__127/O
+                         net (fo=5, routed)           0.168     5.521    playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_46__127_n_0
+    SLICE_X127Y84        LUT5 (Prop_D6LUT_SLICEM_I2_O)
+                                                      0.093     5.614 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_44__128/O
+                         net (fo=2, routed)           0.282     5.896    playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_44__128_n_0
+    SLICE_X125Y83        LUT5 (Prop_C6LUT_SLICEM_I3_O)
+                                                      0.088     5.984 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_1__130/O
+                         net (fo=18, routed)          0.332     6.315    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/B[19]
+    DSP_X2Y41            DSP_A_B_DATA58 (Prop_DSP_A_B_DATA_DSP58_B[19]_B2_DATA[19])
+                                                      0.379     6.694 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_A_B_DATA58_INST/B2_DATA[19]
+                         net (fo=1, routed)           0.000     6.694    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_A_B_DATA58.B2_DATA<19>
+    DSP_X2Y41            DSP_PREADD_DATA58 (Prop_DSP_PREADD_DATA_DSP58_B2_DATA[19]_B2B1[19])
+                                                      0.129     6.823 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_PREADD_DATA58_INST/B2B1[19]
+                         net (fo=1, routed)           0.000     6.823    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_PREADD_DATA58.B2B1<19>
+    DSP_X2Y41            DSP_MULTIPLIER58 (Prop_DSP_MULTIPLIER_DSP58_B2B1[19]_V[24])
+                                                      0.416     7.239 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_MULTIPLIER58_INST/V[24]
+                         net (fo=1, routed)           0.000     7.239    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_MULTIPLIER58.V<24>
+    DSP_X2Y41            DSP_M_DATA58 (Prop_DSP_M_DATA_DSP58_V[24]_V_DATA[24])
+                                                      0.090     7.329 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_M_DATA58_INST/V_DATA[24]
+                         net (fo=1, routed)           0.000     7.329    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_M_DATA58.V_DATA<24>
+    DSP_X2Y41            DSP_ALUMUX (Prop_DSP_ALUMUX_DSP58_V_DATA[24]_Y[24])
+                                                      0.072     7.401 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_ALUMUX_INST/Y[24]
+                         net (fo=1, routed)           0.000     7.401    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_ALUMUX.Y<24>
+    DSP_X2Y41            DSP_ALUADD (Prop_DSP_ALUADD_DSP58_Y[24]_ALU_OUT[24])
+                                                      0.343     7.744 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_ALUADD_INST/ALU_OUT[24]
+                         net (fo=2, routed)           0.000     7.744    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_ALUADD.ALU_OUT<24>
+    DSP_X2Y41            DSP_OUTPUT58 (Prop_DSP_OUTPUT_DSP58_ALU_OUT[24]_PCOUT[24])
+                                                      0.144     7.888 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_OUTPUT58_INST/PCOUT[24]
+                         net (fo=1, routed)           0.039     7.927    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__0/DSP58C<0>_INST/PCIN[24]
+    DSP_X2Y42            DSP_ALUMUX (Prop_DSP_ALUMUX_DSP58_PCIN[24]_Z[24])
+                                                      0.105     8.032 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__0/DSP58C<0>_INST/DSP_ALUMUX_INST/Z[24]
+                         net (fo=1, routed)           0.000     8.032    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__0/DSP58C<0>_INST/DSP_ALUMUX.Z<24>
+    DSP_X2Y42            DSP_ALUADD (Prop_DSP_ALUADD_DSP58_Z[24]_ALU_OUT[25])
+                                                      0.310     8.342 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__0/DSP58C<0>_INST/DSP_ALUADD_INST/ALU_OUT[25]
+                         net (fo=2, routed)           0.000     8.342    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__0/DSP58C<0>_INST/DSP_ALUADD.ALU_OUT<25>
+    DSP_X2Y42            DSP_OUTPUT58 (Prop_DSP_OUTPUT_DSP58_ALU_OUT[25]_P[25])
+                                                      0.195     8.537 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__0/DSP58C<0>_INST/DSP_OUTPUT58_INST/P[25]
+                         net (fo=14, routed)          0.543     9.081    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/A[10]
+    DSP_X3Y38            DSP_A_B_DATA58 (Prop_DSP_A_B_DATA_DSP58_A[10]_A2_DATA[10])
+                                                      0.275     9.356 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_A_B_DATA58_INST/A2_DATA[10]
+                         net (fo=1, routed)           0.000     9.356    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_A_B_DATA58.A2_DATA<10>
+    DSP_X3Y38            DSP_PREADD_DATA58 (Prop_DSP_PREADD_DATA_DSP58_A2_DATA[10]_A2A1[10])
+                                                      0.123     9.479 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_PREADD_DATA58_INST/A2A1[10]
+                         net (fo=1, routed)           0.000     9.479    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_PREADD_DATA58.A2A1<10>
+    DSP_X3Y38            DSP_MULTIPLIER58 (Prop_DSP_MULTIPLIER_DSP58_A2A1[10]_V[23])
+                                                      0.448     9.927 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_MULTIPLIER58_INST/V[23]
+                         net (fo=1, routed)           0.000     9.927    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_MULTIPLIER58.V<23>
+    DSP_X3Y38            DSP_M_DATA58 (Prop_DSP_M_DATA_DSP58_V[23]_V_DATA[23])
+                                                      0.090    10.017 f  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_M_DATA58_INST/V_DATA[23]
+                         net (fo=1, routed)           0.000    10.017    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_M_DATA58.V_DATA<23>
+    DSP_X3Y38            DSP_ALUMUX (Prop_DSP_ALUMUX_DSP58_V_DATA[23]_Y[23])
+                                                      0.072    10.089 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_ALUMUX_INST/Y[23]
+                         net (fo=1, routed)           0.000    10.089    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_ALUMUX.Y<23>
+    DSP_X3Y38            DSP_ALUADD (Prop_DSP_ALUADD_DSP58_Y[23]_ALU_OUT[23])
+                                                      0.343    10.432 f  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_ALUADD_INST/ALU_OUT[23]
+                         net (fo=2, routed)           0.000    10.432    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_ALUADD.ALU_OUT<23>
+    DSP_X3Y38            DSP_OUTPUT58 (Prop_DSP_OUTPUT_DSP58_ALU_OUT[23]_P[23])
+                                                      0.195    10.627 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_OUTPUT58_INST/P[23]
+                         net (fo=2, routed)           0.284    10.911    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[24]_i_2/I2
+    SLICE_X124Y77        LUTCY2 (Prop_A6LUT_SLICEL_I2_GE)
+                                                      0.085    10.996 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[24]_i_2/LUTCY2_INST/GE
+                         net (fo=1, routed)           0.039    11.035    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[24]_i_2_n_0
+    SLICE_X124Y77        LOOKAHEAD8 (Prop_LOOKAHEAD8_SLICEL_GEA_COUTH)
+                                                      0.242    11.277 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[26]_i_5/COUTH
+                         net (fo=3, routed)           0.002    11.279    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[26]_i_5_n_3
+    SLICE_X124Y78        LOOKAHEAD8 (Prop_LOOKAHEAD8_SLICEL_CIN_COUTH)
+                                                      0.039    11.318 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_50/COUTH
+                         net (fo=3, routed)           0.002    11.320    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_50_n_3
+    SLICE_X124Y79        LOOKAHEAD8 (Prop_LOOKAHEAD8_SLICEL_CIN_COUTH)
+                                                      0.039    11.359 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_17/COUTH
+                         net (fo=3, routed)           0.002    11.361    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_17_n_3
+    SLICE_X124Y80        LOOKAHEAD8 (Prop_LOOKAHEAD8_SLICEL_CIN_COUTF)
+                                                      0.053    11.414 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_6/COUTF
+                         net (fo=2, routed)           0.009    11.423    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_3/I4
+    SLICE_X124Y80        LUTCY1 (Prop_G5LUT_SLICEL_I4_O)
+                                                      0.058    11.481 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_3/LUTCY1_INST/O
+                         net (fo=2, routed)           0.341    11.822    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_1/I3
+    SLICE_X126Y77        LUTCY1 (Prop_D5LUT_SLICEL_I3_O)
+                                                      0.121    11.943 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_1/LUTCY1_INST/O
+                         net (fo=1, routed)           0.045    11.988    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_1_n_1
+    SLICE_X126Y77        FDRE                                         r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]/D
   -------------------------------------------------------------------    -------------------
 
                          (clock clk_pl_0 rise edge)
@@ -257,17 +347,17 @@ Slack (MET) :             0.488ns  (required time - arrival time)
                          net (fo=1, routed)           0.000    10.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.055    10.055 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X3Y2 (CLOCK_ROOT)    net (fo=125011, routed)      2.484    12.539    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
-    SLICE_X197Y220       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[21].half_b_reg[6]/C
-                         clock pessimism              0.109    12.648    
-                         clock uncertainty           -0.111    12.537    
-    SLICE_X197Y220       FDRE (Setup_GFF_SLICEM_C_CE)
-                                                     -0.090    12.447    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[21].half_b_reg[6]
+    X3Y2 (CLOCK_ROOT)    net (fo=125022, routed)      2.299    12.354    playback_i/rx/U0/u_rx/u_demod/mlse/aclk
+    SLICE_X126Y77        FDRE                                         r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]/C
+                         clock pessimism              0.115    12.469    
+                         clock uncertainty           -0.111    12.358    
+    SLICE_X126Y77        FDRE (Setup_DFF_SLICEL_C_D)
+                                                      0.007    12.365    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]
   -------------------------------------------------------------------
-                         required time                         12.447    
-                         arrival time                         -11.960    
+                         required time                         12.365    
+                         arrival time                         -11.988    
   -------------------------------------------------------------------
-                         slack                                  0.488    
+                         slack                                  0.378    
 
 
 
@@ -275,22 +365,22 @@ Slack (MET) :             0.488ns  (required time - arrival time)
 
 Min Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             0.013ns  (arrival time - required time)
-  Source:                 playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[696][1]__0/C
+Slack (MET) :             0.016ns  (arrival time - required time)
+  Source:                 playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2]__37/C
                             (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[697][1]__0/D
+  Destination:            playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]/D
                             (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk_pl_0
-  Path Type:              Hold (Min at Slow Process Corner)
+  Path Type:              Hold (Min at Fast Process Corner)
   Requirement:            0.000ns  (clk_pl_0 rise@0.000ns - clk_pl_0 rise@0.000ns)
-  Data Path Delay:        0.471ns  (logic 0.070ns (14.867%)  route 0.401ns (85.133%))
-  Logic Levels:           0  
-  Clock Path Skew:        0.420ns (DCD - SCD - CPR)
-    Destination Clock Delay (DCD):    3.150ns
-    Source Clock Delay      (SCD):    2.551ns
-    Clock Pessimism Removal (CPR):    0.180ns
-  Clock Net Delay (Source):      2.496ns (routing 0.615ns, distribution 1.881ns)
-  Clock Net Delay (Destination): 3.047ns (routing 0.677ns, distribution 2.370ns)
+  Data Path Delay:        0.268ns  (logic 0.096ns (35.821%)  route 0.172ns (64.179%))
+  Logic Levels:           1  (LUTCY1=1)
+  Clock Path Skew:        0.217ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.269ns
+    Source Clock Delay      (SCD):    1.957ns
+    Clock Pessimism Removal (CPR):    0.095ns
+  Clock Net Delay (Source):      1.915ns (routing 0.411ns, distribution 1.504ns)
+  Clock Net Delay (Destination): 2.189ns (routing 0.468ns, distribution 1.721ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -299,14 +389,17 @@ Slack (MET) :             0.013ns  (arrival time - required time)
     PS9_X0Y0             PS9                          0.000     0.000 r  playback_i/cips/U0/pspmc_0/U0/PS9_inst/PMCRCLKCLK[0]
                          net (fo=1, routed)           0.000     0.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
-                                                      0.055     0.055 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X3Y2 (CLOCK_ROOT)    net (fo=125011, routed)      2.496     2.551    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
-    SLICE_X259Y229       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[696][1]__0/C
+                                                      0.042     0.042 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X3Y2 (CLOCK_ROOT)    net (fo=125022, routed)      1.915     1.957    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
+    SLICE_X267Y188       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2]__37/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X259Y229       FDRE (Prop_BFF2_SLICEM_C_Q)
-                                                      0.070     2.621 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[696][1]__0/Q
-                         net (fo=6, routed)           0.401     3.022    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[696]_1545[1]
-    SLICE_X268Y238       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[697][1]__0/D
+    SLICE_X267Y188       FDRE (Prop_CFF2_SLICEM_C_Q)
+                                                      0.050     2.007 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2]__37/Q
+                         net (fo=2, routed)           0.150     2.157    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]_i_1__0/I2
+    SLICE_X267Y183       LUTCY1 (Prop_B5LUT_SLICEM_I2_O)
+                                                      0.046     2.203 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]_i_1__0/LUTCY1_INST/O
+                         net (fo=1, routed)           0.022     2.225    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]_i_1__0_n_1
+    SLICE_X267Y183       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]/D
   -------------------------------------------------------------------    -------------------
 
                          (clock clk_pl_0 rise edge)
@@ -314,17 +407,17 @@ Slack (MET) :             0.013ns  (arrival time - required time)
     PS9_X0Y0             PS9                          0.000     0.000 r  playback_i/cips/U0/pspmc_0/U0/PS9_inst/PMCRCLKCLK[0]
                          net (fo=1, routed)           0.000     0.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
-                                                      0.103     0.103 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X3Y2 (CLOCK_ROOT)    net (fo=125011, routed)      3.047     3.150    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
-    SLICE_X268Y238       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[697][1]__0/C
-                         clock pessimism             -0.180     2.970    
-    SLICE_X268Y238       FDRE (Hold_EFF2_SLICEL_C_D)
-                                                      0.038     3.008    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[697][1]__0
+                                                      0.080     0.080 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
+    X3Y2 (CLOCK_ROOT)    net (fo=125022, routed)      2.189     2.269    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
+    SLICE_X267Y183       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]/C
+                         clock pessimism             -0.095     2.174    
+    SLICE_X267Y183       FDRE (Hold_BFF_SLICEM_C_D)
+                                                      0.035     2.209    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]
   -------------------------------------------------------------------
-                         required time                         -3.008    
-                         arrival time                           3.022    
+                         required time                         -2.209    
+                         arrival time                           2.225    
   -------------------------------------------------------------------
-                         slack                                  0.013    
+                         slack                                  0.016    
 
 
 
