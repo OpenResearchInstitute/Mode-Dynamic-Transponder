@@ -59,17 +59,21 @@ VCK190_PLAYBACK_PLAN.md                this file
 
 ## Build procedure (chococat)
 
-1. `cd haifuraiya/platforms/vck190/syn`
+1. `cd haifuraiya/platforms/vck190/syn` 
 2. `vivado -mode batch -source vck190_playback_project.tcl` — project + block
-   design + wrapper. **This is the step expected to need iteration**: the
-   CIPS automation config keys, the NoC port/clock property names and the
-   address-segment names for module-reference slaves are written from the
-   2022.2 flow without a Vivado here to check them against. Each command in
-   the BD script says what it intends, so Vivado's message points at the
-   fix.
+   design + wrapper. **pass**
 3. `vivado -mode batch -source vck190_playback_project.tcl -tclargs build` —
    synthesis, implementation, device image, `mdt_vck190_playback.xsa`,
-   `timing_summary.rpt`, `utilization.rpt`.
+   `timing_summary.rpt`, `utilization.rpt`. 
+   
+   To check results:
+   timing: the header line and the numbers under it (WNS is the first column)
+   `grep -A2 "WNS(ns)" timing_summary.rpt | head -3`
+   the one-line verdict Vivado prints when every constraint is met, snag it:
+   `grep -i "timing constraints are met" timing_summary.rpt`
+   utilization: one row each for the resources that matter here
+   `grep -E "^\| (CLB LUTs|CLB Registers|Block RAM Tile|DSP58|DSP as Logic) " utilization.rpt`
+   
 4. Doctrine check before step 3: the sim already passed on this RTL
    (25/25, 8/8). The pacer has its own bench. The BD has no bench; its
    correctness is `validate_bd_design` plus the hardware test.
@@ -77,7 +81,8 @@ VCK190_PLAYBACK_PLAN.md                this file
 ## Software (after the .xsa exists)
 
 1. PetaLinux 2022.2 project from the .xsa (`petalinux-create -t project
-   --template versal`, `petalinux-config --get-hw-description`).
+   --template versal`, `petalinux-config --get-hw-description`). This is
+   run from Mode-Dynamic-Transponder/ or the top level, not from /syn
 2. Device tree: `axi_dma` is picked up by the generated DT and bound to
    `xilinx_dma`; the two receiver register blocks get `generic-uio` nodes
    (compatible override in `system-user.dtsi`).
