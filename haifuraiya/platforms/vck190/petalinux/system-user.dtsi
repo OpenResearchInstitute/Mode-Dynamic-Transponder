@@ -1,0 +1,39 @@
+/*
+ * system-user.dtsi -- VCK190 memory-loopback: device-tree additions.
+ *
+ * Copied into the PetaLinux project by `make vck190-import-xsa`.  The
+ * generated device tree (pl.dtsi, from the XSA) already describes axi_dma
+ * and the two receiver register blocks; this file only changes how Linux
+ * binds them:
+ *
+ *   rx ctrl / rx demod  -> generic-uio, so a userspace tool can mmap the
+ *                          receiver's registers (the same maps the sim
+ *                          runner writes: OUTPUT_SHIFT, NORM_SQUELCH, the
+ *                          timing and carrier gains, the readbacks).
+ *   axi_dma             -> stays on the kernel xilinx_dma driver; a dma-proxy
+ *                          node gives userspace one MM2S and one S2MM channel.
+ *
+ * The node labels (rx_0, axi_dma) are Vivado's from the block design cell
+ * names; check pl.dtsi after the first import and fix them here if they
+ * differ.  STATUS 2026-10-23: not yet applied on a real import.
+ */
+/include/ "system-conf.dtsi"
+/ {
+	chosen {
+		bootargs = "console=ttyAMA0 earlycon=pl011,mmio32,0xFF000000,115200n8 clk_ignore_unused root=/dev/ram0 rw uio_pdrv_genirq.of_id=generic-uio";
+	};
+
+	dma_proxy {
+		compatible = "xlnx,dma_proxy";
+		dmas = <&axi_dma 0 &axi_dma 1>;
+		dma-names = "dma_proxy_tx", "dma_proxy_rx";
+	};
+};
+
+/* receiver registers as a UIO device.  A module-reference cell with two
+ * AXI-Lite slaves usually appears as ONE node with two reg entries, so this
+ * gives /dev/uio0 with map0 = channelizer ctrl (0xA4010000) and map1 = demod
+ * (0xA4020000); if pl.dtsi shows two nodes instead, bind both. */
+&rx_0 {
+	compatible = "generic-uio";
+};

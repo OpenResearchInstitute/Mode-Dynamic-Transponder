@@ -78,5 +78,7 @@ python3 ~/Downloads/grade_payload_ber.py ~/vck190/Mode-Dynamic-Transponder/haifu
 python3 ~/Downloads/grade_payload_ber.py ~/vck190/Mode-Dynamic-Transponder/haifuraiya/platforms/vck190/sim/mdt_vck190_sim_2burst_project/mdt_vck190_sim_2burst.sim/sim_1/behav/xsim --stim-dir .
 ```
 
-Action item: move the script into the simulations directory since it has earned
-it's keep. 
+Action item: move the grader script into the simulations directory since 
+it has earned it's keep.
+
+
