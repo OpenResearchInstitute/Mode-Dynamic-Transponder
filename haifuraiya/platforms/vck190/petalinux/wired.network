@@ -1,0 +1,9 @@
+# Static IPv4 for the VCK190's eth0 (copied by hand into
+# mdt_vck190/project-spec/configs/systemd-conf/wired.network -- see README.md).
+# Check Address/Gateway against the lab plan; the ZCU102 is 10.73.1.16.
+[Match]
+Name=eth0
+
+[Network]
+Address=10.73.1.17/24
+Gateway=10.73.1.1

@@ -71,7 +71,12 @@ set_property -dict [list CONFIG.PS_PMC_CONFIG { \
     PS_NUM_FABRIC_RESETS {1} \
     PS_USE_PMCPL_CLK0 {1} \
     PMC_CRP_PL0_REF_CTRL_FREQMHZ {100} \
+    PS_IRQ_USAGE {{CH0 1} {CH1 1}} \
 }] [get_bd_cells cips]
+# PS_IRQ_USAGE enables PL-to-PS interrupt inputs pl_ps_irq0/1 (2026-10-24:
+# the first boot's xilinx-vdma probe failed with "failed to get irq" --
+# the DMA engine's two interrupt outputs were not connected, and the
+# driver will not bind without them; see section 3)
 
 set noc [get_bd_cells axi_noc_0]
 if {$noc eq ""} { error "cips automation did not create axi_noc_0 -- check the automation config names for this Vivado version" }
@@ -107,6 +112,11 @@ connect_bd_net $pl_clk  [get_bd_pins axi_dma/m_axi_sg_aclk]
 connect_bd_net $pl_clk  [get_bd_pins axi_dma/m_axi_mm2s_aclk]
 connect_bd_net $pl_clk  [get_bd_pins axi_dma/m_axi_s2mm_aclk]
 connect_bd_net $pl_rstn [get_bd_pins axi_dma/axi_resetn]
+# DMA interrupts to the PS: MM2S on pl_ps_irq0, S2MM on pl_ps_irq1.  The
+# device-tree generator turns these into the dma node's "interrupts"
+# property, which the xilinx_dma driver requires to probe.
+connect_bd_net [get_bd_pins axi_dma/mm2s_introut] [get_bd_pins cips/pl_ps_irq0]
+connect_bd_net [get_bd_pins axi_dma/s2mm_introut] [get_bd_pins cips/pl_ps_irq1]
 
 # DMA memory masters into the NoC: three more slave ports on the NoC,
 # each routed to the DDR controller.  (NoC port naming: S00_AXI.. are the
