@@ -31,12 +31,14 @@ VCK190_USER_DTSI  := $(VCK190_DIR)/petalinux/system-user.dtsi
 # the receiver's control registers in the BD (vck190_playback_bd.tcl, section 6)
 VCK190_RX_CTRL_ADDR := A4010000
 
-.PHONY: vck190-help vck190-check-vivado vck190-check-env vck190-xsa vck190-project \
+.PHONY: vck190-help vck190-license-up vck190-license-down vck190-check-license vck190-check-vivado vck190-check-env vck190-xsa vck190-project \
         vck190-petalinux-create vck190-import-xsa vck190-check-xsa vck190-build \
         vck190-boot vck190-clean
 
 vck190-help:
 	@echo "VCK190 memory-loopback targets:"
+	@echo "  make vck190-license-up        ssh tunnel to the ORI FlexLM server; then export XILINXD_LICENSE_FILE=2100@127.0.0.1 in your shell."
+	@echo "  make vck190-license-down      drop the tunnel."
 	@echo "  make vck190-project           Vivado batch: project + block design + wrapper only (fast; validates the BD)."
 	@echo "  make vck190-xsa               ... plus synth/impl/device image -> $(notdir $(VCK190_XSA)), timing + utilization reports."
 	@echo "  make vck190-petalinux-create  One-time: create the PetaLinux 2022.2 Versal project under platforms/vck190/petalinux/."
@@ -46,6 +48,29 @@ vck190-help:
 	@echo "  make vck190-boot              petalinux-boot --jtag --prebuilt 3 (hw_server must be reachable)."
 	@echo "  make vck190-clean             Remove the Vivado project directory and reports (keeps the XSA)."
 
+# Paul's Remote Lab license flow: an ssh tunnel to the ORI FlexLM server
+# (local 2100/2101 -> server 2100/2101) and XILINXD_LICENSE_FILE=2100@127.0.0.1.
+# The project/BD step needs no license; synthesis of the XCVC1902 does.
+VCK190_LIC_HOST := abraxas3d@flexlm-server.openresearch.institute
+
+vck190-license-up:
+	@lsof -t -i :2100 >/dev/null 2>&1 && echo "==> license tunnel already up" || \
+	    ssh -f -N -L 2100:127.0.0.1:2100 -L 2101:127.0.0.1:2101 $(VCK190_LIC_HOST)
+	@echo "==> now, in THIS shell (make cannot export into it):"
+	@echo "    export XILINXD_LICENSE_FILE=2100@127.0.0.1"
+
+vck190-license-down:
+	-kill -HUP `lsof -t -i :2100` 2>/dev/null
+	@lsof -i :2100 || echo "==> license tunnel down"
+
+vck190-check-license:
+	@lsof -t -i :2100 >/dev/null 2>&1 || { \
+	    echo "ERROR: no license tunnel on port 2100 -- run 'make vck190-license-up'"; exit 1; }
+	@test "$$XILINXD_LICENSE_FILE" = "2100@127.0.0.1" || { \
+	    echo "ERROR: XILINXD_LICENSE_FILE is '$$XILINXD_LICENSE_FILE', expected 2100@127.0.0.1"; \
+	    echo "       export XILINXD_LICENSE_FILE=2100@127.0.0.1"; exit 1; }
+	@echo "==> license tunnel up, XILINXD_LICENSE_FILE=$$XILINXD_LICENSE_FILE"
+
 vck190-check-vivado:
 	@command -v vivado >/dev/null 2>&1 || { \
 	    echo "ERROR: 'vivado' is not on PATH -- source /tools/Xilinx/Vivado/2022.2/settings64.sh"; exit 1; }
@@ -53,7 +78,7 @@ vck190-check-vivado:
 
 vck190-check-env:
 	@command -v petalinux-build >/dev/null 2>&1 || { \
-	    echo "ERROR: 'petalinux-build' is not on PATH -- source ~/petalinux/2022.2/settings.sh"; exit 1; }
+	    echo "ERROR: 'petalinux-build' is not on PATH -- source /tools/Xilinx/PetaLinux/2022.2/settings.sh"; exit 1; }
 	@echo "==> PetaLinux Tools detected on PATH: $$(command -v petalinux-build)"
 
 vck190-project: vck190-check-vivado
@@ -61,7 +86,7 @@ vck190-project: vck190-check-vivado
 	cd $(VCK190_SYN) && vivado -mode batch -nojournal -log vck190_project.log -source vck190_playback_project.tcl
 	@echo "==> Block design validated. Log: $(VCK190_SYN)/vck190_project.log"
 
-vck190-xsa: vck190-check-vivado
+vck190-xsa: vck190-check-vivado vck190-check-license
 	@echo "==> Vivado batch: VCK190 playback project, synthesis, implementation, device image, XSA..."
 	@echo "    Output: $(VCK190_XSA)"
 	cd $(VCK190_SYN) && vivado -mode batch -nojournal -log vck190_build.log -source vck190_playback_project.tcl -tclargs build
