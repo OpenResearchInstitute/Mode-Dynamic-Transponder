@@ -123,7 +123,7 @@ CONFIG_SUBSYSTEM_ENDIAN_LITTLE=y
 #
 # DTG Settings
 #
-CONFIG_SUBSYSTEM_MACHINE_NAME="template"
+CONFIG_SUBSYSTEM_MACHINE_NAME="versal-vck190-reva"
 CONFIG_SUBSYSTEM_EXTRA_DT_FILES=""
 
 #
@@ -268,4 +268,5 @@ CONFIG_YOCTO_NETWORK_SSTATE_FEEDS_URL="http://petalinux.xilinx.com/sswreleases/r
 # User Layers
 #
 CONFIG_USER_LAYER_0=""
+
 CONFIG_SUBSYSTEM_BOOTARGS_GENERATED="console=ttyAMA0  earlycon=pl011,mmio32,0xFF000000,115200n8 clk_ignore_unused root=/dev/ram0 rw"
