@@ -12,9 +12,10 @@ config files directly as noted. Each is a one-line change in a tracked file.
 1. **Root login enabled, no password** (the ZCU102 image's behaviour; 2022.2 locks
    root by default and forces a `petalinux` user password change on every boot of
    the RAM-disk image):
-   `project-spec/configs/rootfs_config`:
+   `project-spec/configs/rootfs_config` (the symbol is 2022.2's; it sits near
+   the end of the file as a `# ... is not set` line -- flip it, don't append):
    ```
-   CONFIG_YOCTO_ENABLE_DEBUG_TWEAKS=y
+   sed -i 's/^# CONFIG_imagefeature-debug-tweaks is not set/CONFIG_imagefeature-debug-tweaks=y/' mdt_vck190/project-spec/configs/rootfs_config
    ```
    (`debug-tweaks` = root login with empty password, no forced change.)
 2. **Static IPv4 on eth0** (the lab segment gave no DHCP lease at first boot; the
@@ -30,10 +31,23 @@ config files directly as noted. Each is a one-line change in a tracked file.
    Gateway=10.73.1.1
    ```
    Confirm `Gateway` against the lab router before building.
-3. **dma-proxy** kernel module: Xilinx's userspace DMA example driver, matched to the
-   `dma_proxy` node in `system-user.dtsi`. Added as a module recipe under
-   `project-spec/meta-user/recipes-modules/dma-proxy/` -- NOT YET DONE; the source
-   is Xilinx wiki "Linux DMA from User Space 2.0". Until it exists the node is inert.
+3. **dma-proxy** kernel module: Xilinx's userspace DMA example driver (Apache-2.0,
+   vendored from Xilinx-Wiki-Projects/software-prototypes with BUFFER_SIZE raised to
+   4 MB), matched to the `dma_proxy` node in `system-user.dtsi`. The recipe lives in
+   this directory as `recipes-modules/dma-proxy/`; to add it to the image:
+   ```
+   cp -r recipes-modules mdt_vck190/project-spec/meta-user/
+   echo 'CONFIG_dma-proxy' >> mdt_vck190/project-spec/meta-user/conf/user-rootfsconfig
+   echo 'CONFIG_dma-proxy=y' >> mdt_vck190/project-spec/configs/rootfs_config
+   ```
+   then `make vck190-build`. The module needs 2 x 32 x 4 MB of coherent memory, so
+   `system-user.dtsi` now carries `cma=512M` in bootargs (re-copy it with
+   `make vck190-import-xsa`, or by hand to
+   `project-spec/meta-user/recipes-bsp/device-tree/files/`). On the board:
+   `ls /dev/dma_proxy_*` -> `dma_proxy_rx dma_proxy_tx`; `dmesg | grep dma_proxy`.
+4. **opv_play** (dogu/tools/opv_play): the memory-loopback client -- registers via
+   `/dev/uio0`, stimulus through `/dev/dma_proxy_tx`, soft bits from
+   `/dev/dma_proxy_rx`. Host-side converters in `../tools/`.
 
 ## Known: absolute paths
 
