@@ -17,6 +17,11 @@
 
 set script_dir   [file dirname [file normalize [info script]]]
 set project_name "mdt_vck190_playback"
+# Debug variant (VCK190_ILA=1 in the environment; `make vck190-xsa-ila`):
+# a System ILA on the soft-bit path (rx -> widen -> DMA S2MM).  Separate
+# project dir, XSA and reports so the working image is never overwritten.
+set with_ila [expr {[info exists ::env(VCK190_ILA)] && $::env(VCK190_ILA) ne "0"}]
+if {$with_ila} { append project_name "_ila" }
 set project_dir  [file join $script_dir "${project_name}_project"]
 set part_name    "xcvc1902-vsva2197-2MP-e-S"
 set board_ref    "xilinx.com:vck190:part0:2.2"
@@ -82,17 +87,19 @@ safe_add_files sources_1 {
 # --- platform blocks (this directory tree) + the ZCU102 widener, read-only reuse
 safe_add_files sources_1 {
     ../rtl/axis_sample_pacer.vhd
+    ../rtl/axis_softbit_tap.vhd
+    ../rtl/axi_mon_tap.vhd
     ../../../syn/zcu102_with_adrv9001/axis_softbit_widen.vhd
 }
 set n_added [llength [get_files -of_objects [get_filesets sources_1]]]
-if {$n_added != 34} {
-    error "source manifest short ($n_added/34) -- see SKIP lines (submodules initialized?)"
+if {$n_added != 36} {
+    error "source manifest short ($n_added/36) -- see SKIP lines (submodules initialized?)"
 }
 set_property file_type {VHDL 2008} [get_files -of_objects [get_filesets sources_1]]
 
 # module-reference tops must be plain VHDL (the flow's rule, not ours);
 # everything they instantiate stays VHDL 2008
-set_property file_type {VHDL} [get_files {haifuraiya_rx_axi.vhd axis_sample_pacer.vhd axis_softbit_widen.vhd}]
+set_property file_type {VHDL} [get_files {haifuraiya_rx_axi.vhd axis_sample_pacer.vhd axis_softbit_widen.vhd axis_softbit_tap.vhd axi_mon_tap.vhd}]
 
 update_compile_order -fileset sources_1
 
@@ -110,10 +117,16 @@ if {$do_build} {
     launch_runs impl_1 -to_step write_device_image -jobs 8
     wait_on_run impl_1
     open_run impl_1
-    report_timing_summary -file [file join $script_dir "timing_summary.rpt"]
-    report_utilization    -file [file join $script_dir "utilization.rpt"]
+    set rpt_sfx [expr {$with_ila ? "_ila" : ""}]
+    report_timing_summary -file [file join $script_dir "timing_summary${rpt_sfx}.rpt"]
+    report_utilization    -file [file join $script_dir "utilization${rpt_sfx}.rpt"]
     write_hw_platform -fixed -include_bit -force -file [file join $script_dir "${project_name}.xsa"]
-    puts "INFO: wrote ${project_name}.xsa, timing_summary.rpt, utilization.rpt"
+    if {$with_ila} {
+        # probes file for the Hardware Manager (open_hw -> refresh with this .ltx)
+        write_debug_probes -force [file join $script_dir "${project_name}.ltx"]
+        puts "INFO: wrote ${project_name}.ltx (ILA probes)"
+    }
+    puts "INFO: wrote ${project_name}.xsa, timing_summary${rpt_sfx}.rpt, utilization${rpt_sfx}.rpt"
 } else {
     puts "INFO: project built; re-run with -tclargs build for synth/impl/xsa"
 }

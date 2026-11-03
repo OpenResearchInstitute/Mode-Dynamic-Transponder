@@ -1,10 +1,10 @@
 # vck190_playback_bd.tcl -- VCK190 playback self-test: block design
 #
-# STATUS: DRAFT, NOT YET RUN THROUGH VIVADO.  Written 2026-10-23 from the
-# Versal CIPS/NoC block-automation flow in Vivado 2022.2 and the ZCU102
-# integration (syn/zcu102_with_adrv9001/system_bd.tcl).  Expect the first
-# run on chococat to need property-name fixes; every command is commented
-# with what it is meant to do so the fix is obvious from Vivado's message.
+# STATUS: validates and generates in Vivado 2022.2 on chococat (2026-10-23,
+# after three fixes: catalog CIPS version, plain-VHDL module-reference tops,
+# slave-side address assignment).  Written from the Versal CIPS/NoC
+# block-automation flow and the ZCU102 integration
+# (syn/zcu102_with_adrv9001/system_bd.tcl).
 #
 # WHAT THIS BUILDS (one sentence): the receiver as simulated, fed from DDR
 # by a DMA engine metered to the ADC sample rate, with its soft bits written
@@ -35,19 +35,11 @@ current_bd_design $bd_name
 #    controller on the board's DIMM, wires the PS NoC ports, and brings out
 #    one PL clock and one PL reset.
 # -----------------------------------------------------------------------------
-
-# create_bd_cell -type ip -vlnv xilinx.com:ip:versal_cips:3.2 cips # original line
-
-# Replaced above with:
-# We take the catalog's own versal_cips version (pinning 3.2 against a newer
-# catalog creates the cell LOCKED, and block automation then refuses it, which is
-# honestly kind of rude but ok fine)
-# This line fetches all the versions of CIPS and then sorts them in order of version
-# number and then picks the highest number. 
+# take the catalog's own versal_cips version (pinning 3.2 against a newer
+# catalog creates the cell LOCKED, and block automation then refuses it)
 set cips_vlnv [lindex [lsort -dictionary [get_ipdefs -all -filter {VLNV =~ "xilinx.com:ip:versal_cips:*"}]] end]
 puts "INFO: using $cips_vlnv"
 create_bd_cell -type ip -vlnv $cips_vlnv cips
-
 apply_bd_automation -rule xilinx.com:bd_rule:cips -config { \
     board_preset {Yes} \
     boot_config {Custom} \
@@ -106,7 +98,17 @@ set_property -dict [list \
     CONFIG.c_s_axis_s2mm_tdata_width {8} \
     CONFIG.c_s2mm_burst_size {64} \
     CONFIG.c_addr_width {64} \
+    CONFIG.c_sg_include_stscntrl_strm {0} \
 ] [get_bd_cells axi_dma]
+# ^ c_sg_include_stscntrl_strm: the IP's default (1, when SG is on) adds the
+#   optional status/control streams (S_AXIS_STS in, M_AXIS_CNTRL out).  With
+#   them present, the S2MM channel completes an END-OF-PACKET descriptor only
+#   after a status word arrives on S_AXIS_STS -- which nothing here drives, so
+#   it was tied to '0' and every TLAST-terminated frame wedged the channel
+#   (data written, status never written, never idle).  Count-terminated
+#   descriptors completed, which is how it was bracketed.  Found 2026-10-25
+#   with the ILA on M_AXI_SG / M_AXI_S2MM: all write responses OKAY, then
+#   nothing.  Off = plain SG DMA; TLAST alone ends a packet.
 connect_bd_net $pl_clk  [get_bd_pins axi_dma/s_axi_lite_aclk]
 connect_bd_net $pl_clk  [get_bd_pins axi_dma/m_axi_sg_aclk]
 connect_bd_net $pl_clk  [get_bd_pins axi_dma/m_axi_mm2s_aclk]
@@ -168,6 +170,82 @@ connect_bd_intf_net [get_bd_intf_pins rx/m_axis_soft_bit]  [get_bd_intf_pins wid
 connect_bd_intf_net [get_bd_intf_pins widen/m_axis]        [get_bd_intf_pins axi_dma/S_AXIS_S2MM]
 
 # -----------------------------------------------------------------------------
+# 4a. (debug build only) System ILA on the soft-bit path.
+#     First hardware run, 2026-10-24: receiver locked, FRAMES_RECEIVED 24,
+#     SOFT_DROPPED 0, yet the DMA S2MM channel sat running/not-idle with zero
+#     bytes counted -- the FIFO->widen->DMA handshake never moved and nothing
+#     software-visible says which side.  This probes the handshake into the
+#     DMA (tvalid, tready, tlast, tdata) plus the receiver's frame-sync lock
+#     and frame counter for context, so the first tvalid and what tready does
+#     can be seen.
+#     Enabled by VCK190_ILA=1 in the environment (make vck190-xsa-ila).
+#
+#     Native probes, not interface probes: Vivado 2022.2's AXIS ILA interface
+#     monitor fails to elaborate on these interfaces ("can't read
+#     net_name_int_TD_" -- no TKEEP/TDEST present).  Native probes need plain
+#     nets, so the debug build inserts axis_softbit_tap (a wire with probe_*
+#     copies) between the widener and the DMA.  Production build: no tap.
+# -----------------------------------------------------------------------------
+if {[info exists ::env(VCK190_ILA)] && $::env(VCK190_ILA) ne "0"} {
+    # tap in: widen -> tap -> DMA
+    delete_bd_objs [get_bd_intf_nets -of_objects [get_bd_intf_pins widen/m_axis]]
+    create_bd_cell -type module -reference axis_softbit_tap tap
+    set_property -dict [list CONFIG.DATA_WIDTH {8}] [get_bd_cells tap]
+    connect_bd_net $pl_clk  [get_bd_pins tap/aclk]
+    connect_bd_net $pl_rstn [get_bd_pins tap/aresetn]
+    connect_bd_intf_net [get_bd_intf_pins widen/m_axis] [get_bd_intf_pins tap/s_axis]
+    connect_bd_intf_net [get_bd_intf_pins tap/m_axis]   [get_bd_intf_pins axi_dma/S_AXIS_S2MM]
+
+    # nets to probe: the four handshake copies + receiver context (native pins
+    # on rx that are otherwise unconnected)
+    set dbg_pins [list tap/probe_valid tap/probe_ready tap/probe_last tap/probe_data \
+                       rx/frame_sync_locked rx/frames_received]
+    set dbg_nets {}
+    foreach p $dbg_pins {
+        set pin [get_bd_pins $p]
+        if {$pin eq ""} {
+            error "ILA: no pin '$p'; pins on [file dirname $p]: [get_bd_pins [file dirname $p]/*]"
+        }
+        set nn  "dbg_[string map {/ _} $p]"
+        set net [create_bd_net $nn]
+        if {$net eq ""} { error "ILA: create_bd_net $nn returned nothing" }
+        connect_bd_net -net $net $pin
+        set_property HDL_ATTRIBUTE.DEBUG true $net
+        lappend dbg_nets $net
+    }
+    # One AXIS ILA (Versal's system ILA) for all of them, PL clock.  On Versal
+    # this automation also inserts the AXI debug hub the ILA needs.
+    set dict {}
+    foreach n $dbg_nets {
+        lappend dict $n {PROBE_TYPE "Data and Trigger" CLK_SRC "/cips/pl0_ref_clk" AXIS_ILA "Auto"}
+    }
+    apply_bd_automation -rule xilinx.com:bd_rule:debug -dict $dict
+
+    # 2026-10-25, second round.  The stream side measured clean (ILA: the FIFO
+    # offers, the DMA accepted frame 1 and wrote it to DDR).  Count-terminated
+    # receive descriptors complete (status written, channel idle); descriptors
+    # ended by TLAST/end-of-packet wedge BEFORE the status write-back.  So:
+    # interface probes on the DMA's two memory-side masters -- does the SG
+    # port ever issue the status write for an EOF descriptor, and does the
+    # S2MM data port get all its write responses?  Full AXI4 interface
+    # monitors (the elaboration bug above was the AXI-Stream flavour).
+    set axi_dict {}
+    foreach ifp [list axi_dma/M_AXI_SG axi_dma/M_AXI_S2MM] {
+        set n [get_bd_intf_nets -of_objects [get_bd_intf_pins $ifp]]
+        set_property HDL_ATTRIBUTE.DEBUG true $n
+        lappend axi_dict $n {AXI_R_ADDRESS "Data and Trigger" AXI_R_DATA "Data and Trigger" AXI_W_ADDRESS "Data and Trigger" AXI_W_DATA "Data and Trigger" AXI_W_RESPONSE "Data and Trigger" CLK_SRC "/cips/pl0_ref_clk" AXIS_ILA "Auto" APC_EN "0"}
+    }
+    apply_bd_automation -rule xilinx.com:bd_rule:debug -dict $axi_dict
+
+    foreach ila [get_bd_cells -filter {VLNV =~ "xilinx.com:ip:axis_ila:*"}] {
+        # 4096 samples at 100 MHz = 41 us: the AXI monitors are wide, keep the
+        # BRAM bill modest; a descriptor's whole data+status phase fits.
+        set_property CONFIG.C_DATA_DEPTH {4096} $ila
+        puts "INFO: AXIS ILA $ila (native probes: $dbg_pins; AXI: M_AXI_SG, M_AXI_S2MM), depth 4096"
+    }
+}
+
+# -----------------------------------------------------------------------------
 # 5. Control plane: CIPS M_AXI_FPD -> smartconnect -> three AXI-Lite slaves
 # -----------------------------------------------------------------------------
 create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 ctrl_sc
@@ -187,17 +265,16 @@ connect_bd_intf_net [get_bd_intf_pins ctrl_sc/M02_AXI] [get_bd_intf_pins rx/s_ax
 #      axi_dma   0xA400_0000
 #      rx ctrl   0xA401_0000   (channelizer registers, 4 KB used)
 #      rx demod  0xA402_0000   (demod registers, 4 KB used)
-#  Offsets are given on the slave-side segments so Vivado’s mapped-segment 
-#  names don’t matter. The foreach prints the final map into the log. Neat!
 # -----------------------------------------------------------------------------
 set fpd [get_bd_addr_spaces cips/M_AXI_FPD]
-# control plane: fixed offsets, slave segments named by their own paths
+# control plane: fixed offsets, slave segments named by their own paths, so
+# Vivado's mapped-segment names don't matter; the foreach prints the final
+# map into the log (what the device tree and opv_play use)
 assign_bd_address -target_address_space $fpd -offset 0xA4000000 -range 64K [get_bd_addr_segs axi_dma/S_AXI_LITE/Reg]
 assign_bd_address -target_address_space $fpd -offset 0xA4010000 -range 64K [get_bd_addr_segs rx/s_axi_ctrl/*]
 assign_bd_address -target_address_space $fpd -offset 0xA4020000 -range 64K [get_bd_addr_segs rx/s_axi_demod/*]
 # everything else (the DMA's three masters onto the DDR) as Vivado sees fit
 assign_bd_address
-# record the map in the log: this is what the device tree and opv_play will use
 foreach s [get_bd_addr_segs -of_objects $fpd] {
     puts "INFO: M_AXI_FPD  $s  offset [get_property OFFSET $s]  range [get_property RANGE $s]"
 }

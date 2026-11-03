@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
 -----------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version      : Vivado v.2022.2 (lin64) Build 3671981 Fri Oct 14 04:59:54 MDT 2022
-| Date              : Sat Oct 24 16:00:08 2026
+| Date              : Sun Oct 25 20:41:33 2026
 | Host              : chococat running 64-bit Ubuntu 22.04.5 LTS
 | Command           : report_timing_summary -file /home/abraxas3d/vck190/Mode-Dynamic-Transponder/haifuraiya/platforms/vck190/syn/timing_summary.rpt
 | Design            : playback_wrapper
@@ -137,7 +137,7 @@ Table of Contents
 
     WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
     -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
-      0.378        0.000                      0               451014        0.016        0.000                      0               451014        0.000        0.000                       0                124978  
+      0.546        0.000                      0               450812        0.012        0.000                      0               450812        0.000        0.000                       0                124887  
 
 
 All user specified timing constraints are met.
@@ -167,7 +167,7 @@ ddr4_dimm1_sma_clk_clk_p   {0.000 2.500}          5.000           200.000
 
 Clock                          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
 -----                          -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
-clk_pl_0                         0.378        0.000                      0               451014        0.016        0.000                      0               451014        3.571        0.000                       0                124923  
+clk_pl_0                         0.546        0.000                      0               450812        0.012        0.000                      0               450812        3.571        0.000                       0                124832  
 ddr4_dimm1_sma_clk_clk_p                                                                                                                                                     2.109        0.000                       0                     1  
   bank1_clkout0                                                                                                                                                              0.000        0.000                       0                     3  
     pll_clktoxphy[0]                                                                                                                                                         0.054        0.000                       0                     9  
@@ -205,34 +205,34 @@ Path Group    From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing 
 From Clock:  clk_pl_0
   To Clock:  clk_pl_0
 
-Setup :            0  Failing Endpoints,  Worst Slack        0.378ns,  Total Violation        0.000ns
-Hold  :            0  Failing Endpoints,  Worst Slack        0.016ns,  Total Violation        0.000ns
+Setup :            0  Failing Endpoints,  Worst Slack        0.546ns,  Total Violation        0.000ns
+Hold  :            0  Failing Endpoints,  Worst Slack        0.012ns,  Total Violation        0.000ns
 PW    :            0  Failing Endpoints,  Worst Slack        3.571ns,  Total Violation        0.000ns
 ---------------------------------------------------------------------------------------------------
 
 
 Max Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             0.378ns  (required time - arrival time)
-  Source:                 playback_i/rx/U0/u_rx/u_demod/mlse/rom_q0_reg_bram_8/CLKBWRCLKL
+Slack (MET) :             0.546ns  (required time - arrival time)
+  Source:                 playback_i/rx/U0/u_rx/u_demod/mlse/rom_q0_reg_bram_9/CLKARDCLKU
                             (rising edge-triggered cell RAMB36E5_INT clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]/D
+  Destination:            playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]/D
                             (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk_pl_0
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk_pl_0 rise@10.000ns - clk_pl_0 rise@0.000ns)
-  Data Path Delay:        9.232ns  (logic 5.898ns (63.885%)  route 3.334ns (36.115%))
+  Data Path Delay:        9.328ns  (logic 5.873ns (62.964%)  route 3.455ns (37.036%))
   Logic Levels:           30  (DSP_A_B_DATA58=2 DSP_ALUADD=3 DSP_ALUMUX=3 DSP_M_DATA58=2 DSP_MULTIPLIER58=2 DSP_OUTPUT58=3 DSP_PREADD_DATA58=2 LOOKAHEAD8=4 LUT2=1 LUT5=3 LUT6=2 LUTCY1=2 LUTCY2=1)
-  Clock Path Skew:        -0.286ns (DCD - SCD + CPR)
-    Destination Clock Delay (DCD):    2.354ns = ( 12.354 - 10.000 ) 
-    Source Clock Delay      (SCD):    2.755ns
-    Clock Pessimism Removal (CPR):    0.115ns
+  Clock Path Skew:        -0.022ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.522ns = ( 12.522 - 10.000 ) 
+    Source Clock Delay      (SCD):    2.738ns
+    Clock Pessimism Removal (CPR):    0.194ns
   Clock Uncertainty:      0.111ns  (CJ)/2 + PE + PJ
     Clock Jitter             (CJ):    0.222ns
     Phase Error              (PE):    0.000ns
     Phase Jitter             (PJ):    0.000ns
-  Clock Net Delay (Source):      2.652ns (routing 0.677ns, distribution 1.975ns)
-  Clock Net Delay (Destination): 2.299ns (routing 0.615ns, distribution 1.684ns)
+  Clock Net Delay (Source):      2.635ns (routing 0.677ns, distribution 1.958ns)
+  Clock Net Delay (Destination): 2.467ns (routing 0.615ns, distribution 1.852ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -242,103 +242,103 @@ Slack (MET) :             0.378ns  (required time - arrival time)
                          net (fo=1, routed)           0.000     0.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.103     0.103 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X3Y2 (CLOCK_ROOT)    net (fo=125022, routed)      2.652     2.755    playback_i/rx/U0/u_rx/u_demod/mlse/aclk
-    RAMB36_X2Y27         RAMB36E5_INT                                 r  playback_i/rx/U0/u_rx/u_demod/mlse/rom_q0_reg_bram_8/CLKBWRCLKL
+    X3Y2 (CLOCK_ROOT)    net (fo=124931, routed)      2.635     2.738    playback_i/rx/U0/u_rx/u_demod/mlse/aclk
+    RAMB36_X7Y13         RAMB36E5_INT                                 r  playback_i/rx/U0/u_rx/u_demod/mlse/rom_q0_reg_bram_9/CLKARDCLKU
   -------------------------------------------------------------------    -------------------
-    RAMB36_X2Y27         RAMB36E5_INT (Prop_RAMB36_CLKBWRCLKL_DOUTBDOUT[0])
-                                                      0.876     3.631 f  playback_i/rx/U0/u_rx/u_demod/mlse/rom_q0_reg_bram_8/DOUTBDOUT[0]
-                         net (fo=1, routed)           0.453     4.084    playback_i/rx/U0/u_rx/u_demod/mlse/rom_q0_reg_bram_8_n_131
-    SLICE_X117Y95        LUT6 (Prop_H6LUT_SLICEM_I5_O)
-                                                      0.141     4.225 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_73__127/O
-                         net (fo=1, routed)           0.154     4.379    playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_73__127_n_0
-    SLICE_X118Y95        LUT2 (Prop_C6LUT_SLICEL_I0_O)
-                                                      0.119     4.498 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_59__127/O
-                         net (fo=3, routed)           0.427     4.925    playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_59__127_n_0
-    SLICE_X127Y85        LUT5 (Prop_F5LUT_SLICEM_I3_O)
-                                                      0.141     5.066 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_53__127/O
-                         net (fo=5, routed)           0.213     5.279    playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_53__127_n_0
-    SLICE_X127Y85        LUT6 (Prop_E6LUT_SLICEM_I2_O)
-                                                      0.074     5.353 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_46__127/O
-                         net (fo=5, routed)           0.168     5.521    playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_46__127_n_0
-    SLICE_X127Y84        LUT5 (Prop_D6LUT_SLICEM_I2_O)
-                                                      0.093     5.614 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_44__128/O
-                         net (fo=2, routed)           0.282     5.896    playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_44__128_n_0
-    SLICE_X125Y83        LUT5 (Prop_C6LUT_SLICEM_I3_O)
-                                                      0.088     5.984 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG_i_1__130/O
-                         net (fo=18, routed)          0.332     6.315    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/B[19]
-    DSP_X2Y41            DSP_A_B_DATA58 (Prop_DSP_A_B_DATA_DSP58_B[19]_B2_DATA[19])
-                                                      0.379     6.694 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_A_B_DATA58_INST/B2_DATA[19]
-                         net (fo=1, routed)           0.000     6.694    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_A_B_DATA58.B2_DATA<19>
-    DSP_X2Y41            DSP_PREADD_DATA58 (Prop_DSP_PREADD_DATA_DSP58_B2_DATA[19]_B2B1[19])
-                                                      0.129     6.823 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_PREADD_DATA58_INST/B2B1[19]
-                         net (fo=1, routed)           0.000     6.823    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_PREADD_DATA58.B2B1<19>
-    DSP_X2Y41            DSP_MULTIPLIER58 (Prop_DSP_MULTIPLIER_DSP58_B2B1[19]_V[24])
-                                                      0.416     7.239 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_MULTIPLIER58_INST/V[24]
-                         net (fo=1, routed)           0.000     7.239    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_MULTIPLIER58.V<24>
-    DSP_X2Y41            DSP_M_DATA58 (Prop_DSP_M_DATA_DSP58_V[24]_V_DATA[24])
-                                                      0.090     7.329 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_M_DATA58_INST/V_DATA[24]
-                         net (fo=1, routed)           0.000     7.329    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_M_DATA58.V_DATA<24>
-    DSP_X2Y41            DSP_ALUMUX (Prop_DSP_ALUMUX_DSP58_V_DATA[24]_Y[24])
-                                                      0.072     7.401 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_ALUMUX_INST/Y[24]
-                         net (fo=1, routed)           0.000     7.401    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_ALUMUX.Y<24>
-    DSP_X2Y41            DSP_ALUADD (Prop_DSP_ALUADD_DSP58_Y[24]_ALU_OUT[24])
-                                                      0.343     7.744 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_ALUADD_INST/ALU_OUT[24]
-                         net (fo=2, routed)           0.000     7.744    playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_ALUADD.ALU_OUT<24>
-    DSP_X2Y41            DSP_OUTPUT58 (Prop_DSP_OUTPUT_DSP58_ALU_OUT[24]_PCOUT[24])
-                                                      0.144     7.888 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG/DSP58C<0>_INST/DSP_OUTPUT58_INST/PCOUT[24]
-                         net (fo=1, routed)           0.039     7.927    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__0/DSP58C<0>_INST/PCIN[24]
-    DSP_X2Y42            DSP_ALUMUX (Prop_DSP_ALUMUX_DSP58_PCIN[24]_Z[24])
-                                                      0.105     8.032 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__0/DSP58C<0>_INST/DSP_ALUMUX_INST/Z[24]
-                         net (fo=1, routed)           0.000     8.032    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__0/DSP58C<0>_INST/DSP_ALUMUX.Z<24>
-    DSP_X2Y42            DSP_ALUADD (Prop_DSP_ALUADD_DSP58_Z[24]_ALU_OUT[25])
-                                                      0.310     8.342 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__0/DSP58C<0>_INST/DSP_ALUADD_INST/ALU_OUT[25]
-                         net (fo=2, routed)           0.000     8.342    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__0/DSP58C<0>_INST/DSP_ALUADD.ALU_OUT<25>
-    DSP_X2Y42            DSP_OUTPUT58 (Prop_DSP_OUTPUT_DSP58_ALU_OUT[25]_P[25])
-                                                      0.195     8.537 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__0/DSP58C<0>_INST/DSP_OUTPUT58_INST/P[25]
-                         net (fo=14, routed)          0.543     9.081    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/A[10]
-    DSP_X3Y38            DSP_A_B_DATA58 (Prop_DSP_A_B_DATA_DSP58_A[10]_A2_DATA[10])
-                                                      0.275     9.356 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_A_B_DATA58_INST/A2_DATA[10]
-                         net (fo=1, routed)           0.000     9.356    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_A_B_DATA58.A2_DATA<10>
-    DSP_X3Y38            DSP_PREADD_DATA58 (Prop_DSP_PREADD_DATA_DSP58_A2_DATA[10]_A2A1[10])
-                                                      0.123     9.479 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_PREADD_DATA58_INST/A2A1[10]
-                         net (fo=1, routed)           0.000     9.479    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_PREADD_DATA58.A2A1<10>
-    DSP_X3Y38            DSP_MULTIPLIER58 (Prop_DSP_MULTIPLIER_DSP58_A2A1[10]_V[23])
-                                                      0.448     9.927 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_MULTIPLIER58_INST/V[23]
-                         net (fo=1, routed)           0.000     9.927    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_MULTIPLIER58.V<23>
-    DSP_X3Y38            DSP_M_DATA58 (Prop_DSP_M_DATA_DSP58_V[23]_V_DATA[23])
-                                                      0.090    10.017 f  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_M_DATA58_INST/V_DATA[23]
-                         net (fo=1, routed)           0.000    10.017    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_M_DATA58.V_DATA<23>
-    DSP_X3Y38            DSP_ALUMUX (Prop_DSP_ALUMUX_DSP58_V_DATA[23]_Y[23])
-                                                      0.072    10.089 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_ALUMUX_INST/Y[23]
-                         net (fo=1, routed)           0.000    10.089    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_ALUMUX.Y<23>
-    DSP_X3Y38            DSP_ALUADD (Prop_DSP_ALUADD_DSP58_Y[23]_ALU_OUT[23])
-                                                      0.343    10.432 f  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_ALUADD_INST/ALU_OUT[23]
-                         net (fo=2, routed)           0.000    10.432    playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_ALUADD.ALU_OUT<23>
-    DSP_X3Y38            DSP_OUTPUT58 (Prop_DSP_OUTPUT_DSP58_ALU_OUT[23]_P[23])
-                                                      0.195    10.627 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp/DSP58C<0>_INST/DSP_OUTPUT58_INST/P[23]
-                         net (fo=2, routed)           0.284    10.911    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[24]_i_2/I2
-    SLICE_X124Y77        LUTCY2 (Prop_A6LUT_SLICEL_I2_GE)
-                                                      0.085    10.996 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[24]_i_2/LUTCY2_INST/GE
-                         net (fo=1, routed)           0.039    11.035    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[24]_i_2_n_0
-    SLICE_X124Y77        LOOKAHEAD8 (Prop_LOOKAHEAD8_SLICEL_GEA_COUTH)
-                                                      0.242    11.277 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[26]_i_5/COUTH
-                         net (fo=3, routed)           0.002    11.279    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[26]_i_5_n_3
-    SLICE_X124Y78        LOOKAHEAD8 (Prop_LOOKAHEAD8_SLICEL_CIN_COUTH)
-                                                      0.039    11.318 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_50/COUTH
-                         net (fo=3, routed)           0.002    11.320    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_50_n_3
-    SLICE_X124Y79        LOOKAHEAD8 (Prop_LOOKAHEAD8_SLICEL_CIN_COUTH)
-                                                      0.039    11.359 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_17/COUTH
-                         net (fo=3, routed)           0.002    11.361    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_17_n_3
-    SLICE_X124Y80        LOOKAHEAD8 (Prop_LOOKAHEAD8_SLICEL_CIN_COUTF)
-                                                      0.053    11.414 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_6/COUTF
-                         net (fo=2, routed)           0.009    11.423    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_3/I4
-    SLICE_X124Y80        LUTCY1 (Prop_G5LUT_SLICEL_I4_O)
-                                                      0.058    11.481 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_3/LUTCY1_INST/O
-                         net (fo=2, routed)           0.341    11.822    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_1/I3
-    SLICE_X126Y77        LUTCY1 (Prop_D5LUT_SLICEL_I3_O)
-                                                      0.121    11.943 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_1/LUTCY1_INST/O
-                         net (fo=1, routed)           0.045    11.988    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]_i_1_n_1
-    SLICE_X126Y77        FDRE                                         r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]/D
+    RAMB36_X7Y13         RAMB36E5_INT (Prop_RAMB36_CLKARDCLKU_DOUTADOUT[1])
+                                                      0.901     3.639 f  playback_i/rx/U0/u_rx/u_demod/mlse/rom_q0_reg_bram_9/DOUTADOUT[1]
+                         net (fo=1, routed)           0.280     3.919    playback_i/rx/U0/u_rx/u_demod/mlse/rom_q0_reg_bram_9_n_98
+    SLICE_X204Y46        LUT6 (Prop_D6LUT_SLICEL_I3_O)
+                                                      0.126     4.045 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1_i_74__0/O
+                         net (fo=1, routed)           0.276     4.321    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1_i_74__0_n_0
+    SLICE_X208Y43        LUT2 (Prop_F5LUT_SLICEL_I0_O)
+                                                      0.079     4.400 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1_i_60__0/O
+                         net (fo=2, routed)           0.279     4.679    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1_i_60__0_n_0
+    SLICE_X208Y40        LUT5 (Prop_D5LUT_SLICEL_I4_O)
+                                                      0.053     4.732 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1_i_53__0/O
+                         net (fo=5, routed)           0.293     5.025    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1_i_53__0_n_0
+    SLICE_X209Y41        LUT6 (Prop_H6LUT_SLICEM_I2_O)
+                                                      0.088     5.113 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1_i_46__0/O
+                         net (fo=5, routed)           0.228     5.341    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1_i_46__0_n_0
+    SLICE_X210Y40        LUT5 (Prop_A5LUT_SLICEL_I2_O)
+                                                      0.134     5.475 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1_i_44__0/O
+                         net (fo=2, routed)           0.224     5.699    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1_i_44__0_n_0
+    SLICE_X210Y40        LUT5 (Prop_D6LUT_SLICEL_I3_O)
+                                                      0.126     5.825 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1_i_1__0/O
+                         net (fo=18, routed)          0.622     6.447    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/B[19]
+    DSP_X9Y20            DSP_A_B_DATA58 (Prop_DSP_A_B_DATA_DSP58_B[19]_B2_DATA[19])
+                                                      0.379     6.826 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_A_B_DATA58_INST/B2_DATA[19]
+                         net (fo=1, routed)           0.000     6.826    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_A_B_DATA58.B2_DATA<19>
+    DSP_X9Y20            DSP_PREADD_DATA58 (Prop_DSP_PREADD_DATA_DSP58_B2_DATA[19]_B2B1[19])
+                                                      0.129     6.955 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_PREADD_DATA58_INST/B2B1[19]
+                         net (fo=1, routed)           0.000     6.955    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_PREADD_DATA58.B2B1<19>
+    DSP_X9Y20            DSP_MULTIPLIER58 (Prop_DSP_MULTIPLIER_DSP58_B2B1[19]_V[30])
+                                                      0.416     7.371 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_MULTIPLIER58_INST/V[30]
+                         net (fo=1, routed)           0.000     7.371    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_MULTIPLIER58.V<30>
+    DSP_X9Y20            DSP_M_DATA58 (Prop_DSP_M_DATA_DSP58_V[30]_V_DATA[30])
+                                                      0.090     7.461 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_M_DATA58_INST/V_DATA[30]
+                         net (fo=1, routed)           0.000     7.461    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_M_DATA58.V_DATA<30>
+    DSP_X9Y20            DSP_ALUMUX (Prop_DSP_ALUMUX_DSP58_V_DATA[30]_Y[30])
+                                                      0.072     7.533 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_ALUMUX_INST/Y[30]
+                         net (fo=1, routed)           0.000     7.533    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_ALUMUX.Y<30>
+    DSP_X9Y20            DSP_ALUADD (Prop_DSP_ALUADD_DSP58_Y[30]_ALU_OUT[30])
+                                                      0.343     7.876 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_ALUADD_INST/ALU_OUT[30]
+                         net (fo=2, routed)           0.000     7.876    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_ALUADD.ALU_OUT<30>
+    DSP_X9Y20            DSP_OUTPUT58 (Prop_DSP_OUTPUT_DSP58_ALU_OUT[30]_PCOUT[30])
+                                                      0.144     8.020 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__1/DSP58C<0>_INST/DSP_OUTPUT58_INST/PCOUT[30]
+                         net (fo=1, routed)           0.041     8.061    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__2/DSP58C<0>_INST/PCIN[30]
+    DSP_X9Y21            DSP_ALUMUX (Prop_DSP_ALUMUX_DSP58_PCIN[30]_Z[30])
+                                                      0.105     8.166 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__2/DSP58C<0>_INST/DSP_ALUMUX_INST/Z[30]
+                         net (fo=1, routed)           0.000     8.166    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__2/DSP58C<0>_INST/DSP_ALUMUX.Z<30>
+    DSP_X9Y21            DSP_ALUADD (Prop_DSP_ALUADD_DSP58_Z[30]_ALU_OUT[30])
+                                                      0.310     8.476 r  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__2/DSP58C<0>_INST/DSP_ALUADD_INST/ALU_OUT[30]
+                         net (fo=2, routed)           0.000     8.476    playback_i/rx/U0/u_rx/u_demod/mlse/ARG__2/DSP58C<0>_INST/DSP_ALUADD.ALU_OUT<30>
+    DSP_X9Y21            DSP_OUTPUT58 (Prop_DSP_OUTPUT_DSP58_ALU_OUT[30]_P[30])
+                                                      0.195     8.671 f  playback_i/rx/U0/u_rx/u_demod/mlse/ARG__2/DSP58C<0>_INST/DSP_OUTPUT58_INST/P[30]
+                         net (fo=14, routed)          0.401     9.072    playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/A[15]
+    DSP_X9Y22            DSP_A_B_DATA58 (Prop_DSP_A_B_DATA_DSP58_A[15]_A2_DATA[15])
+                                                      0.275     9.347 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_A_B_DATA58_INST/A2_DATA[15]
+                         net (fo=1, routed)           0.000     9.347    playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_A_B_DATA58.A2_DATA<15>
+    DSP_X9Y22            DSP_PREADD_DATA58 (Prop_DSP_PREADD_DATA_DSP58_A2_DATA[15]_A2A1[15])
+                                                      0.123     9.470 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_PREADD_DATA58_INST/A2A1[15]
+                         net (fo=1, routed)           0.000     9.470    playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_PREADD_DATA58.A2A1<15>
+    DSP_X9Y22            DSP_MULTIPLIER58 (Prop_DSP_MULTIPLIER_DSP58_A2A1[15]_V[23])
+                                                      0.448     9.918 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_MULTIPLIER58_INST/V[23]
+                         net (fo=1, routed)           0.000     9.918    playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_MULTIPLIER58.V<23>
+    DSP_X9Y22            DSP_M_DATA58 (Prop_DSP_M_DATA_DSP58_V[23]_V_DATA[23])
+                                                      0.090    10.008 f  playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_M_DATA58_INST/V_DATA[23]
+                         net (fo=1, routed)           0.000    10.008    playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_M_DATA58.V_DATA<23>
+    DSP_X9Y22            DSP_ALUMUX (Prop_DSP_ALUMUX_DSP58_V_DATA[23]_Y[23])
+                                                      0.072    10.080 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_ALUMUX_INST/Y[23]
+                         net (fo=1, routed)           0.000    10.080    playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_ALUMUX.Y<23>
+    DSP_X9Y22            DSP_ALUADD (Prop_DSP_ALUADD_DSP58_Y[23]_ALU_OUT[23])
+                                                      0.343    10.423 f  playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_ALUADD_INST/ALU_OUT[23]
+                         net (fo=2, routed)           0.000    10.423    playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_ALUADD.ALU_OUT<23>
+    DSP_X9Y22            DSP_OUTPUT58 (Prop_DSP_OUTPUT_DSP58_ALU_OUT[23]_P[23])
+                                                      0.195    10.618 r  playback_i/rx/U0/u_rx/u_demod/mlse/multOp__0/DSP58C<0>_INST/DSP_OUTPUT58_INST/P[23]
+                         net (fo=2, routed)           0.355    10.973    playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[24]_i_2/I2
+    SLICE_X240Y43        LUTCY2 (Prop_A6LUT_SLICEL_I2_GE)
+                                                      0.085    11.058 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[24]_i_2/LUTCY2_INST/GE
+                         net (fo=1, routed)           0.039    11.097    playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[24]_i_2_n_0
+    SLICE_X240Y43        LOOKAHEAD8 (Prop_LOOKAHEAD8_SLICEL_GEA_COUTH)
+                                                      0.242    11.339 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[26]_i_5/COUTH
+                         net (fo=3, routed)           0.007    11.346    playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[26]_i_5_n_3
+    SLICE_X240Y44        LOOKAHEAD8 (Prop_LOOKAHEAD8_SLICEL_CIN_COUTH)
+                                                      0.039    11.385 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]_i_51/COUTH
+                         net (fo=3, routed)           0.002    11.387    playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]_i_51_n_3
+    SLICE_X240Y45        LOOKAHEAD8 (Prop_LOOKAHEAD8_SLICEL_CIN_COUTH)
+                                                      0.039    11.426 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]_i_18/COUTH
+                         net (fo=3, routed)           0.002    11.428    playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]_i_18_n_3
+    SLICE_X240Y46        LOOKAHEAD8 (Prop_LOOKAHEAD8_SLICEL_CIN_COUTF)
+                                                      0.053    11.481 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]_i_7/COUTF
+                         net (fo=2, routed)           0.009    11.490    playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]_i_4/I4
+    SLICE_X240Y46        LUTCY1 (Prop_G5LUT_SLICEL_I4_O)
+                                                      0.058    11.548 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]_i_4/LUTCY1_INST/O
+                         net (fo=2, routed)           0.352    11.900    playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]_i_2/I3
+    SLICE_X238Y45        LUTCY1 (Prop_D5LUT_SLICEL_I3_O)
+                                                      0.121    12.021 r  playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]_i_2/LUTCY1_INST/O
+                         net (fo=1, routed)           0.045    12.066    playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]_i_2_n_1
+    SLICE_X238Y45        FDRE                                         r  playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]/D
   -------------------------------------------------------------------    -------------------
 
                          (clock clk_pl_0 rise edge)
@@ -347,17 +347,17 @@ Slack (MET) :             0.378ns  (required time - arrival time)
                          net (fo=1, routed)           0.000    10.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.055    10.055 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X3Y2 (CLOCK_ROOT)    net (fo=125022, routed)      2.299    12.354    playback_i/rx/U0/u_rx/u_demod/mlse/aclk
-    SLICE_X126Y77        FDRE                                         r  playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]/C
-                         clock pessimism              0.115    12.469    
-                         clock uncertainty           -0.111    12.358    
-    SLICE_X126Y77        FDRE (Setup_DFF_SLICEL_C_D)
-                                                      0.007    12.365    playback_i/rx/U0/u_rx/u_demod/mlse/bm1_r_reg[27]
+    X3Y2 (CLOCK_ROOT)    net (fo=124931, routed)      2.467    12.522    playback_i/rx/U0/u_rx/u_demod/mlse/aclk
+    SLICE_X238Y45        FDRE                                         r  playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]/C
+                         clock pessimism              0.194    12.716    
+                         clock uncertainty           -0.111    12.605    
+    SLICE_X238Y45        FDRE (Setup_DFF_SLICEL_C_D)
+                                                      0.007    12.612    playback_i/rx/U0/u_rx/u_demod/mlse/bm0_r_reg[27]
   -------------------------------------------------------------------
-                         required time                         12.365    
-                         arrival time                         -11.988    
+                         required time                         12.612    
+                         arrival time                         -12.066    
   -------------------------------------------------------------------
-                         slack                                  0.378    
+                         slack                                  0.546    
 
 
 
@@ -365,22 +365,22 @@ Slack (MET) :             0.378ns  (required time - arrival time)
 
 Min Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             0.016ns  (arrival time - required time)
-  Source:                 playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2]__37/C
+Slack (MET) :             0.012ns  (arrival time - required time)
+  Source:                 playback_i/axi_dma/U0/GEN_SG_ENGINE.I_SG_ENGINE/I_SG_AXI_DATAMOVER/GEN_MM2S_BASIC.I_MM2S_BASIC_WRAPPER/I_ADDR_CNTL/sig_next_addr_reg_reg[28]/C
                             (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]/D
-                            (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            playback_i/axi_noc_0/inst/S06_AXI_nmu/bd_88c9_S06_AXI_nmu_0_top_INST/NOC_NMU512_INST/IF_NOC_AXI_ARADDR[28]
+                            (rising edge-triggered cell NOC_NMU512 clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk_pl_0
   Path Type:              Hold (Min at Fast Process Corner)
   Requirement:            0.000ns  (clk_pl_0 rise@0.000ns - clk_pl_0 rise@0.000ns)
-  Data Path Delay:        0.268ns  (logic 0.096ns (35.821%)  route 0.172ns (64.179%))
-  Logic Levels:           1  (LUTCY1=1)
-  Clock Path Skew:        0.217ns (DCD - SCD - CPR)
-    Destination Clock Delay (DCD):    2.269ns
-    Source Clock Delay      (SCD):    1.957ns
-    Clock Pessimism Removal (CPR):    0.095ns
-  Clock Net Delay (Source):      1.915ns (routing 0.411ns, distribution 1.504ns)
-  Clock Net Delay (Destination): 2.189ns (routing 0.468ns, distribution 1.721ns)
+  Data Path Delay:        0.322ns  (logic 0.048ns (14.907%)  route 0.274ns (85.093%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.195ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.067ns
+    Source Clock Delay      (SCD):    1.702ns
+    Clock Pessimism Removal (CPR):    0.170ns
+  Clock Net Delay (Source):      1.660ns (routing 0.411ns, distribution 1.249ns)
+  Clock Net Delay (Destination): 1.987ns (routing 0.468ns, distribution 1.519ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -390,16 +390,13 @@ Slack (MET) :             0.016ns  (arrival time - required time)
                          net (fo=1, routed)           0.000     0.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.042     0.042 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X3Y2 (CLOCK_ROOT)    net (fo=125022, routed)      1.915     1.957    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
-    SLICE_X267Y188       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2]__37/C
+    X3Y2 (CLOCK_ROOT)    net (fo=124931, routed)      1.660     1.702    playback_i/axi_dma/U0/GEN_SG_ENGINE.I_SG_ENGINE/I_SG_AXI_DATAMOVER/GEN_MM2S_BASIC.I_MM2S_BASIC_WRAPPER/I_ADDR_CNTL/m_axi_sg_aclk
+    SLICE_X77Y52         FDRE                                         r  playback_i/axi_dma/U0/GEN_SG_ENGINE.I_SG_ENGINE/I_SG_AXI_DATAMOVER/GEN_MM2S_BASIC.I_MM2S_BASIC_WRAPPER/I_ADDR_CNTL/sig_next_addr_reg_reg[28]/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X267Y188       FDRE (Prop_CFF2_SLICEM_C_Q)
-                                                      0.050     2.007 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2]__37/Q
-                         net (fo=2, routed)           0.150     2.157    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]_i_1__0/I2
-    SLICE_X267Y183       LUTCY1 (Prop_B5LUT_SLICEM_I2_O)
-                                                      0.046     2.203 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]_i_1__0/LUTCY1_INST/O
-                         net (fo=1, routed)           0.022     2.225    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]_i_1__0_n_1
-    SLICE_X267Y183       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]/D
+    SLICE_X77Y52         FDRE (Prop_EFF2_SLICEM_C_Q)
+                                                      0.048     1.750 r  playback_i/axi_dma/U0/GEN_SG_ENGINE.I_SG_ENGINE/I_SG_AXI_DATAMOVER/GEN_MM2S_BASIC.I_MM2S_BASIC_WRAPPER/I_ADDR_CNTL/sig_next_addr_reg_reg[28]/Q
+                         net (fo=1, routed)           0.274     2.024    playback_i/axi_noc_0/inst/S06_AXI_nmu/bd_88c9_S06_AXI_nmu_0_top_INST/IF_NOC_AXI_ARADDR[28]
+    NOC_NMU512_X0Y1      NOC_NMU512                                   r  playback_i/axi_noc_0/inst/S06_AXI_nmu/bd_88c9_S06_AXI_nmu_0_top_INST/NOC_NMU512_INST/IF_NOC_AXI_ARADDR[28]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk_pl_0 rise edge)
@@ -408,16 +405,16 @@ Slack (MET) :             0.016ns  (arrival time - required time)
                          net (fo=1, routed)           0.000     0.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.080     0.080 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X3Y2 (CLOCK_ROOT)    net (fo=125022, routed)      2.189     2.269    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
-    SLICE_X267Y183       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]/C
-                         clock pessimism             -0.095     2.174    
-    SLICE_X267Y183       FDRE (Hold_BFF_SLICEM_C_D)
-                                                      0.035     2.209    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[44].q_reg[2][9]
+    X3Y2 (CLOCK_ROOT)    net (fo=124931, routed)      1.987     2.067    playback_i/axi_noc_0/inst/S06_AXI_nmu/bd_88c9_S06_AXI_nmu_0_top_INST/aclk
+    NOC_NMU512_X0Y1      NOC_NMU512                                   r  playback_i/axi_noc_0/inst/S06_AXI_nmu/bd_88c9_S06_AXI_nmu_0_top_INST/NOC_NMU512_INST/CLK
+                         clock pessimism             -0.170     1.897    
+    NOC_NMU512_X0Y1      NOC_NMU512 (Hold_NMU_NOC_NMU512_CLK_IF_NOC_AXI_ARADDR[28])
+                                                      0.115     2.012    playback_i/axi_noc_0/inst/S06_AXI_nmu/bd_88c9_S06_AXI_nmu_0_top_INST/NOC_NMU512_INST
   -------------------------------------------------------------------
-                         required time                         -2.209    
-                         arrival time                           2.225    
+                         required time                         -2.012    
+                         arrival time                           2.024    
   -------------------------------------------------------------------
-                         slack                                  0.016    
+                         slack                                  0.012    
 
 
 
