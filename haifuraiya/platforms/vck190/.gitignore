@@ -11,4 +11,4 @@ petalinux/*/images/
 petalinux/*/components/
 petalinux/*/.petalinux/
 # Ignore the ILA probe file
-haifuraiya/platforms/vck190/syn/*.ltx
+syn/*.ltx

@@ -1,0 +1,5 @@
+** Note: 681600ps+2: link_ready after 431600000 fs (from reset release)
+** Note: 171675ns+0: sent 3000  received 3000  mismatched 0  seq_err 0  marker_err 0  multi_err 0  (dut counters sent 3000 rcvd 3000)
+** Note: 171675ns+0: faulty-lane instance: received 3000  seq_err 750  marker_err 0  multi_err 0  (expect seq_err = 750: lane-1 SEQ bit 0 stuck by the bench)
+** Note: 171675ns+0: PASS: tb_esi_link_loop
+RESULT: PASS
