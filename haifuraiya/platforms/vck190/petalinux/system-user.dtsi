@@ -11,16 +11,21 @@
  *                          runner writes: OUTPUT_SHIFT, NORM_SQUELCH, the
  *                          timing and carrier gains, the readbacks).
  *   axi_dma             -> stays on the kernel xilinx_dma driver; a dma-proxy
- *                          node gives userspace one MM2S and one S2MM channel.
+ *                          node gives userspace one MM2S and one S2MM channel
+ *                          (module recipe: recipes-modules/dma-proxy; 4 MB
+ *                          buffers x 32 x 2 channels = 256 MB of coherent
+ *                          memory, hence cma=512M in bootargs).
  *
- * The node labels (rx_0, axi_dma) are Vivado's from the block design cell
- * names; check pl.dtsi after the first import and fix them here if they
- * differ.  STATUS 2026-10-23: not yet applied on a real import.
+ * The node labels (rx, axi_dma) are the device-tree generator's, read from
+ * pl.dtsi after the first import (2026-10-24): the receiver is ONE node,
+ * "rx: haifuraiya_rx_axi@a4010000", with two reg entries (0xa4010000 and
+ * 0xa4020000), so generic-uio gives /dev/uio0 with map0 = channelizer
+ * registers and map1 = demod registers.
  */
 /include/ "system-conf.dtsi"
 / {
 	chosen {
-		bootargs = "console=ttyAMA0 earlycon=pl011,mmio32,0xFF000000,115200n8 clk_ignore_unused root=/dev/ram0 rw uio_pdrv_genirq.of_id=generic-uio";
+		bootargs = "console=ttyAMA0 earlycon=pl011,mmio32,0xFF000000,115200n8 clk_ignore_unused root=/dev/ram0 rw uio_pdrv_genirq.of_id=generic-uio cma=512M";
 	};
 
 	dma_proxy {
@@ -30,10 +35,8 @@
 	};
 };
 
-/* receiver registers as a UIO device.  A module-reference cell with two
- * AXI-Lite slaves usually appears as ONE node with two reg entries, so this
- * gives /dev/uio0 with map0 = channelizer ctrl (0xA4010000) and map1 = demod
- * (0xA4020000); if pl.dtsi shows two nodes instead, bind both. */
+/* receiver registers as a UIO device: /dev/uio0, map0 = channelizer ctrl
+ * (0xA4010000), map1 = demod (0xA4020000) */
 &rx {
 	compatible = "generic-uio";
 };
