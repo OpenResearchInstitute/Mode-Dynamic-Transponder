@@ -12,3 +12,6 @@ petalinux/*/components/
 petalinux/*/.petalinux/
 # Ignore the ILA probe file
 syn/*.ltx
+# Ignore the waveform files
+logs/*.wdb
+logs/*/*.wdb

@@ -64,8 +64,16 @@ if {![string match "${EXPECTED_VIVADO}*" $this_vivado]} {
     puts "********************************************************************"
 }
 
-# Tier switch (see USAGE).  Default: tier 1, the core alone.
-if {![info exists ESI_LOOP]} { set ESI_LOOP 0 }
+# Tier switch (see USAGE).  Default: tier 1, the core alone.  The global is
+# consumed and UNSET here so it cannot linger in the Tcl interpreter and turn
+# a later tier-1 source into a tier-2 run (it did, 2026-11-05: a day lost).
+# The tier-2 wrapper must set it every time; nothing else should.
+if {[info exists ESI_LOOP]} {
+    set esi_loop $ESI_LOOP
+    unset ESI_LOOP
+} else {
+    set esi_loop 0
+}
 
 # Close any existing simulation
 catch {close_sim -force}
@@ -91,7 +99,7 @@ if {[file exists $project_dir]} {
 puts "========================================"
 puts "MDT core on VCK190 -- simulation project"
 puts "Project:     $project_name"
-puts "Tier:        [expr {$ESI_LOOP ? "2 (ESIstream digital loopback)" : "1 (core alone)"}]"
+puts "Tier:        [expr {$esi_loop ? "2 (ESIstream digital loopback)" : "1 (core alone)"}]"
 puts "Part:        $part_name (VCK190, Versal VC1902)"
 puts "Vivado:      $this_vivado (baseline $EXPECTED_VIVADO)"
 puts "Working dir: [pwd]"
@@ -217,7 +225,7 @@ puts "PART 2 complete: $n_added core files added."
 # xsim has XPM.  sim/esi/rx_xpm_async_fifo_sim.vhd is the nvc stand-in and
 # must NOT be added here.  Order is the dependency order; xsim re-orders
 # anyway but a human reading SKIP lines should not have to.
-if {$ESI_LOOP} {
+if {$esi_loop} {
     puts "\nAdding ESIstream link (tier 2)..."
     set esi ../../../third_party/esistream_vck190
     safe_add_files sources_1 [list \
@@ -268,7 +276,7 @@ if {$ESI_LOOP} {
 
 # Tier 2 is the moment the input side became ESIstream-shaped, so it has its
 # own copy of the bench beside this script (header there says what differs).
-if {$ESI_LOOP} {
+if {$esi_loop} {
     set tb_file ./tb_haifuraiya_vck190_esi.vhd
     set tb_top  tb_haifuraiya_vck190_esi
 } else {
@@ -552,7 +560,7 @@ add_wave -into {Frame_Sync} $FS/energy_prev
 #   esi_link_ready should rise within ~0.5 us of each reset release; the
 #   bench's s_axis_data_tready stays low until it does.  Counters must end
 #   sent = rcvd, errors 0 (the bench grades them too).
-if {$ESI_LOOP} {
+if {$esi_loop} {
     set ESI $TB/u_esi
     add_wave_group {ESI_Link}
     add_wave -into {ESI_Link}                 $TB/link_clk
@@ -581,5 +589,20 @@ add_wave $RX/cfo_applied
  
 run all
  
+# --- archive: the project directory is deleted on the next source, so copy
+# the evidence out now: simulate.log, the waveform database and the bench's
+# output files, into sim/logs/<top>_<timestamp>/.  (2026-11-05: the 59-hour
+# tier-2 waveform was lost this way.)  *.wdb is gitignored; the text is not.
+set xsim_dir [file normalize "$project_dir/${project_name}.sim/sim_1/behav/xsim"]
+set stamp    [clock format [clock seconds] -format %Y%m%d_%H%M]
+set arch     [file normalize "./logs/${tb_top}_${stamp}"]
+file mkdir $arch
+foreach f {simulate.log seam_chan_out.txt soft_raw.txt channel_iq.txt f1_error.txt} {
+    if {[file exists "$xsim_dir/$f"]} { file copy -force "$xsim_dir/$f" $arch }
+}
+foreach f [glob -nocomplain "$xsim_dir/*.wdb"] { file copy -force $f $arch }
 puts ""
 puts "PART 4 complete: simulation ran to the bench's own finish."
+puts "Archived to $arch :"
+foreach f [lsort [glob -nocomplain "$arch/*"]] { puts "   [file tail $f]  [file size $f] bytes" }
+puts "The Tcl console text (the run: Time line, \$finish) is NOT in simulate.log -- copy it there by hand."

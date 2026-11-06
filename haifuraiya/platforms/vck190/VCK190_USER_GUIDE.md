@@ -101,7 +101,7 @@ show sent = rcvd and all three error counts 0, and is folded into
 
 Run time: tier 1 is about a night for the 25-frame stimulus. Tier 2 with 8
 lanes measured ~18 ms of simulated time per hour on chococat (2026-11-02),
-i.e. roughly 55–60 hours — the ESIstream encoder and decoder run every
+i.e. 50+ hours — the ESIstream encoder and decoder run every
 6.4 ns on every lane whether or not a slot carries a sample. The planned
 follow-up is `NB_LANES => 2` on `u_esi` in the bench copy (the tier-3 lane
 count anyway).
@@ -111,6 +111,23 @@ ESIstream pieces alone:
 `sim/esi/run_esi_link_nvc.sh` (pass = `PASS: tb_esi_link_loop`). It uses
 `sim/esi/rx_xpm_async_fifo_sim.vhd` in place of Teledyne's XPM FIFO wrapper;
 never add that stand-in to a Vivado project.
+
+## Save Logs after Simulation
+
+```
+mkdir -p haifuraiya/platforms/vck190/sim/logs
+cp haifuraiya/platforms/vck190/sim/mdt_vck190_sim_project/mdt_vck190_sim.sim/sim_1/behav/xsim/simulate.log \
+   haifuraiya/platforms/vck190/sim/logs/tier1_3frame_$(date +%Y%m%d).log
+```
+
+If you want a copy of the waveform, then you have to copy the database along 
+with exporting the configuration. 
+
+```
+cp haifuraiya/platforms/vck190/sim/mdt_vck190_sim_project/mdt_vck190_sim.sim/sim_1/behav/xsim/tb_haifuraiya_channelizer_axi_behav.wdb \
+   haifuraiya/platforms/vck190/sim/logs/tier1_3frame_20261105.wdb
+```
+
 
 ## How to Build and Boot the Memory-Loopback Design (VCK190)
 
