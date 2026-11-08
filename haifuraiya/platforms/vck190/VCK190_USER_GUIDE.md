@@ -112,7 +112,7 @@ ESIstream pieces alone:
 `sim/esi/rx_xpm_async_fifo_sim.vhd` in place of Teledyne's XPM FIFO wrapper;
 never add that stand-in to a Vivado project.
 
-## Save Logs after Simulation
+## Save Logs after Simulation (if the automated log saving isn't something your tcl runner does)
 
 ```
 mkdir -p haifuraiya/platforms/vck190/sim/logs

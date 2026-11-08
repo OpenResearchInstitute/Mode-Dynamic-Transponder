@@ -302,7 +302,7 @@ begin
 
     -- ESI: the splice.  IDEAL_LINK: TX words wired to RX words, no transceiver.
     u_esi : entity work.esi_link_loop
-        generic map (NB_LANES => 8, IDEAL_LINK => true)
+        generic map (NB_LANES => 2, IDEAL_LINK => true)
         port map (
             aclk => aclk, aresetn => aresetn,
             s_axis_tdata  => s_axis_data_tdata,
