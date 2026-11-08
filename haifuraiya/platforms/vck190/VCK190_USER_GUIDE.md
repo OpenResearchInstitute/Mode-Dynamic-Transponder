@@ -99,12 +99,33 @@ log, `ESI LINK: sent= rcvd= seq_err= marker_err= multi_err=`, which must
 show sent = rcvd and all three error counts 0, and is folded into
 `ALL TESTS PASSED`.
 
-Run time: tier 1 is about a night for the 25-frame stimulus. Tier 2 with 8
-lanes measured ~18 ms of simulated time per hour on chococat (2026-11-02),
-i.e. 50+ hours — the ESIstream encoder and decoder run every
-6.4 ns on every lane whether or not a slot carries a sample. The planned
-follow-up is `NB_LANES => 2` on `u_esi` in the bench copy (the tier-3 lane
-count anyway).
+Run time, measured on chococat with the 3-frame stimulus: the core alone
+simulates 130–146 ms per wall hour (about 8 hours for the 25-frame
+stimulus); tier 2 at 8 lanes ran 18.6 ms/hour (59 h 40 min for 25 frames);
+at 2 lanes 51 ms/hour. The bench copy is at 2 lanes now (the tier-3 lane
+count). The ESIstream encoder and decoder run every 6.4 ns on every lane
+whether or not a slot carries a sample, so lanes are the first cost, the
+156.25 MHz clock and the two crossing FIFOs the rest. `top` on `xsimk`
+shows the real load; Vivado's `run: Time` cpu figure is Vivado's own
+process, not the simulator.
+
+Two checks worth running on any tier-2 archive:
+
+```
+python3 haifuraiya/platforms/vck190/tools/esi_rx_check.py haifuraiya/sim/opv_chan_stim.txt <archive>/esi_rx_samples.txt
+```
+
+(every sample the core received against the stimulus, plus the spacing
+histogram — expect 0 mismatches and only 5s), and a byte compare
+(`cmp`) of `soft_raw.txt` against the tier-1 archive of the same stimulus —
+expect identical (it was, 2026-11-08). `tools/which_phase.py` tells which
+halfband decimation phase a `channel_iq.txt` capture used, against the
+golden channelizer model.
+
+Per-frame BER tables recorded before 2026-11-08 were computed with the
+bench's first sample dropped (the halfband ran on the other decimation
+phase); see "Things that bit us". The grade class is unchanged; the old
+numbers do not reproduce exactly.
 
 There is also a link-level bench that runs in seconds under nvc, for the
 ESIstream pieces alone:
@@ -112,21 +133,33 @@ ESIstream pieces alone:
 `sim/esi/rx_xpm_async_fifo_sim.vhd` in place of Teledyne's XPM FIFO wrapper;
 never add that stand-in to a Vivado project.
 
-## Save Logs after Simulation (if the automated log saving isn't something your tcl runner does)
+## Logs and waveforms after a simulation
+
+The runner archives every run that reaches the bench's own finish:
+`simulate.log`, the `.wdb` waveform database, and the output text files go
+to `sim/logs/<bench>_<date>_<time>/` before the next `source` can delete
+the project directory (it deletes it every time — the 59-hour tier-2
+waveform was lost that way on 2026-11-05). `*.wdb` is gitignored; the text
+is committed as the evidence behind the notes.
+
+Two things the archive does **not** capture:
+
+- The Tcl console text. `simulate.log` stops at the last message xsim
+  wrote; the `$finish` line and `run: Time (s): cpu = … ; elapsed = …` are
+  only in the console. Copy them into the archive directory by hand.
+- A run you stop early. Then copy by hand, before sourcing anything else:
 
 ```
-mkdir -p haifuraiya/platforms/vck190/sim/logs
-cp haifuraiya/platforms/vck190/sim/mdt_vck190_sim_project/mdt_vck190_sim.sim/sim_1/behav/xsim/simulate.log \
-   haifuraiya/platforms/vck190/sim/logs/tier1_3frame_$(date +%Y%m%d).log
+X=haifuraiya/platforms/vck190/sim/mdt_vck190_sim_project/mdt_vck190_sim.sim/sim_1/behav/xsim
+A=haifuraiya/platforms/vck190/sim/logs/<bench>_<date>_<time>_stopped
+mkdir -p $A && cp $X/simulate.log $X/*.txt $X/*.wdb $A/
 ```
 
-If you want a copy of the waveform, then you have to copy the database along 
-with exporting the configuration. 
-
-```
-cp haifuraiya/platforms/vck190/sim/mdt_vck190_sim_project/mdt_vck190_sim.sim/sim_1/behav/xsim/tb_haifuraiya_channelizer_axi_behav.wdb \
-   haifuraiya/platforms/vck190/sim/logs/tier1_3frame_20261105.wdb
-```
+To look at an archived waveform later, in the Vivado Tcl console:
+`open_wave_database <archive>/<bench>_behav.wdb` then
+`open_wave_config <your saved .wcfg>`. "Save Waveform Configuration" in the
+GUI saves only the `.wcfg` (which signals, how displayed), never the data;
+the data is the `.wdb`, and it is only there if it was copied.
 
 
 ## How to Build and Boot the Memory-Loopback Design (VCK190)
@@ -414,3 +447,29 @@ make vck190-license-down   # drops the license tunnel
 - 2026-11-02: `git apply` of a review patch failed ("No such file") — its
   paths lacked the `haifuraiya/` prefix. The tarballs carry whole files;
   the patches are for reading.
+- 2026-11-05: the runner's tier switch was a Tcl global that survived
+  between `source`s; a "tier 1" run was tier 2 for a day. Now consumed and
+  unset on every source. Check the `Tier:` banner line anyway, and the
+  Scope window's top-level name before walking away.
+- 2026-11-05: the runner deletes the project directory on every source; the
+  59-hour tier-2 waveform went with it. Every run archives itself now.
+- 2026-11-05: Vivado's `run: Time` cpu figure is the Vivado process (8 % of
+  elapsed); `xsimk` was at 100 % the whole time. Use `top`.
+- 2026-11-05: a `git worktree` has no submodules; the bisect script's first
+  version failed every point in a minute and then waited twenty for output.
+- 2026-11-05: an orphaned `xsimk` from mid-October was still holding its
+  deleted output files open; `/proc/<pid>/fd/` gave them back. Kill
+  orphans after rescuing, not before.
+- 2026-11-07: the two runners differ by four letters; the tier-1 one was
+  sourced for a tier-2 test and 3.5 hours went to a clean but unwanted
+  tier-1 run. `run_mdt_vck190_esi_sim.tcl` is the only thing to source for
+  tier 2.
+- 2026-11-08: the shared bench's `wait for 2 us` before the burst landed
+  exactly on a clock edge; the first `tvalid` rose in the same delta as
+  `aclk` and the core's combinational `sample_valid_int` missed `stim[0]`.
+  Every simulation before this ran on the inverted halfband decimation
+  phase. Found because the ESIstream link's input FIFO caught the sample
+  and the two tiers disagreed by exactly 14.06° (one 20 MSps sample at
+  781.25 kHz); the golden channelizer model put tier 2 on the designed
+  phase; a byte-identical re-run after the fix proved it. Fix:
+  `wait until rising_edge(aclk)` after the `wait for` (two places).

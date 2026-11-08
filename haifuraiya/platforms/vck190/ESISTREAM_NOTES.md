@@ -112,7 +112,7 @@ Board clock pins for tier 2 (quad 201 refclk0): **AB11 / AB10**
 - **Simulation first:** the package has xsim testbenches for the link; the
   reassembler gets its own bench; then the system bench with the link in.
 
-### 4.1 Tier 2 in simulation — PASS 2026-11-05
+### 4.1 Tier 2 in simulation — PASS, and bit-identical to tier 1 (2026-11-08)
 
 What exists (all under `haifuraiya/platforms/vck190/` unless noted):
 
@@ -123,59 +123,26 @@ What exists (all under `haifuraiya/platforms/vck190/` unless noted):
 | `rtl/esi/esi_sample_packer.vhd` | AXI-Stream in (100 MHz) → one sample per link clock, rotating over the lanes, idle slots elsewhere → `tx_esistream.data_in`. |
 | `rtl/esi/esi_sample_reassembler.vhd` | `rx_esistream.data_out` → the one valid slot per clock → AXI-Stream out (100 MHz); counts `seq_errors`, `marker_errors`, `multi_errors`, `samples_rcvd`. |
 | `rtl/esi/esi_link_loop.vhd` | packer → `tx_esistream` → link → `rx_esistream` → reassembler, plus bring-up (ip_ready, one sync pulse, wait for `lanes_ready`, release). Generic `IDEAL_LINK`: true = TX words wired to RX words (simulation); false = words out/in on `xcvr_*` ports for the GTY block (hardware). |
-| `sim/esi/tb_esi_link_loop.vhd`, `run_esi_link_nvc.sh` | Link-level bench (nvc; `rx_xpm_async_fifo_sim.vhd` stands in for the one XPM wrapper — never in a Vivado project). |
-| `sim/tb_haifuraiya_vck190_esi.vhd` | **Copy** of the shared bench with the loop spliced in; header records the source md5; `diff` against the shared bench shows only `ESI:` hunks. The ZCU102 bench is untouched. |
-| `sim/run_mdt_vck190_esi_sim.tcl` | Sets `ESI_LOOP 1` and sources the tier-1 runner, which then adds the 22 link files (gate 54) and uses the copy as top. |
+| `sim/esi/tb_esi_link_loop.vhd`, `run_esi_link_nvc.sh` | Link-level bench (nvc; `rx_xpm_async_fifo_sim.vhd` stands in for the one XPM wrapper — never in a Vivado project). Negative test: a faulty lane must count exactly the predicted sequence errors (750 at 8 lanes, 2999 at 2, 1500 at 4; N = 3000). |
+| `sim/tb_haifuraiya_vck190_esi.vhd` | **Copy** of the shared bench with the loop spliced in (`NB_LANES => 2`, the tier-3 lane count); header records the source md5; `diff` against the shared bench shows only `ESI:` hunks. Also writes `esi_rx_samples.txt`: every sample the core accepts, with the clock gap since the previous one. |
+| `sim/run_mdt_vck190_esi_sim.tcl` | Sets `ESI_LOOP 1` and sources the tier-1 runner (which consumes and unsets the switch, adds the 22 link files — gate 54 — uses the copy as top, and archives every run's log, waveform and output files to `sim/logs/<top>_<stamp>/`). |
+| `tools/esi_rx_check.py` | `esi_rx_samples.txt` against the stimulus: value mismatches and the gap histogram. |
+| `tools/which_phase.py` | Golden-channelizer model at both halfband phases against a `channel_iq.txt` capture: which phase did the run use? (Channel 5 of the bench is model index 59 — the wrapper relabels.) |
+| `tools/bisect_sim_pace.sh` | Per-commit simulation pace in a scratch worktree (10-minute points). |
 
 Measured:
 
-- Link-level bench (nvc, 2026-11-02): link ready 431.6 ns after reset
-  release; 3000 samples sent, 3000 received, 0 mismatched, all counters 0.
-  A second instance behind a deliberately faulty "transceiver" (lane-1 SEQ
-  bit 0 stuck after link-up) counts exactly 750 = 2 × 3000/8 sequence
-  errors, as predicted before the run. The counters can fail, so zero means
-  something. Note: a pure lane *swap* is invisible at this sample rate (one
-  sample per ~8 link words never shares a word with its neighbour) — the
-  fixture catches alignment and corruption, not lane permutation.
-- System bench (xsim on chococat, 2026-11-02 10:54 → 2026-11-04 ~22:30,
-  elapsed 59 h 40 min): **25/25 frames decodable, pre-FEC BER 0.00–0.56 %,
-  flat** — the same range as tier 1 (grade on `seam_chan_out.txt`,
-  53,600 soft bits = 25.00 frames, all polarity +). Link counters at the
-  end of the run, read from the waveform: **sent = rcvd = 20,829,760**
-  (20,799,760 samples fed + 30,000 zero tail), seq_errors = marker_errors
-  = multi_errors = 0. Receiver readbacks through the link: CFO applied
-  498 Hz (truth 500), SYM_CLK_OFFSET −2254 Q24 (+11.5 ppm stimulus,
-  expected ≈ −2200). Register bracket passed unchanged; first sample
-  accepted 2 µs after the bracket; link up within the first microsecond
-  of each reset release.
-- Two sync-word correlation peaks were dented (627,732 at 561 ms and
-  626,265 at 801 ms against the full-scale 786,408 = 24 × 32,767); both
-  frames still synced and decoded (0.37 % and 0.09 %). At this error rate
-  one or two dented sync words in 25 is what noise predicts; the same seed
-  in tier 1 should show the same two dents — not yet compared.
-- The bench's own tail did **not** complete: after injection, SL-A polled
-  for symbol lock 40 ms *after the signal ended* (fails by placement, not
-  by the receiver), then the SL-C write to demod register 0x0AC got no
-  `bvalid` and the bench's write timeout called `$finish` at 1081.66 ms,
-  before the `ESI LINK` line and the pass/fail summary printed. The
-  AXI-Lite path does not cross the link. Whether the tier-1 run of
-  2026-10-23 ended the same way is the open question; its log tail
-  decides whether this is bench-tail business or a timing difference
-  worth chasing. (The dead-air `ratio_pct = 247 %` readback is in the
-  same bucket.)
-- Simulation cost: xsim reported **cpu 4 h 42 min against 59 h 40 min
-  elapsed** — 8 % of one core. The run was not compute-bound; the
-  ESIstream lane busywork is not what made it slow. Suspects: the bench's
-  per-sample textio writes (`channel_iq.txt`, `soft_raw.txt`,
-  `seam_chan_out.txt`, `f1_error.txt`) or a loaded host. Tier 1's
-  `run: Time (s)` line gives the baseline ratio. Until that is known,
-  `NB_LANES => 2` is not the first thing to try.
+- **Link bench** (nvc, 2026-11-02/07): link ready 431.6 ns after reset release; 3000 sent, 3000 received, 0 mismatched, all counters 0, at 8, 4 and 2 lanes; faulty-lane instance counts exactly the predicted errors each time. Latency 25 aclk cycles (28 in xsim with the real XPM FIFO).
+- **System bench, 25 frames, 8 lanes, old shared bench** (xsim, 2026-11-02→04, 59 h 40 min): 25/25 decodable, pre-FEC BER 0.00–0.56 %, flat. Link counters: sent = rcvd = 20,829,760 (20,799,760 + 30,000 tail), zero errors.
+- **System bench, 3 frames, 2 lanes** (2026-11-06, 3 h 57 min): 3/3; **every sample the core received checked against the stimulus: 3,229,963 received, 0 mismatches, 3,229,962 gaps all exactly 5 clocks** (2026-11-08 capture run).
+- **Tier 1 vs tier 2, same 3-frame stimulus, fixed shared bench (2026-11-08): `soft_raw.txt` and `channel_iq.txt` byte-identical**; grade 0.33 / 0.09 / 0.19. The receiver through the link produces the same bits as the receiver fed directly.
+- Pace (3-frame stimulus): core alone 130–146 ms of simulated time per hour (same at commit `8980e58` and HEAD — no regression); 8 lanes 18.6 ms/h; **2 lanes 51 ms/h**. The link's cost is the lanes first, then the 156.25 MHz clock and the two crossing FIFOs. (The Vivado `run: Time` cpu figure is the Vivado process, not `xsimk`; `top` on `xsimk` is the real load — it was 100 % of one core throughout.)
 
-Things that bit us: `git apply` of the review patch fails ("No such file")
-because its paths lack the `haifuraiya/` prefix — the tarball carries the
-whole runner, the patch is for reading only. The core does not analyse in
-nvc (`lowpass_ema.vhd` line 132 aggregate), so the system bench runs in
-xsim only.
+**Finding — the shared bench dropped the first sample.** Before 2026-11-08, tier 1 and tier 2 differed by exactly one 20 MSps sample of halfband decimation phase: the channel output rotated 14.06° (= 2π · 781.25 kHz · 50 ns), 83 of 8688 soft symbols moved, one frame picked up two coded-bit errors. The golden channelizer model put tier 2 on the *designed* phase (0.0°, residual 0.0 %) and tier 1 at +14.1°, i.e. a stream starting at `stim[1]`. Cause, in `tb_haifuraiya_channelizer_axi.vhd`: `wait for 2 us` from a clock edge lands exactly on the next edge, so the burst's first `tvalid` rose in the same delta as `aclk`; the core's combinational `sample_valid_int` (`haifuraiya_channelizer_axi.vhd`) updates a delta later and the decimator never saw `stim[0]`. The link's input FIFO reads `tvalid` directly inside its clocked process, caught the sample, and delivered it a full cycle wide — which is why tier 2 was right. Fix: `wait until rising_edge(aclk)` after each such `wait for` (two places). Every per-frame BER table recorded before this fix was computed on the inverted decimation phase; the grade class never changed. The hardware pacer (registered `tvalid`) never had the race.
+
+**Bench tail, pre-existing, in the tracker:** after injection, SL-A polls for symbol lock 40 ms after the signal ended (fails by placement), then the SL-C write to demod register 0x0AC never gets `bvalid` and the bench dies by `$finish` before printing its summary or the `ESI LINK` line — in tier 1 at commit `8980e58` as well. `haifuraiya_demod_regs` commits a write only when AW and W handshake in the same cycle; the bench (correctly) does not promise that. Issue filed 2026-11-06.
+
+**Lessons for the runner (fixed 2026-11-05):** a Tcl global that survives between `source`s turned a tier-1 run into tier 2 for a day — the switch is now consumed and unset on every source; the project directory is deleted on every source, which destroyed the 59-hour waveform — every run now archives its log, `.wdb` and outputs before anything else can run.
 
 ## 5. Tier 3 operating point (ADC)
 
@@ -238,9 +205,10 @@ we want that in writing since the risk is the FPGA's banks.
 1. Port check: run `xm107/script_64b.tcl` under Vivado 2022.2 untouched
    (scratch dir), log the IP-upgrade complaints. Measures the port cost.
 2. ~~Write the reassembler + its bench; frame layout per §4.~~ Done; tier 2
-   in simulation **passed** 2026-11-05 (§4.1). Open from that run: compare
-   the bench tail (SL-A, 0x0AC bvalid timeout, cpu/elapsed ratio) with the
-   tier-1 log; then the sync-word dents against tier 1's correlation peaks.
+   in simulation **passed and is bit-identical to tier 1** (§4.1,
+   2026-11-08). Remaining: a 25-frame tier-1 acceptance on the fixed bench
+   (the existing tables are on the inverted phase); the bench-tail items
+   are in the tracker.
 3. Bring `tx_esistream`/`rx_esistream` + the package's transceiver block
    into our block design (new `vck190_esistream_bd.tcl` or a `VCK190_ESI=1`
    variant of the playback BD), board clock on refclk0, internal loopback,
