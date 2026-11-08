@@ -1127,6 +1127,7 @@ wait for 1 us;    -- let the design come back up
     axi_write(ADDR_CONTROL, 1);              -- soft reset (bit0=1): core_reset=1, clears the EMA cascade
     axi_write(ADDR_CONTROL, 2);              -- release + enable (bit1=1): core_reset=0, run
     wait for 2 us;                           -- let the reset settle / pipeline re-prime before the burst
+    wait until rising_edge(aclk);            -- 2026-11-08: same edge re-alignment (matters when DO_DEMOD_BRACKET=false)
     report "MILESTONE 1: channelizer configured + enabled" severity note;
 
     -- =========================================================================
@@ -1266,6 +1267,13 @@ wait for 1 us;    -- let the design come back up
     else fail("SL-B STATUS.1 asserted with no signal -- lock detector lying"); end if;
 	
     wait for 2 us;                           -- let the re-init settle before the burst arrives
+    wait until rising_edge(aclk);            -- 2026-11-08: re-align to a clock edge before the first tvalid.
+                                             -- `wait for 2 us` from an edge lands exactly ON the next edge, so
+                                             -- the loop's first tvalid rose in the same delta as aclk; the
+                                             -- core's combinational sample_valid_int (channelizer_axi) updates a
+                                             -- delta later and the halfband never saw stim[0]. Every sim before
+                                             -- this ran on the other decimation phase. Found by the VCK190
+                                             -- tier-2 bench, whose link FIFO reads tvalid directly and caught it.
     report "MILESTONE 2: demod bracket complete; endfile(fin)=" &
            boolean'image(endfile(fin)) severity note;
     else

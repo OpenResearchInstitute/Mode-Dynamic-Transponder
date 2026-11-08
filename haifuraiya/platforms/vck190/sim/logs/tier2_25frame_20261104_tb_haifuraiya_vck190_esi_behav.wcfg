@@ -1,0 +1,1147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wave_config>
+   <wave_state>
+   </wave_state>
+   <db_ref_list>
+      <db_ref path="tb_haifuraiya_vck190_esi_behav.wdb" id="1">
+         <top_modules>
+            <top_module name="channel_gain_pkg" />
+            <top_module name="esi_loop_pkg" />
+            <top_module name="esistream_pkg" />
+            <top_module name="glbl" />
+            <top_module name="haifuraiya_coeffs_pkg" />
+            <top_module name="halfband_taps_pkg" />
+            <top_module name="lut16q_pkg" />
+            <top_module name="tb_haifuraiya_vck190_esi" />
+            <top_module name="vcomponents" />
+         </top_modules>
+      </db_ref>
+   </db_ref_list>
+   <zoom_setting>
+      <ZoomStartTime time="0.000000000 ms"></ZoomStartTime>
+      <ZoomEndTime time="163.381555039 ms"></ZoomEndTime>
+      <Cursor1Time time="0.000000000 ms"></Cursor1Time>
+   </zoom_setting>
+   <column_width_setting>
+      <NameColumnWidth column_width="432"></NameColumnWidth>
+      <ValueColumnWidth column_width="210"></ValueColumnWidth>
+   </column_width_setting>
+   <WVObjectSize size="127" />
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/aclk">
+      <obj_property name="ElementShortName">aclk</obj_property>
+      <obj_property name="ObjectShortName">aclk</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/aresetn">
+      <obj_property name="ElementShortName">aresetn</obj_property>
+      <obj_property name="ObjectShortName">aresetn</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axis_data_tdata">
+      <obj_property name="ElementShortName">s_axis_data_tdata[31:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axis_data_tdata[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axis_data_tvalid">
+      <obj_property name="ElementShortName">s_axis_data_tvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axis_data_tvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axis_data_tready">
+      <obj_property name="ElementShortName">s_axis_data_tready</obj_property>
+      <obj_property name="ObjectShortName">s_axis_data_tready</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/link_clk">
+      <obj_property name="ElementShortName">link_clk</obj_property>
+      <obj_property name="ObjectShortName">link_clk</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/link_rstn">
+      <obj_property name="ElementShortName">link_rstn</obj_property>
+      <obj_property name="ObjectShortName">link_rstn</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/esi_tdata">
+      <obj_property name="ElementShortName">esi_tdata[31:0]</obj_property>
+      <obj_property name="ObjectShortName">esi_tdata[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/esi_tvalid">
+      <obj_property name="ElementShortName">esi_tvalid</obj_property>
+      <obj_property name="ObjectShortName">esi_tvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/esi_tready">
+      <obj_property name="ElementShortName">esi_tready</obj_property>
+      <obj_property name="ObjectShortName">esi_tready</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/esi_link_ready">
+      <obj_property name="ElementShortName">esi_link_ready</obj_property>
+      <obj_property name="ObjectShortName">esi_link_ready</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/esi_seq_errors">
+      <obj_property name="ElementShortName">esi_seq_errors[31:0]</obj_property>
+      <obj_property name="ObjectShortName">esi_seq_errors[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/esi_marker_errors">
+      <obj_property name="ElementShortName">esi_marker_errors[31:0]</obj_property>
+      <obj_property name="ObjectShortName">esi_marker_errors[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/esi_multi_errors">
+      <obj_property name="ElementShortName">esi_multi_errors[31:0]</obj_property>
+      <obj_property name="ObjectShortName">esi_multi_errors[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/esi_samples_sent">
+      <obj_property name="ElementShortName">esi_samples_sent[31:0]</obj_property>
+      <obj_property name="ObjectShortName">esi_samples_sent[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/esi_samples_rcvd">
+      <obj_property name="ElementShortName">esi_samples_rcvd[31:0]</obj_property>
+      <obj_property name="ObjectShortName">esi_samples_rcvd[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/m_axis_chans_tdata">
+      <obj_property name="ElementShortName">m_axis_chans_tdata[31:0]</obj_property>
+      <obj_property name="ObjectShortName">m_axis_chans_tdata[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/m_axis_chans_tvalid">
+      <obj_property name="ElementShortName">m_axis_chans_tvalid</obj_property>
+      <obj_property name="ObjectShortName">m_axis_chans_tvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/m_axis_chans_tready">
+      <obj_property name="ElementShortName">m_axis_chans_tready</obj_property>
+      <obj_property name="ObjectShortName">m_axis_chans_tready</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/m_axis_chans_tdest">
+      <obj_property name="ElementShortName">m_axis_chans_tdest[7:0]</obj_property>
+      <obj_property name="ObjectShortName">m_axis_chans_tdest[7:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/m_axis_chans_tlast">
+      <obj_property name="ElementShortName">m_axis_chans_tlast</obj_property>
+      <obj_property name="ObjectShortName">m_axis_chans_tlast</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_awaddr">
+      <obj_property name="ElementShortName">s_axi_ctrl_awaddr[11:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_awaddr[11:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_awvalid">
+      <obj_property name="ElementShortName">s_axi_ctrl_awvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_awvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_awready">
+      <obj_property name="ElementShortName">s_axi_ctrl_awready</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_awready</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_wdata">
+      <obj_property name="ElementShortName">s_axi_ctrl_wdata[31:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_wdata[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_wstrb">
+      <obj_property name="ElementShortName">s_axi_ctrl_wstrb[3:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_wstrb[3:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_wvalid">
+      <obj_property name="ElementShortName">s_axi_ctrl_wvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_wvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_wready">
+      <obj_property name="ElementShortName">s_axi_ctrl_wready</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_wready</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_bresp">
+      <obj_property name="ElementShortName">s_axi_ctrl_bresp[1:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_bresp[1:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_bvalid">
+      <obj_property name="ElementShortName">s_axi_ctrl_bvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_bvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_bready">
+      <obj_property name="ElementShortName">s_axi_ctrl_bready</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_bready</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_araddr">
+      <obj_property name="ElementShortName">s_axi_ctrl_araddr[11:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_araddr[11:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_arvalid">
+      <obj_property name="ElementShortName">s_axi_ctrl_arvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_arvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_arready">
+      <obj_property name="ElementShortName">s_axi_ctrl_arready</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_arready</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_rdata">
+      <obj_property name="ElementShortName">s_axi_ctrl_rdata[31:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_rdata[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_rresp">
+      <obj_property name="ElementShortName">s_axi_ctrl_rresp[1:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_rresp[1:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_rvalid">
+      <obj_property name="ElementShortName">s_axi_ctrl_rvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_rvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_rready">
+      <obj_property name="ElementShortName">s_axi_ctrl_rready</obj_property>
+      <obj_property name="ObjectShortName">s_axi_ctrl_rready</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_awaddr">
+      <obj_property name="ElementShortName">s_axi_demod_awaddr[11:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_awaddr[11:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_awvalid">
+      <obj_property name="ElementShortName">s_axi_demod_awvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_awvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_awready">
+      <obj_property name="ElementShortName">s_axi_demod_awready</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_awready</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_wdata">
+      <obj_property name="ElementShortName">s_axi_demod_wdata[31:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_wdata[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_wstrb">
+      <obj_property name="ElementShortName">s_axi_demod_wstrb[3:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_wstrb[3:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_wvalid">
+      <obj_property name="ElementShortName">s_axi_demod_wvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_wvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_wready">
+      <obj_property name="ElementShortName">s_axi_demod_wready</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_wready</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_bresp">
+      <obj_property name="ElementShortName">s_axi_demod_bresp[1:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_bresp[1:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_bvalid">
+      <obj_property name="ElementShortName">s_axi_demod_bvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_bvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_bready">
+      <obj_property name="ElementShortName">s_axi_demod_bready</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_bready</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_araddr">
+      <obj_property name="ElementShortName">s_axi_demod_araddr[11:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_araddr[11:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_arvalid">
+      <obj_property name="ElementShortName">s_axi_demod_arvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_arvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_arready">
+      <obj_property name="ElementShortName">s_axi_demod_arready</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_arready</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_rdata">
+      <obj_property name="ElementShortName">s_axi_demod_rdata[31:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_rdata[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_rresp">
+      <obj_property name="ElementShortName">s_axi_demod_rresp[1:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_rresp[1:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_rvalid">
+      <obj_property name="ElementShortName">s_axi_demod_rvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_rvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_rready">
+      <obj_property name="ElementShortName">s_axi_demod_rready</obj_property>
+      <obj_property name="ObjectShortName">s_axi_demod_rready</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/chan_capture">
+      <obj_property name="ElementShortName">chan_capture[0:63][31:0]</obj_property>
+      <obj_property name="ObjectShortName">chan_capture[0:63][31:0]</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/beats_in_frame">
+      <obj_property name="ElementShortName">beats_in_frame</obj_property>
+      <obj_property name="ObjectShortName">beats_in_frame</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/seen_tdest">
+      <obj_property name="ElementShortName">seen_tdest</obj_property>
+      <obj_property name="ObjectShortName">seen_tdest</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/frame_seq_ok">
+      <obj_property name="ElementShortName">frame_seq_ok</obj_property>
+      <obj_property name="ObjectShortName">frame_seq_ok</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/frames_observed">
+      <obj_property name="ElementShortName">frames_observed</obj_property>
+      <obj_property name="ObjectShortName">frames_observed</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/running">
+      <obj_property name="ElementShortName">running</obj_property>
+      <obj_property name="ObjectShortName">running</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/chan_i_reg">
+      <obj_property name="ElementShortName">chan_i_reg[15:0]</obj_property>
+      <obj_property name="ObjectShortName">chan_i_reg[15:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/chan_q_reg">
+      <obj_property name="ElementShortName">chan_q_reg[15:0]</obj_property>
+      <obj_property name="ObjectShortName">chan_q_reg[15:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/dbg_soft_corr_s">
+      <obj_property name="ElementShortName">dbg_soft_corr_s[15:0]</obj_property>
+      <obj_property name="ObjectShortName">dbg_soft_corr_s[15:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/dbg_sym_valid_s">
+      <obj_property name="ElementShortName">dbg_sym_valid_s</obj_property>
+      <obj_property name="ObjectShortName">dbg_sym_valid_s</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/rx_svalid">
+      <obj_property name="ElementShortName">rx_svalid</obj_property>
+      <obj_property name="ObjectShortName">rx_svalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/lock_f1">
+      <obj_property name="ElementShortName">lock_f1</obj_property>
+      <obj_property name="ObjectShortName">lock_f1</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/lock_f2">
+      <obj_property name="ElementShortName">lock_f2</obj_property>
+      <obj_property name="ObjectShortName">lock_f2</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/sb_tdata">
+      <obj_property name="ElementShortName">sb_tdata[2:0]</obj_property>
+      <obj_property name="ObjectShortName">sb_tdata[2:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/sb_tvalid">
+      <obj_property name="ElementShortName">sb_tvalid</obj_property>
+      <obj_property name="ObjectShortName">sb_tvalid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/sb_tlast">
+      <obj_property name="ElementShortName">sb_tlast</obj_property>
+      <obj_property name="ObjectShortName">sb_tlast</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/sb_tready">
+      <obj_property name="ElementShortName">sb_tready</obj_property>
+      <obj_property name="ObjectShortName">sb_tready</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/frame_sync_locked">
+      <obj_property name="ElementShortName">frame_sync_locked</obj_property>
+      <obj_property name="ObjectShortName">frame_sync_locked</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/frames_received">
+      <obj_property name="ElementShortName">frames_received[31:0]</obj_property>
+      <obj_property name="ObjectShortName">frames_received[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/n_target_samps">
+      <obj_property name="ElementShortName">n_target_samps</obj_property>
+      <obj_property name="ObjectShortName">n_target_samps</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/n_soft_beats">
+      <obj_property name="ElementShortName">n_soft_beats</obj_property>
+      <obj_property name="ObjectShortName">n_soft_beats</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/n_soft_frames">
+      <obj_property name="ElementShortName">n_soft_frames</obj_property>
+      <obj_property name="ObjectShortName">n_soft_frames</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/n_soft_raw">
+      <obj_property name="ElementShortName">n_soft_raw</obj_property>
+      <obj_property name="ObjectShortName">n_soft_raw</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/dbg_f1_err_s">
+      <obj_property name="ElementShortName">dbg_f1_err_s[31:0]</obj_property>
+      <obj_property name="ObjectShortName">dbg_f1_err_s[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/SMP_PERIOD">
+      <obj_property name="ElementShortName">SMP_PERIOD</obj_property>
+      <obj_property name="ObjectShortName">SMP_PERIOD</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/CLK_PERIOD">
+      <obj_property name="ElementShortName">CLK_PERIOD</obj_property>
+      <obj_property name="ObjectShortName">CLK_PERIOD</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/N_CHANNELS">
+      <obj_property name="ElementShortName">N_CHANNELS</obj_property>
+      <obj_property name="ObjectShortName">N_CHANNELS</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/M_DECIMATION">
+      <obj_property name="ElementShortName">M_DECIMATION</obj_property>
+      <obj_property name="ObjectShortName">M_DECIMATION</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/DATA_WIDTH">
+      <obj_property name="ElementShortName">DATA_WIDTH</obj_property>
+      <obj_property name="ObjectShortName">DATA_WIDTH</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/ACCUM_WIDTH">
+      <obj_property name="ElementShortName">ACCUM_WIDTH</obj_property>
+      <obj_property name="ObjectShortName">ACCUM_WIDTH</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/ADDR_WIDTH">
+      <obj_property name="ElementShortName">ADDR_WIDTH</obj_property>
+      <obj_property name="ObjectShortName">ADDR_WIDTH</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/ADDR_VERSION">
+      <obj_property name="ElementShortName">ADDR_VERSION</obj_property>
+      <obj_property name="ObjectShortName">ADDR_VERSION</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/ADDR_CONTROL">
+      <obj_property name="ElementShortName">ADDR_CONTROL</obj_property>
+      <obj_property name="ObjectShortName">ADDR_CONTROL</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/ADDR_STATUS">
+      <obj_property name="ElementShortName">ADDR_STATUS</obj_property>
+      <obj_property name="ObjectShortName">ADDR_STATUS</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/ADDR_FRAME_COUNT">
+      <obj_property name="ElementShortName">ADDR_FRAME_COUNT</obj_property>
+      <obj_property name="ObjectShortName">ADDR_FRAME_COUNT</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/ADDR_DROPPED">
+      <obj_property name="ElementShortName">ADDR_DROPPED</obj_property>
+      <obj_property name="ObjectShortName">ADDR_DROPPED</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/ADDR_OUTPUT_SHIFT">
+      <obj_property name="ElementShortName">ADDR_OUTPUT_SHIFT</obj_property>
+      <obj_property name="ObjectShortName">ADDR_OUTPUT_SHIFT</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/ADDR_ALPHA1">
+      <obj_property name="ElementShortName">ADDR_ALPHA1</obj_property>
+      <obj_property name="ObjectShortName">ADDR_ALPHA1</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/ADDR_ALPHA2">
+      <obj_property name="ElementShortName">ADDR_ALPHA2</obj_property>
+      <obj_property name="ObjectShortName">ADDR_ALPHA2</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/ADDR_NORM_SQUELCH">
+      <obj_property name="ElementShortName">ADDR_NORM_SQUELCH</obj_property>
+      <obj_property name="ObjectShortName">ADDR_NORM_SQUELCH</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/ADDR_POWER_BASE">
+      <obj_property name="ElementShortName">ADDR_POWER_BASE</obj_property>
+      <obj_property name="ObjectShortName">ADDR_POWER_BASE</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/LINK_CLK_PERIOD">
+      <obj_property name="ElementShortName">LINK_CLK_PERIOD</obj_property>
+      <obj_property name="ObjectShortName">LINK_CLK_PERIOD</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/RUN_CHANNELIZER_TESTS">
+      <obj_property name="ElementShortName">RUN_CHANNELIZER_TESTS</obj_property>
+      <obj_property name="ObjectShortName">RUN_CHANNELIZER_TESTS</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/DO_DEMOD_BRACKET">
+      <obj_property name="ElementShortName">DO_DEMOD_BRACKET</obj_property>
+      <obj_property name="ObjectShortName">DO_DEMOD_BRACKET</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/TARGET_INPUT_BIN">
+      <obj_property name="ElementShortName">TARGET_INPUT_BIN</obj_property>
+      <obj_property name="ObjectShortName">TARGET_INPUT_BIN</obj_property>
+   </wvobject>
+   <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/TARGET_CHANNEL">
+      <obj_property name="ElementShortName">TARGET_CHANNEL</obj_property>
+      <obj_property name="ObjectShortName">TARGET_CHANNEL</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/FREQ_WORD_F1">
+      <obj_property name="ElementShortName">FREQ_WORD_F1[31:0]</obj_property>
+      <obj_property name="ObjectShortName">FREQ_WORD_F1[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/FREQ_WORD_F2">
+      <obj_property name="ElementShortName">FREQ_WORD_F2[31:0]</obj_property>
+      <obj_property name="ObjectShortName">FREQ_WORD_F2[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/LPF_P_GAIN">
+      <obj_property name="ElementShortName">LPF_P_GAIN[23:0]</obj_property>
+      <obj_property name="ObjectShortName">LPF_P_GAIN[23:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/LPF_I_GAIN">
+      <obj_property name="ElementShortName">LPF_I_GAIN[23:0]</obj_property>
+      <obj_property name="ObjectShortName">LPF_I_GAIN[23:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/LPF_ALPHA">
+      <obj_property name="ElementShortName">LPF_ALPHA[23:0]</obj_property>
+      <obj_property name="ObjectShortName">LPF_ALPHA[23:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/SYM_LOCK_CNT">
+      <obj_property name="ElementShortName">SYM_LOCK_CNT[9:0]</obj_property>
+      <obj_property name="ObjectShortName">SYM_LOCK_CNT[9:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/SYM_LOCK_THR">
+      <obj_property name="ElementShortName">SYM_LOCK_THR[15:0]</obj_property>
+      <obj_property name="ObjectShortName">SYM_LOCK_THR[15:0]</obj_property>
+   </wvobject>
+   <wvobject type="group" fp_name="group334">
+      <obj_property name="label">TB_Control</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/frames_observed">
+         <obj_property name="ElementShortName">frames_observed</obj_property>
+         <obj_property name="ObjectShortName">frames_observed</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/n_target_samps">
+         <obj_property name="ElementShortName">n_target_samps</obj_property>
+         <obj_property name="ObjectShortName">n_target_samps</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/n_soft_beats">
+         <obj_property name="ElementShortName">n_soft_beats</obj_property>
+         <obj_property name="ObjectShortName">n_soft_beats</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="other" fp_name="/tb_haifuraiya_vck190_esi/n_soft_frames">
+         <obj_property name="ElementShortName">n_soft_frames</obj_property>
+         <obj_property name="ObjectShortName">n_soft_frames</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/running">
+         <obj_property name="ElementShortName">running</obj_property>
+         <obj_property name="ObjectShortName">running</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group340">
+      <obj_property name="label">Control_Plane_Channelizer</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_awaddr">
+         <obj_property name="ElementShortName">s_axi_ctrl_awaddr[11:0]</obj_property>
+         <obj_property name="ObjectShortName">s_axi_ctrl_awaddr[11:0]</obj_property>
+         <obj_property name="Radix">HEXRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_awvalid">
+         <obj_property name="ElementShortName">s_axi_ctrl_awvalid</obj_property>
+         <obj_property name="ObjectShortName">s_axi_ctrl_awvalid</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_wdata">
+         <obj_property name="ElementShortName">s_axi_ctrl_wdata[31:0]</obj_property>
+         <obj_property name="ObjectShortName">s_axi_ctrl_wdata[31:0]</obj_property>
+         <obj_property name="Radix">HEXRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_wvalid">
+         <obj_property name="ElementShortName">s_axi_ctrl_wvalid</obj_property>
+         <obj_property name="ObjectShortName">s_axi_ctrl_wvalid</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_ctrl_bvalid">
+         <obj_property name="ElementShortName">s_axi_ctrl_bvalid</obj_property>
+         <obj_property name="ObjectShortName">s_axi_ctrl_bvalid</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group346">
+      <obj_property name="label">Control_Plane_Demod</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_awaddr">
+         <obj_property name="ElementShortName">s_axi_demod_awaddr[11:0]</obj_property>
+         <obj_property name="ObjectShortName">s_axi_demod_awaddr[11:0]</obj_property>
+         <obj_property name="Radix">HEXRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_awvalid">
+         <obj_property name="ElementShortName">s_axi_demod_awvalid</obj_property>
+         <obj_property name="ObjectShortName">s_axi_demod_awvalid</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_awready">
+         <obj_property name="ElementShortName">s_axi_demod_awready</obj_property>
+         <obj_property name="ObjectShortName">s_axi_demod_awready</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_wdata">
+         <obj_property name="ElementShortName">s_axi_demod_wdata[31:0]</obj_property>
+         <obj_property name="ObjectShortName">s_axi_demod_wdata[31:0]</obj_property>
+         <obj_property name="Radix">HEXRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_wvalid">
+         <obj_property name="ElementShortName">s_axi_demod_wvalid</obj_property>
+         <obj_property name="ObjectShortName">s_axi_demod_wvalid</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_wready">
+         <obj_property name="ElementShortName">s_axi_demod_wready</obj_property>
+         <obj_property name="ObjectShortName">s_axi_demod_wready</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axi_demod_bvalid">
+         <obj_property name="ElementShortName">s_axi_demod_bvalid</obj_property>
+         <obj_property name="ObjectShortName">s_axi_demod_bvalid</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/init">
+         <obj_property name="ElementShortName">init</obj_property>
+         <obj_property name="ObjectShortName">init</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/rx_enable">
+         <obj_property name="ElementShortName">rx_enable</obj_property>
+         <obj_property name="ObjectShortName">rx_enable</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group356">
+      <obj_property name="label">Channelizer_Input</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axis_data_tvalid">
+         <obj_property name="ElementShortName">s_axis_data_tvalid</obj_property>
+         <obj_property name="ObjectShortName">s_axis_data_tvalid</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axis_data_tready">
+         <obj_property name="ElementShortName">s_axis_data_tready</obj_property>
+         <obj_property name="ObjectShortName">s_axis_data_tready</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/s_axis_data_tdata">
+         <obj_property name="ElementShortName">s_axis_data_tdata[31:0]</obj_property>
+         <obj_property name="ObjectShortName">s_axis_data_tdata[31:0]</obj_property>
+         <obj_property name="Radix">HEXRADIX</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group360">
+      <obj_property name="label">Channel_Numbering</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_chan/chan_idx_int">
+         <obj_property name="ElementShortName">chan_idx_int[5:0]</obj_property>
+         <obj_property name="ObjectShortName">chan_idx_int[5:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_chan/chan_idx_int_r">
+         <obj_property name="ElementShortName">chan_idx_int_r[5:0]</obj_property>
+         <obj_property name="ObjectShortName">chan_idx_int_r[5:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_chan/eq_chan">
+         <obj_property name="ElementShortName">eq_chan[5:0]</obj_property>
+         <obj_property name="ObjectShortName">eq_chan[5:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_chan/chan_valid">
+         <obj_property name="ElementShortName">chan_valid</obj_property>
+         <obj_property name="ObjectShortName">chan_valid</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_chan/chan_valid_r">
+         <obj_property name="ElementShortName">chan_valid_r</obj_property>
+         <obj_property name="ObjectShortName">chan_valid_r</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_chan/eq_valid">
+         <obj_property name="ElementShortName">eq_valid</obj_property>
+         <obj_property name="ObjectShortName">eq_valid</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group367">
+      <obj_property name="label">Channelizer_Output</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/chans_tvalid">
+         <obj_property name="ElementShortName">chans_tvalid</obj_property>
+         <obj_property name="ObjectShortName">chans_tvalid</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/chans_tdest">
+         <obj_property name="ElementShortName">chans_tdest[7:0]</obj_property>
+         <obj_property name="ObjectShortName">chans_tdest[7:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/chans_tdata">
+         <obj_property name="ElementShortName">chans_tdata[31:0]</obj_property>
+         <obj_property name="ObjectShortName">chans_tdata[31:0]</obj_property>
+         <obj_property name="Radix">HEXRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/chans_tlast">
+         <obj_property name="ElementShortName">chans_tlast</obj_property>
+         <obj_property name="ObjectShortName">chans_tlast</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_chan/chan_last">
+         <obj_property name="ElementShortName">chan_last</obj_property>
+         <obj_property name="ObjectShortName">chan_last</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group373">
+      <obj_property name="label">Demod_Input</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/rx_svalid">
+         <obj_property name="ElementShortName">rx_svalid</obj_property>
+         <obj_property name="ObjectShortName">rx_svalid</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/chan_i_reg">
+         <obj_property name="ElementShortName">chan_i_reg[15:0]</obj_property>
+         <obj_property name="ObjectShortName">chan_i_reg[15:0]</obj_property>
+         <obj_property name="Radix">HEXRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/chan_q_reg">
+         <obj_property name="ElementShortName">chan_q_reg[15:0]</obj_property>
+         <obj_property name="ObjectShortName">chan_q_reg[15:0]</obj_property>
+         <obj_property name="Radix">HEXRADIX</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group377">
+      <obj_property name="label">Elastic_Store</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/rx_svalid">
+         <obj_property name="ElementShortName">rx_svalid</obj_property>
+         <obj_property name="ObjectShortName">rx_svalid</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/st_wr_ptr_rd">
+         <obj_property name="ElementShortName">st_wr_ptr_rd[23:0]</obj_property>
+         <obj_property name="ObjectShortName">st_wr_ptr_rd[23:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/st_fill_ptr">
+         <obj_property name="ElementShortName">st_fill_ptr[23:0]</obj_property>
+         <obj_property name="ObjectShortName">st_fill_ptr[23:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/st_fill_lead">
+         <obj_property name="ElementShortName">st_fill_lead[23:0]</obj_property>
+         <obj_property name="ObjectShortName">st_fill_lead[23:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/st_occ">
+         <obj_property name="ElementShortName">st_occ[23:0]</obj_property>
+         <obj_property name="ObjectShortName">st_occ[23:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/store_hold">
+         <obj_property name="ElementShortName">store_hold</obj_property>
+         <obj_property name="ObjectShortName">store_hold</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/st_fill_pend">
+         <obj_property name="ElementShortName">st_fill_pend</obj_property>
+         <obj_property name="ObjectShortName">st_fill_pend</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/st_starve">
+         <obj_property name="ElementShortName">st_starve</obj_property>
+         <obj_property name="ObjectShortName">st_starve</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/st_stomp">
+         <obj_property name="ElementShortName">st_stomp</obj_property>
+         <obj_property name="ObjectShortName">st_stomp</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group387">
+      <obj_property name="label">MLSE_Engine</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/engine/pos">
+         <obj_property name="ElementShortName">pos[47:0]</obj_property>
+         <obj_property name="ObjectShortName">pos[47:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/engine/k">
+         <obj_property name="ElementShortName">k[23:0]</obj_property>
+         <obj_property name="ObjectShortName">k[23:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/engine/freq">
+         <obj_property name="ElementShortName">freq[31:0]</obj_property>
+         <obj_property name="ObjectShortName">freq[31:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/e_valid">
+         <obj_property name="ElementShortName">e_valid</obj_property>
+         <obj_property name="ObjectShortName">e_valid</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/e_y1r">
+         <obj_property name="ElementShortName">e_y1r[23:0]</obj_property>
+         <obj_property name="ObjectShortName">e_y1r[23:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/e_y2r">
+         <obj_property name="ElementShortName">e_y2r[23:0]</obj_property>
+         <obj_property name="ObjectShortName">e_y2r[23:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group394">
+      <obj_property name="label">MLSE_Trellis</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/th0">
+         <obj_property name="ElementShortName">th0[15:0]</obj_property>
+         <obj_property name="ObjectShortName">th0[15:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/th1">
+         <obj_property name="ElementShortName">th1[15:0]</obj_property>
+         <obj_property name="ObjectShortName">th1[15:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/th2">
+         <obj_property name="ElementShortName">th2[15:0]</obj_property>
+         <obj_property name="ObjectShortName">th2[15:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/th3">
+         <obj_property name="ElementShortName">th3[15:0]</obj_property>
+         <obj_property name="ObjectShortName">th3[15:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/dbg_best">
+         <obj_property name="ElementShortName">dbg_best[1:0]</obj_property>
+         <obj_property name="ObjectShortName">dbg_best[1:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/m_busy">
+         <obj_property name="ElementShortName">m_busy</obj_property>
+         <obj_property name="ObjectShortName">m_busy</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group401">
+      <obj_property name="label">Symbol_Lock</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/sl_locked">
+         <obj_property name="ElementShortName">sl_locked</obj_property>
+         <obj_property name="ObjectShortName">sl_locked</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/u_symlock/ratio_pct">
+         <obj_property name="ElementShortName">ratio_pct[7:0]</obj_property>
+         <obj_property name="ObjectShortName">ratio_pct[7:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/u_symlock/window_full">
+         <obj_property name="ElementShortName">window_full</obj_property>
+         <obj_property name="ObjectShortName">window_full</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/u_symlock/s_num">
+         <obj_property name="ElementShortName">s_num[28:0]</obj_property>
+         <obj_property name="ObjectShortName">s_num[28:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/u_symlock/s_den">
+         <obj_property name="ElementShortName">s_den[28:0]</obj_property>
+         <obj_property name="ObjectShortName">s_den[28:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/u_symlock/fill">
+         <obj_property name="ElementShortName">fill[12:0]</obj_property>
+         <obj_property name="ObjectShortName">fill[12:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/u_symlock/wlog_r">
+         <obj_property name="ElementShortName">wlog_r[3:0]</obj_property>
+         <obj_property name="ObjectShortName">wlog_r[3:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/sl_e_early">
+         <obj_property name="ElementShortName">sl_e_early[15:0]</obj_property>
+         <obj_property name="ObjectShortName">sl_e_early[15:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/sl_e_late">
+         <obj_property name="ElementShortName">sl_e_late[15:0]</obj_property>
+         <obj_property name="ObjectShortName">sl_e_late[15:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/sl_e_err_v">
+         <obj_property name="ElementShortName">sl_e_err_v</obj_property>
+         <obj_property name="ObjectShortName">sl_e_err_v</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/sym_clk_offset">
+         <obj_property name="ElementShortName">sym_clk_offset[31:0]</obj_property>
+         <obj_property name="ObjectShortName">sym_clk_offset[31:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/dbg_freq">
+         <obj_property name="ElementShortName">dbg_freq[31:0]</obj_property>
+         <obj_property name="ObjectShortName">dbg_freq[31:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/dbg_trk">
+         <obj_property name="ElementShortName">dbg_trk</obj_property>
+         <obj_property name="ObjectShortName">dbg_trk</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/dbg_ted">
+         <obj_property name="ElementShortName">dbg_ted[16:0]</obj_property>
+         <obj_property name="ObjectShortName">dbg_ted[16:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/e_pos">
+         <obj_property name="ElementShortName">e_pos[47:0]</obj_property>
+         <obj_property name="ObjectShortName">e_pos[47:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group417">
+      <obj_property name="label">CFO</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/cfo_word">
+         <obj_property name="ElementShortName">cfo_word[15:0]</obj_property>
+         <obj_property name="ObjectShortName">cfo_word[15:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_cfo/en">
+         <obj_property name="ElementShortName">en</obj_property>
+         <obj_property name="ObjectShortName">en</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_cfo/out_valid">
+         <obj_property name="ElementShortName">out_valid</obj_property>
+         <obj_property name="ObjectShortName">out_valid</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_cfo/phase">
+         <obj_property name="ElementShortName">phase[31:0]</obj_property>
+         <obj_property name="ObjectShortName">phase[31:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_cfo/i_out">
+         <obj_property name="ElementShortName">i_out[15:0]</obj_property>
+         <obj_property name="ObjectShortName">i_out[15:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_cfo/q_out">
+         <obj_property name="ElementShortName">q_out[15:0]</obj_property>
+         <obj_property name="ObjectShortName">q_out[15:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/u_afc/est_hz">
+         <obj_property name="ElementShortName">est_hz[15:0]</obj_property>
+         <obj_property name="ObjectShortName">est_hz[15:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/u_afc/state_o">
+         <obj_property name="ElementShortName">state_o[2:0]</obj_property>
+         <obj_property name="ObjectShortName">state_o[2:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/u_afc/quality">
+         <obj_property name="ElementShortName">quality[15:0]</obj_property>
+         <obj_property name="ObjectShortName">quality[15:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/u_afc/cfo_locked">
+         <obj_property name="ElementShortName">cfo_locked</obj_property>
+         <obj_property name="ObjectShortName">cfo_locked</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/u_afc/in_acq">
+         <obj_property name="ElementShortName">in_acq</obj_property>
+         <obj_property name="ObjectShortName">in_acq</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/u_afc/seen_pre">
+         <obj_property name="ElementShortName">seen_pre</obj_property>
+         <obj_property name="ObjectShortName">seen_pre</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/acq_done_s">
+         <obj_property name="ElementShortName">acq_done_s</obj_property>
+         <obj_property name="ObjectShortName">acq_done_s</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/pre_ena_s">
+         <obj_property name="ElementShortName">pre_ena_s</obj_property>
+         <obj_property name="ObjectShortName">pre_ena_s</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/chan_quiet_s">
+         <obj_property name="ElementShortName">chan_quiet_s</obj_property>
+         <obj_property name="ObjectShortName">chan_quiet_s</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/quiet_cnt">
+         <obj_property name="ElementShortName">quiet_cnt[15:0]</obj_property>
+         <obj_property name="ObjectShortName">quiet_cnt[15:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/quiet_frame_s">
+         <obj_property name="ElementShortName">quiet_frame_s</obj_property>
+         <obj_property name="ObjectShortName">quiet_frame_s</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_chan/ctrl_norm_squelch">
+         <obj_property name="ElementShortName">ctrl_norm_squelch[30:0]</obj_property>
+         <obj_property name="ObjectShortName">ctrl_norm_squelch[30:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_chan/norm_power">
+         <obj_property name="ElementShortName">norm_power[30:0]</obj_property>
+         <obj_property name="ObjectShortName">norm_power[30:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_chan/norm_quiet">
+         <obj_property name="ElementShortName">norm_quiet</obj_property>
+         <obj_property name="ObjectShortName">norm_quiet</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_chan/u_norm/s4_gain">
+         <obj_property name="ElementShortName">s4_gain[15:0]</obj_property>
+         <obj_property name="ObjectShortName">s4_gain[15:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/pre_ferr_s">
+         <obj_property name="ElementShortName">pre_ferr_s[15:0]</obj_property>
+         <obj_property name="ObjectShortName">pre_ferr_s[15:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/pre_valid_s">
+         <obj_property name="ElementShortName">pre_valid_s</obj_property>
+         <obj_property name="ObjectShortName">pre_valid_s</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/pre_mag_s">
+         <obj_property name="ElementShortName">pre_mag_s[15:0]</obj_property>
+         <obj_property name="ObjectShortName">pre_mag_s[15:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group442">
+      <obj_property name="label">Bit_Decisions</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/rx_data">
+         <obj_property name="ElementShortName">rx_data</obj_property>
+         <obj_property name="ObjectShortName">rx_data</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/rx_data_soft">
+         <obj_property name="ElementShortName">rx_data_soft[15:0]</obj_property>
+         <obj_property name="ObjectShortName">rx_data_soft[15:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/rx_dvalid">
+         <obj_property name="ElementShortName">rx_dvalid</obj_property>
+         <obj_property name="ObjectShortName">rx_dvalid</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_demod/demod_lock">
+         <obj_property name="ElementShortName">demod_lock</obj_property>
+         <obj_property name="ObjectShortName">demod_lock</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group447">
+      <obj_property name="label">Frame_Sync</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <obj_property name="isExpanded"></obj_property>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/frame_sync_locked">
+         <obj_property name="ElementShortName">frame_sync_locked</obj_property>
+         <obj_property name="ObjectShortName">frame_sync_locked</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/frames_received">
+         <obj_property name="ElementShortName">frames_received[31:0]</obj_property>
+         <obj_property name="ObjectShortName">frames_received[31:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/debug_corr_peak">
+         <obj_property name="ElementShortName">debug_corr_peak[31:0]</obj_property>
+         <obj_property name="ObjectShortName">debug_corr_peak[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/debug_correlation">
+         <obj_property name="ElementShortName">debug_correlation[31:0]</obj_property>
+         <obj_property name="ObjectShortName">debug_correlation[31:0]</obj_property>
+         <obj_property name="WaveformStyle">STYLE_ANALOG</obj_property>
+         <obj_property name="CellHeight">100</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/debug_state">
+         <obj_property name="ElementShortName">debug_state[2:0]</obj_property>
+         <obj_property name="ObjectShortName">debug_state[2:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/debug_consecutive_good">
+         <obj_property name="ElementShortName">debug_consecutive_good[3:0]</obj_property>
+         <obj_property name="ObjectShortName">debug_consecutive_good[3:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/debug_missed_syncs">
+         <obj_property name="ElementShortName">debug_missed_syncs[3:0]</obj_property>
+         <obj_property name="ObjectShortName">debug_missed_syncs[3:0]</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/rx_bit">
+         <obj_property name="ElementShortName">rx_bit</obj_property>
+         <obj_property name="ObjectShortName">rx_bit</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/rx_bit_valid">
+         <obj_property name="ElementShortName">rx_bit_valid</obj_property>
+         <obj_property name="ObjectShortName">rx_bit_valid</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/demod_sync_lock">
+         <obj_property name="ElementShortName">demod_sync_lock</obj_property>
+         <obj_property name="ObjectShortName">demod_sync_lock</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/demod_sync_lock_d">
+         <obj_property name="ElementShortName">demod_sync_lock_d</obj_property>
+         <obj_property name="ObjectShortName">demod_sync_lock_d</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/debug_soft_current">
+         <obj_property name="ElementShortName">debug_soft_current[15:0]</obj_property>
+         <obj_property name="ObjectShortName">debug_soft_current[15:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/debug_soft_quantized">
+         <obj_property name="ElementShortName">debug_soft_quantized[2:0]</obj_property>
+         <obj_property name="ObjectShortName">debug_soft_quantized[2:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/corr_prev">
+         <obj_property name="ElementShortName">corr_prev[31:0]</obj_property>
+         <obj_property name="ObjectShortName">corr_prev[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/u_fsync/energy_prev">
+         <obj_property name="ElementShortName">energy_prev[31:0]</obj_property>
+         <obj_property name="ObjectShortName">energy_prev[31:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+         <obj_property name="WaveformStyle">STYLE_DIGITAL</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group463">
+      <obj_property name="label">ESI_Link</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <obj_property name="isExpanded"></obj_property>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/link_clk">
+         <obj_property name="ElementShortName">link_clk</obj_property>
+         <obj_property name="ObjectShortName">link_clk</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/link_rstn">
+         <obj_property name="ElementShortName">link_rstn</obj_property>
+         <obj_property name="ObjectShortName">link_rstn</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_esi/ip_ready">
+         <obj_property name="ElementShortName">ip_ready</obj_property>
+         <obj_property name="ObjectShortName">ip_ready</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_esi/sync_pulse">
+         <obj_property name="ElementShortName">sync_pulse</obj_property>
+         <obj_property name="ObjectShortName">sync_pulse</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/u_esi/lanes_ready">
+         <obj_property name="ElementShortName">lanes_ready</obj_property>
+         <obj_property name="ObjectShortName">lanes_ready</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/esi_link_ready">
+         <obj_property name="ElementShortName">esi_link_ready</obj_property>
+         <obj_property name="ObjectShortName">esi_link_ready</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axis_data_tvalid">
+         <obj_property name="ElementShortName">s_axis_data_tvalid</obj_property>
+         <obj_property name="ObjectShortName">s_axis_data_tvalid</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/s_axis_data_tready">
+         <obj_property name="ElementShortName">s_axis_data_tready</obj_property>
+         <obj_property name="ObjectShortName">s_axis_data_tready</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/esi_tvalid">
+         <obj_property name="ElementShortName">esi_tvalid</obj_property>
+         <obj_property name="ObjectShortName">esi_tvalid</obj_property>
+         <obj_property name="CustomSignalColor">#00FFFF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/esi_tready">
+         <obj_property name="ElementShortName">esi_tready</obj_property>
+         <obj_property name="ObjectShortName">esi_tready</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/esi_tdata">
+         <obj_property name="ElementShortName">esi_tdata[31:0]</obj_property>
+         <obj_property name="ObjectShortName">esi_tdata[31:0]</obj_property>
+         <obj_property name="Radix">HEXRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/esi_samples_sent">
+         <obj_property name="ElementShortName">esi_samples_sent[31:0]</obj_property>
+         <obj_property name="ObjectShortName">esi_samples_sent[31:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+         <obj_property name="CustomSignalColor">#00FFFF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+         <obj_property name="WaveformStyle">STYLE_ANALOG</obj_property>
+         <obj_property name="CellHeight">100</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/esi_samples_rcvd">
+         <obj_property name="ElementShortName">esi_samples_rcvd[31:0]</obj_property>
+         <obj_property name="ObjectShortName">esi_samples_rcvd[31:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+         <obj_property name="CustomSignalColor">#00FFFF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+         <obj_property name="WaveformStyle">STYLE_ANALOG</obj_property>
+         <obj_property name="CellHeight">100</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/esi_seq_errors">
+         <obj_property name="ElementShortName">esi_seq_errors[31:0]</obj_property>
+         <obj_property name="ObjectShortName">esi_seq_errors[31:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/esi_marker_errors">
+         <obj_property name="ElementShortName">esi_marker_errors[31:0]</obj_property>
+         <obj_property name="ObjectShortName">esi_marker_errors[31:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/esi_multi_errors">
+         <obj_property name="ElementShortName">esi_multi_errors[31:0]</obj_property>
+         <obj_property name="ObjectShortName">esi_multi_errors[31:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/sb_tvalid">
+      <obj_property name="ElementShortName">sb_tvalid</obj_property>
+      <obj_property name="ObjectShortName">sb_tvalid</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/sb_tdata">
+      <obj_property name="ElementShortName">sb_tdata[2:0]</obj_property>
+      <obj_property name="ObjectShortName">sb_tdata[2:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_haifuraiya_vck190_esi/sb_tlast">
+      <obj_property name="ElementShortName">sb_tlast</obj_property>
+      <obj_property name="ObjectShortName">sb_tlast</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_haifuraiya_vck190_esi/u_rx/u_rx/cfo_applied">
+      <obj_property name="ElementShortName">cfo_applied[15:0]</obj_property>
+      <obj_property name="ObjectShortName">cfo_applied[15:0]</obj_property>
+   </wvobject>
+</wave_config>

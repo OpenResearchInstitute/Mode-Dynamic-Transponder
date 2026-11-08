@@ -1,0 +1,8 @@
+# bisect_sim_pace  Thu Nov  5 08:26:30 AM PST 2026  minutes/point=10  stimulus md5 1ae2d72b
+# commit    subject                                   lines@t0  lines@t1   sim_ms   ms/hour
+8980e58   back up to previous setpoint              NO OUTPUT after 20 min (see /tmp/mdt_bisect/haifuraiya/platforms/vck190/sim/bisect_8980e58.log)
+6945229   modify the vhdl to simplify the C++ port  NO OUTPUT after 20 min (see /tmp/mdt_bisect/haifuraiya/platforms/vck190/sim/bisect_6945229.log)
+3e4c7ed   Carrier: train on the preamble, hold, re  NO OUTPUT after 20 min (see /tmp/mdt_bisect/haifuraiya/platforms/vck190/sim/bisect_3e4c7ed.log)
+5eacf1d   Re-Reference!                             NO OUTPUT after 20 min (see /tmp/mdt_bisect/haifuraiya/platforms/vck190/sim/bisect_5eacf1d.log)
+c2bf05f   first light on the VCK190!                NO OUTPUT after 20 min (see /tmp/mdt_bisect/haifuraiya/platforms/vck190/sim/bisect_c2bf05f.log)
+# done Thu Nov  5 10:06:59 AM PST 2026

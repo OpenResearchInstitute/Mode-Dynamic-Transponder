@@ -1,0 +1,3 @@
+# bisect_sim_pace  Thu Nov  5 07:39:06 PM PST 2026  minutes/point=10  stimulus md5 1ae2d72b
+# commit    subject                                   lines@t0  lines@t1   sim_ms   ms/hour
+8980e58   back up to previous setpoint                    94     12268    19.48     116.9

@@ -1,0 +1,4 @@
+Running: xsim.dir/tb_haifuraiya_channelizer_axi_behav/xsimk -simmode gui -wdb tb_haifuraiya_channelizer_axi_behav.wdb -simrunnum 0 -socket 37543
+Design successfully loaded
+Design Loading Memory Usage: 44000 KB (Peak: 44008 KB)
+Design Loading CPU Usage: 50 ms

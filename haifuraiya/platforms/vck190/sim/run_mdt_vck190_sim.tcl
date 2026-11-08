@@ -597,7 +597,7 @@ set xsim_dir [file normalize "$project_dir/${project_name}.sim/sim_1/behav/xsim"
 set stamp    [clock format [clock seconds] -format %Y%m%d_%H%M]
 set arch     [file normalize "./logs/${tb_top}_${stamp}"]
 file mkdir $arch
-foreach f {simulate.log seam_chan_out.txt soft_raw.txt channel_iq.txt f1_error.txt} {
+foreach f {simulate.log seam_chan_out.txt soft_raw.txt channel_iq.txt f1_error.txt esi_rx_samples.txt} {
     if {[file exists "$xsim_dir/$f"]} { file copy -force "$xsim_dir/$f" $arch }
 }
 foreach f [glob -nocomplain "$xsim_dir/*.wdb"] { file copy -force $f $arch }

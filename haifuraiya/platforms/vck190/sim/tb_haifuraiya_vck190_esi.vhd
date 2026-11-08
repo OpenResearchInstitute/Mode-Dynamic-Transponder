@@ -13,7 +13,7 @@
 -- THIS FILE IS A COPY
 -------------------------------------------------------------------------------
 -- Copied from haifuraiya/sim/tb_haifuraiya_channelizer_axi.vhd
--- (md5 5970b0f122450de387553b4c83770ea2, 2026-11-02), which stays the ZCU102
+-- (md5 3dd891fe70eef49d259c599b9454c2f0, 2026-11-08), which stays the ZCU102
 -- bench and is NOT modified.  The run_mdt_vck190_sim.tcl header said a copy
 -- would be made "when the input side becomes ESIstream-shaped"; this is that
 -- moment.  Everything that is not marked "ESI:" below is byte-identical to
@@ -300,9 +300,32 @@ begin
     end process;
     link_rstn <= aresetn;
 
+    -- ESI: what the core actually receives.  One line per accepted sample:
+    -- "<I> <Q> <aclk cycles since the previous sample>".  Diff the first two
+    -- columns against opv_chan_stim.txt for data transparency in the system
+    -- context; the third column is the spacing (the bench sends every 5).
+    p_esi_rx_cap : process(aclk)
+        file fo        : text open write_mode is "esi_rx_samples.txt";
+        variable l     : line;
+        variable gap   : natural := 0;
+    begin
+        if rising_edge(aclk) then
+            gap := gap + 1;
+            if esi_tvalid = '1' and esi_tready = '1' then
+                write(l, to_integer(signed(esi_tdata(15 downto 0))));
+                write(l, string'(" "));
+                write(l, to_integer(signed(esi_tdata(31 downto 16))));
+                write(l, string'(" "));
+                write(l, gap);
+                writeline(fo, l);
+                gap := 0;
+            end if;
+        end if;
+    end process;
+
     -- ESI: the splice.  IDEAL_LINK: TX words wired to RX words, no transceiver.
     u_esi : entity work.esi_link_loop
-        generic map (NB_LANES => 2, IDEAL_LINK => true)
+        generic map (NB_LANES => 8, IDEAL_LINK => true)
         port map (
             aclk => aclk, aresetn => aresetn,
             s_axis_tdata  => s_axis_data_tdata,
@@ -1198,6 +1221,7 @@ wait for 1 us;    -- let the design come back up
     axi_write(ADDR_CONTROL, 1);              -- soft reset (bit0=1): core_reset=1, clears the EMA cascade
     axi_write(ADDR_CONTROL, 2);              -- release + enable (bit1=1): core_reset=0, run
     wait for 2 us;                           -- let the reset settle / pipeline re-prime before the burst
+    wait until rising_edge(aclk);            -- 2026-11-08: same edge re-alignment (matters when DO_DEMOD_BRACKET=false)
     report "MILESTONE 1: channelizer configured + enabled" severity note;
 
     -- =========================================================================
@@ -1337,6 +1361,13 @@ wait for 1 us;    -- let the design come back up
     else fail("SL-B STATUS.1 asserted with no signal -- lock detector lying"); end if;
 	
     wait for 2 us;                           -- let the re-init settle before the burst arrives
+    wait until rising_edge(aclk);            -- 2026-11-08: re-align to a clock edge before the first tvalid.
+                                             -- `wait for 2 us` from an edge lands exactly ON the next edge, so
+                                             -- the loop's first tvalid rose in the same delta as aclk; the
+                                             -- core's combinational sample_valid_int (channelizer_axi) updates a
+                                             -- delta later and the halfband never saw stim[0]. Every sim before
+                                             -- this ran on the other decimation phase. Found by the VCK190
+                                             -- tier-2 bench, whose link FIFO reads tvalid directly and caught it.
     report "MILESTONE 2: demod bracket complete; endfile(fin)=" &
            boolean'image(endfile(fin)) severity note;
     else
