@@ -136,6 +136,7 @@ Measured:
 - **System bench, 25 frames, 8 lanes, old shared bench** (xsim, 2026-11-02→04, 59 h 40 min): 25/25 decodable, pre-FEC BER 0.00–0.56 %, flat. Link counters: sent = rcvd = 20,829,760 (20,799,760 + 30,000 tail), zero errors.
 - **System bench, 3 frames, 2 lanes** (2026-11-06, 3 h 57 min): 3/3; **every sample the core received checked against the stimulus: 3,229,963 received, 0 mismatches, 3,229,962 gaps all exactly 5 clocks** (2026-11-08 capture run).
 - **Tier 1 vs tier 2, same 3-frame stimulus, fixed shared bench (2026-11-08): `soft_raw.txt` and `channel_iq.txt` byte-identical**; grade 0.33 / 0.09 / 0.19. The receiver through the link produces the same bits as the receiver fed directly.
+- **25 frames, fixed bench, tier 1 (2026-11-08→09, archive `tb_haifuraiya_channelizer_axi_20261108_2122`): 25/25, pre-FEC BER 0.00–0.56 %, and `soft_raw.txt` byte-identical to the 2026-11-04 tier-2 run through the 8-lane link.** The per-frame table (0.42, 0.47, 0.19, 0.00, 0.19, 0.37, 0.09, 0.09, 0.28, 0.09, 0.19, 0.19, 0.19, 0.37, 0.19, 0.19, 0.19, 0.56, 0.09, 0.09, 0.28, 0.09, 0.09, 0.19, 0.37 %) is the acceptance reference for both tiers. Stimulus: the acceptance command with `--frames 25`, md5 `6088c57b03b048abab52b8cd29fdd867`, 20,799,760 samples.
 - Pace (3-frame stimulus): core alone 130–146 ms of simulated time per hour (same at commit `8980e58` and HEAD — no regression); 8 lanes 18.6 ms/h; **2 lanes 51 ms/h**. The link's cost is the lanes first, then the 156.25 MHz clock and the two crossing FIFOs. (The Vivado `run: Time` cpu figure is the Vivado process, not `xsimk`; `top` on `xsimk` is the real load — it was 100 % of one core throughout.)
 
 **Finding — the shared bench dropped the first sample.** Before 2026-11-08, tier 1 and tier 2 differed by exactly one 20 MSps sample of halfband decimation phase: the channel output rotated 14.06° (= 2π · 781.25 kHz · 50 ns), 83 of 8688 soft symbols moved, one frame picked up two coded-bit errors. The golden channelizer model put tier 2 on the *designed* phase (0.0°, residual 0.0 %) and tier 1 at +14.1°, i.e. a stream starting at `stim[1]`. Cause, in `tb_haifuraiya_channelizer_axi.vhd`: `wait for 2 us` from a clock edge lands exactly on the next edge, so the burst's first `tvalid` rose in the same delta as `aclk`; the core's combinational `sample_valid_int` (`haifuraiya_channelizer_axi.vhd`) updates a delta later and the decimator never saw `stim[0]`. The link's input FIFO reads `tvalid` directly inside its clocked process, caught the sample, and delivered it a full cycle wide — which is why tier 2 was right. Fix: `wait until rising_edge(aclk)` after each such `wait for` (two places). Every per-frame BER table recorded before this fix was computed on the inverted decimation phase; the grade class never changed. The hardware pacer (registered `tvalid`) never had the race.
@@ -204,11 +205,9 @@ we want that in writing since the risk is the FPGA's banks.
 
 1. Port check: run `xm107/script_64b.tcl` under Vivado 2022.2 untouched
    (scratch dir), log the IP-upgrade complaints. Measures the port cost.
-2. ~~Write the reassembler + its bench; frame layout per §4.~~ Done; tier 2
-   in simulation **passed and is bit-identical to tier 1** (§4.1,
-   2026-11-08). Remaining: a 25-frame tier-1 acceptance on the fixed bench
-   (the existing tables are on the inverted phase); the bench-tail items
-   are in the tracker.
+2. ~~Write the reassembler + its bench; frame layout per §4.~~ **Done.**
+   Tier 2 in simulation passed and is bit-identical to tier 1 at 3 and 25
+   frames (§4.1, 2026-11-08/09). The bench-tail items are in the tracker.
 3. Bring `tx_esistream`/`rx_esistream` + the package's transceiver block
    into our block design (new `vck190_esistream_bd.tcl` or a `VCK190_ESI=1`
    variant of the playback BD), board clock on refclk0, internal loopback,

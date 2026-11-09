@@ -7,7 +7,7 @@ _Open Research Institute, 2026-10-23. Status: **PASS** on hardware 2026-10-25._
 | Tier | What is in the loop | Needs | Pass/fail | Status |
 |---|---|---|---|---|
 | **1. Memory loopback** (this plan) | DDR → DMA → pacer → receiver → DMA → DDR. No converter interface at all. | VCK190, Vivado 2022.2, PetaLinux 2022.2 | `grade_payload_ber.py` on the captured soft bits matches the xsim table | **PASS** 2026-10-25: 24/24 frames decodable, pre-FEC BER 0.00–0.56 %, flat |
-| 2. Digital loopback | The ESIstream serial path spliced into tier 1: DDR → DMA → pacer → packer → ESIstream TX → link → ESIstream RX → reassembler → receiver → DMA → DDR. The link is a transceiver quad in internal near-end loopback (no card in the slot) or, in simulation, the TX words wired straight to the RX. | Teledyne ESIstream VCK190 package (public domain, vendored); the board's own 156.25 MHz reference clock. **No ADC card.** | Same stimulus, same `opv_play`, same grade as tier 1, plus the link's own counters at zero (every sample sent was received, in order). | Simulation in progress (`ESISTREAM_NOTES.md` §4.1). Hardware: block design not yet built. |
+| 2. Digital loopback | The ESIstream serial path spliced into tier 1: DDR → DMA → pacer → packer → ESIstream TX → link → ESIstream RX → reassembler → receiver → DMA → DDR. The link is a transceiver quad in internal near-end loopback (no card in the slot) or, in simulation, the TX words wired straight to the RX. | Teledyne ESIstream VCK190 package (public domain, vendored); the board's own 156.25 MHz reference clock. **No ADC card.** | Same stimulus, same `opv_play`, same grade as tier 1, plus the link's own counters at zero (every sample sent was received, in order). | **Simulation PASS 2026-11-09**: 25/25, byte-identical soft symbols to tier 1 (`ESISTREAM_NOTES.md` §4.1). Hardware: next — the block design with the transceiver in internal loopback is the work item. |
 | 3. RF loopback | The Opulent Voice transmitter, on the air or by cable, into the EV12AQ600 ADC → ESIstream RX → digital downconverter → receiver. | Teledyne EV12AQ600 FMC+ evaluation module (on loan, pending), the downconverter (new fabric block) | As the ZCU102's RF loopback | Operating point chosen on paper (`ESISTREAM_NOTES.md` §5); card not yet in hand |
 
 Tier 1 is the ZCU102's "digital loopback" taken one level deeper: there is not even a serial link in it, and it is the only tier whose pass criterion was defined to the bit before it ran. Tier 2 changes exactly one thing — the samples travel over the link — and keeps the pass criterion. The ESIstream plan, package review and tier-2/3 details live in `ESISTREAM_NOTES.md`; this file is tier 1 and the table above.
@@ -81,7 +81,27 @@ Doctrine check before synthesis: the sim already passed on this RTL
 (25/25, 8/8). The pacer has its own bench. The BD has no bench; its
 correctness is `validate_bd_design` plus the hardware test. **Done.**
 
-## Acceptance (measured 2026-10-25)
+## Acceptance reference (simulation, 2026-11-09)
+
+Stimulus: `opv_stim.py --preamble --clock-offset-ppm 11.5 --fc 781250
+--carrier-offset 500 --ebn0 10 --seed 1 --frames 25`, md5
+`6088c57b03b048abab52b8cd29fdd867`, 20,799,760 samples. Bench with the
+first-sample fix. Archive `sim/logs/tb_haifuraiya_channelizer_axi_20261108_2122/`.
+
+| frame | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| BER % | 0.42 | 0.47 | 0.19 | 0.00 | 0.19 | 0.37 | 0.09 | 0.09 | 0.28 | 0.09 | 0.19 | 0.19 | 0.19 |
+
+| frame | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| BER % | 0.37 | 0.19 | 0.19 | 0.19 | 0.56 | 0.09 | 0.09 | 0.28 | 0.09 | 0.09 | 0.19 | 0.37 |
+
+25/25 decodable, all polarity +. The tier-2 (ESIstream digital loopback)
+simulation of 2026-11-04 produced a byte-identical `soft_raw.txt`, so this
+is tier 2's table as well. Tables recorded before 2026-11-08 were computed
+with the bench's first sample dropped and differ slightly.
+
+## Acceptance (hardware, measured 2026-10-25)
 
 - `opv_play` on `opv_chan_stim.bin` (25-frame, 11.5 ppm, +500 Hz, seed 1):
   `grade_payload_ber.py` **24/24 decodable, pre-FEC BER 0.00–0.56 %, flat**,
