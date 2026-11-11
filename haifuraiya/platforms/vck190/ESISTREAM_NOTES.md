@@ -207,10 +207,12 @@ CIPS M_AXI_FPD --> smartconnect --> axi_dma 0xA400_0000, rx ctrl 0xA401_0000, rx
 |---|---|---|---|
 | 0x00 | ID | RO | `0x45534931` "ESI1" |
 | 0x04 | CONTROL | RW | bit 0 LINK_RESET (hold the link logic in reset); bit 1 SYNC_REQ (write 1: one more sync pulse); bit 2 STATS_CLEAR (write 1); bit 3 GT_RESET (write 1: 8-clock pulse to the bridge); bits 6:4 LOOPBACK (010 default); bit 7 SNAPSHOT (write 1: latch the link-domain counters). The pulse bits read 0. |
-| 0x08 | STATUS | RO | 0 gt_powergood, 1 lcpll_lock, 2 tx_resetdone, 3 rx_resetdone, 4 gt_link_status (the bridge's, for its protocol modes; stays 0 in bypass mode and means nothing here), 5 xcvr_ready, 6 lanes_ready, 7 link_ready, 8 snapshot busy, 9 tx_clk alive, 10 rx_clk alive. A healthy tier-2 link reads 0x6EF. |
+| 0x08 | STATUS | RO | 0 gt_powergood, 1 lcpll_lock, 2 tx_resetdone, 3 rx_resetdone, 4 gt_link_status (the bridge's, for its protocol modes; stays 0 in bypass mode and means nothing here), 5 xcvr_ready, 6 lanes_ready, 7 link_ready, 8 snapshot busy, 9 tx_clk alive, 10 rx_clk alive, 11 refclk_valid. A healthy tier-2 link reads 0xEEF (0x6EF before the monitor, 2026-11-10). |
 | 0x0C–0x1C | SAMPLES_SENT, SAMPLES_RCVD, SEQ_ERRORS, MARKER_ERRORS, MULTI_ERRORS | RO | snapshot values |
 | 0x20, 0x24, 0x28 | TX_CLK_COUNT, RX_CLK_COUNT, ACLK_COUNT | RO | snapshot of the free-running cycle counters; two snapshots give the clock ratios (tx/aclk = 1.5625 when the SI570 is right) |
 | 0x2C | LINK_DROPS | RO | times `link_ready` fell since reset |
+| 0x30 | REFCLK_PERIOD | RO | PL clocks per 1024 reference clocks: 655 at 156.25 MHz, 1024 at 100 MHz, 4095 = no clock |
+| 0x34 | REFCLK_GOOD_EVENTS | RO | times the reference clock became good = automatic transceiver resets issued (1 after a normal boot) |
 
 Why SNAPSHOT: the counters live in the 156.25 MHz domains and advance at up
 to 20 MHz; reading them directly from the 100 MHz bus would tear. A write to
@@ -239,12 +241,29 @@ the quad → `lcpll_lock`, `tx_resetdone`, `rx_resetdone` → `xcvr_ready` → 1
 aligns the two lanes → `lanes_ready` → 16 `rx_clk` → `release_data` =
 `link_ready` → the packer starts taking samples from the pacer. Until then
 `s_axis_tready` is low and the DMA simply waits: `opv_play` needs no change.
-On the board there is one wrinkle: the fabric's own `gtreset_in` pulse comes
-at PL reset, before Linux has programmed the SI570, so the PLL sees 100 MHz
-and does not lock; the sequence completes after one more reset once the
-clock is right (`opv_play -r`, 2026-11-10: `-l` → STATUS 0x001, `-r` →
-0x6EF within its 500 ms wait). Making the block retry the reset until the
-PLL locks is the next change.
+On the board there was one wrinkle (2026-11-10): the block's `gtreset_in`
+pulse came at a fixed time after PL reset, before Linux had programmed the
+SI570, so the PLL saw 100 MHz and did not lock; the sequence completed
+after one more reset once the clock was right (`opv_play -r`: `-l` →
+STATUS 0x001, `-r` → 0x6EF within its 500 ms wait).
+
+**The qualified reset (2026-11-11, in the next build).** The transceiver's
+reset is not issued at a time; it is issued when the thing it depends on
+is true. The block gets a fabric copy of the reference clock (the
+IBUFDS_GTE5's ODIV2 output through one more BUFG_GT — ODIV2 is the
+reference itself with the primitive's default `REFCLK_HROW_CK_SEL = 0`,
+AM002) and a monitor: a toggle every 1024 reference cycles, timed in PL
+clocks; 655 ± 17 means 156.25 MHz. `refclk_valid` asserts after 8
+consecutive good windows (52 µs) and clears on 2 bad ones or no clock at
+all; **one** `gtreset_in` pulse is issued on each rising edge of
+`refclk_valid`. One reset per "clock became good" event, none if it never
+does, no retry timer. `tb_esi_link_hw` now starts its reference at 100 MHz,
+switches it at 80 µs the way Linux does, and checks: no reset and
+REFCLK_PERIOD 1024 before; exactly one reset, `refclk_valid`,
+REFCLK_PERIOD 656 and link-up after; then drops the reference and brings it
+back — `link_ready` falls, a second reset, REFCLK_GOOD_EVENTS 2, link back.
+PASS (nvc, 2026-11-11). On the board the expectation is `opv_play -l`
+straight after boot reading 0xEEF with no `-r`, and REFCLK_GOOD_EVENTS 1.
 
 **Pass criterion (tier 2, hardware):** `opv_play -q`, same command as tier
 1: 24/24 decodable on the acceptance stimulus with the §4.1 table, and in the
@@ -283,8 +302,8 @@ System Controller's console dark (the device-tree route above replaced it);
 and the bridge's `lcpll_lock_out` never asserting in bypass mode (the quad's
 `hsclk0_lcplllock` is the signal, as in Teledyne's wrapper).
 
-**Still open:** the block should retry the transceiver reset until the PLL
-locks (removes `opv_play -r`); `tb_esi_link_hw` has run under nvc in the
+**Still open:** the qualified reset is designed and benched, not yet built
+and booted (the next `make vck190-xsa-esi`); `tb_esi_link_hw` has run under nvc in the
 sandbox only, not yet on chococat; `i2c-tools` is `=y` in the rootfs config
 but `i2cdetect` did not appear in the image (not needed — the kernel found
 the switch and the oscillator itself — but a config line that does nothing
@@ -366,8 +385,9 @@ we want that in writing since the risk is the FPGA's banks.
    brought up 2026-11-10** (§4.2).
 4. ~~Tier-2 acceptance: `opv_play` unchanged, 24/24 flat, same table as tier 1,
    link counters sent = rcvd, zero errors.~~ **PASS 2026-11-10** (§4.2).
-4a. The link block retries the transceiver reset until the PLL locks, so
-   the boot needs no `opv_play -r`; one RTL change, the unit test, one
-   build, one `-l`.
+4a. ~~The link block retries the transceiver reset~~ The link block resets
+   the transceiver when its reference clock becomes good (§4.2, "the
+   qualified reset"): designed and benched 2026-11-11; build, boot,
+   `opv_play -l` with no `-r` next.
 5. Downconverter design pass on paper (mode/clock per §5), then its bench,
    then fabric — for tier 3, when the card arrives.

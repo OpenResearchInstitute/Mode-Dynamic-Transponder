@@ -37,14 +37,17 @@ set_property PACKAGE_PIN AA4 [get_ports {esi_gt_grx_p[1]}]
 set_property PACKAGE_PIN AA3 [get_ports {esi_gt_grx_n[1]}]
 
 # --- clock relationships ----------------------------------------------------------------
-# The GT user clocks (ch0 txoutclk and rxoutclk through the BUFG_GTs) are
-# asynchronous to the 100 MHz PL clock (clk_pl_0) and to each other; every
-# crossing in esi_link_hw / esi_link_loop is a two-flop synchronizer, a
-# toggle handshake, or an XPM/axis async FIFO, so no path between them is a
-# timing path.  Teledyne's example does the same with set_false_path pairs.
+# The GT user clocks (ch0 txoutclk and rxoutclk through the BUFG_GTs) and
+# the fabric copy of the reference clock (IBUFDS_GTE5 ODIV2 through
+# bufg_gt_ref, for the link block's clock monitor) are asynchronous to the
+# 100 MHz PL clock (clk_pl_0) and to each other; every crossing in
+# esi_link_hw / esi_link_loop is a two-flop synchronizer, a toggle
+# handshake, or an XPM/axis async FIFO, so no path between them is a timing
+# path.  Teledyne's example does the same with set_false_path pairs.
 # The clock names are what the quad IP creates; this is resolved late (after
 # the IP's own constraints) so the names exist by then.
 set_clock_groups -asynchronous -quiet \
     -group [get_clocks clk_pl_0] \
     -group [get_clocks -of_objects [get_pins -hierarchical -filter {NAME =~ *bufg_gt_tx*/O}]] \
-    -group [get_clocks -of_objects [get_pins -hierarchical -filter {NAME =~ *bufg_gt_rx*/O}]]
+    -group [get_clocks -of_objects [get_pins -hierarchical -filter {NAME =~ *bufg_gt_rx*/O}]] \
+    -group [get_clocks -of_objects [get_pins -hierarchical -filter {NAME =~ *bufg_gt_ref*/O}]]

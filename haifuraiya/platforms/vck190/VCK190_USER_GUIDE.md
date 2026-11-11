@@ -492,7 +492,7 @@ make vck190-build
 make vck190-boot
 ssh-keygen -R 10.73.1.17
 scp ~/dogu/tools/opv_play/opv_play root@10.73.1.17:/home/root/     # every boot: RAM root filesystem
-ssh root@10.73.1.17 /home/root/opv_play -r                          # every boot: transceiver reset after the clock (T4)
+ssh root@10.73.1.17 /home/root/opv_play -l                          # expect 0xEEF: the block reset the transceiver itself (T4)
 ```
 
 `vck190-check-xsa` still looks for the receiver at 0xA4010000, which tier 2
@@ -543,17 +543,17 @@ this board because the VCK190's System Controller boots from a microSD
 card in **its own slot, J206** — not the Versal's J302 — and none has been
 fitted; AMD's "SC Update" image would go on it.)
 
-One consequence: the fabric resets the transceiver once, when the PL comes
-out of reset at boot, which is **before** Linux programs the oscillator;
-the PLL sees 100 MHz then and does not lock. So after every boot, once:
-
-```
-ssh root@10.73.1.17 /home/root/opv_play -r
-```
-
-which pulses the transceiver reset through the link's register and reports
-the link (T5 shows the output). Until the block retries the reset by
-itself (the next change), this is the one manual step of tier 2.
+One consequence, and how it is handled: Linux programs the oscillator
+long after the PL came out of reset, so a transceiver reset at a fixed time
+after PL reset would run against 100 MHz and never lock (it did, on
+2026-11-10, and `opv_play -r` — a manual reset through the link's register
+— was the workaround). Since the build of 2026-11-11 the link block
+watches a copy of the reference clock and resets the transceiver **when
+the clock becomes good** (`ESISTREAM_NOTES.md` §4.2, "the qualified
+reset"): nothing to do after boot. `opv_play -l` shows it —
+`refclk_valid=1`, `ESI_REFCLK_PERIOD 655 (reference clock 156.25 MHz)`,
+`ESI_REFCLK_GOOD_EVENTS 1`. _Verified on the board: not yet — the first
+boot of that build will say so here._ `-r` remains for experiments.
 
 ### T5. Look at the link before the first run
 
@@ -576,9 +576,11 @@ ESI_SEQ_ERRORS 0  ESI_MARKER_ERRORS 0  ESI_MULTI_ERRORS 0  ESI_LINK_DROPS 0
 tx_clk / PL clock over 20006224 PL clocks = 1.5625  (156.25 MHz / 100 MHz = 1.5625; 1.0000 = SI570 still at 100 MHz)
 ```
 
-`0x6EF` is the healthy word: every bit but 4 (`gt_link_status` is the
-bridge's own link indicator for its protocol modes and stays 0 in bypass
-mode; it is not part of the pass). Reading the failures: ratio 1.0000 =
+`0x6EF` was the healthy word for that build; with the clock monitor
+(2026-11-11 build) it is `0xEEF` — bit 11 `refclk_valid` added — and the
+`-l` straight after boot should read it without any `-r`. Bit 4
+(`gt_link_status`) is the bridge's own link indicator for its protocol
+modes and stays 0 in bypass mode; it is not part of the pass. Reading the failures: ratio 1.0000 =
 the oscillator is at 100 MHz (the device tree did not take — check
 `dmesg` as in T4); `lcpll_lock=0` with both clocks alive after `-r` is the
 2026-11-10 miswiring, fixed in `8f1d612` (the lock signal must be the

@@ -208,6 +208,7 @@ if {$tier == 2} {
     set_property CONFIG.REFCLK_STRING {HSCLK0_LCPLLGTREFCLK0 refclk_PROT0_R0_156.25_MHz_unique1 HSCLK1_LCPLLGTREFCLK0 refclk_PROT0_R0_156.25_MHz_unique1} $quad
     create_bd_cell -type ip -vlnv xilinx.com:ip:bufg_gt:1.0 bufg_gt_tx
     create_bd_cell -type ip -vlnv xilinx.com:ip:bufg_gt:1.0 bufg_gt_rx
+    create_bd_cell -type ip -vlnv xilinx.com:ip:bufg_gt:1.0 bufg_gt_ref   ;# the reference clock itself, for the monitor
     set dsbuf [create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.2 gt_refclk_buf]
     set_property CONFIG.C_BUF_TYPE {IBUFDSGTE} $dsbuf
 
@@ -220,6 +221,11 @@ if {$tier == 2} {
     set_property CONFIG.FREQ_HZ 156250000 [get_bd_intf_ports esi_refclk]
     connect_bd_intf_net [get_bd_intf_ports esi_refclk] [get_bd_intf_pins gt_refclk_buf/CLK_IN_D]
     connect_bd_net [get_bd_pins gt_refclk_buf/IBUF_OUT] [get_bd_pins gt_quad_base/GT_REFCLK0]
+    # a fabric copy of the reference clock (IBUFDS_GTE5 ODIV2 = O with the
+    # default REFCLK_HROW_CK_SEL, AM002) for the link block's clock monitor:
+    # the transceiver is reset when, and only when, this clock is at 156.25 MHz
+    connect_bd_net [get_bd_pins gt_refclk_buf/IBUF_DS_ODIV2] [get_bd_pins bufg_gt_ref/outclk]
+    connect_bd_net [get_bd_pins bufg_gt_ref/usrclk] [get_bd_pins esi/gt_refclk_mon]
     # serial lanes to the FMC1 DP0/DP1 pins (xdc)
     create_bd_intf_port -mode Master -vlnv xilinx.com:interface:gt_rtl:1.0 esi_gt
     connect_bd_intf_net [get_bd_intf_ports esi_gt] [get_bd_intf_pins gt_quad_base/GT_Serial]
@@ -357,7 +363,7 @@ if {$tier == 2} {
     connect_bd_intf_net [get_bd_intf_pins ctrl_sc/M03_AXI] [get_bd_intf_pins esi/s_axi]
     # one box in the diagram for everything tier 2 added (after the last
     # connection to it, so the hierarchy pins are made for us)
-    group_bd_cells esi_link [get_bd_cells {esi gt_bridge_ip gt_quad_base bufg_gt_tx bufg_gt_rx gt_refclk_buf gt_zero4 gt_zero1}]
+    group_bd_cells esi_link [get_bd_cells {esi gt_bridge_ip gt_quad_base bufg_gt_tx bufg_gt_rx bufg_gt_ref gt_refclk_buf gt_zero4 gt_zero1}]
 }
 
 # -----------------------------------------------------------------------------

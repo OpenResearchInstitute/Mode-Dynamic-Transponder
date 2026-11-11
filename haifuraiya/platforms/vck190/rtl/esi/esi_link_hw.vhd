@@ -18,9 +18,26 @@
 --
 -- Clock domains: aclk (100 MHz, the receiver's clock, also the bridge/quad
 -- apb3clk), tx_clk and rx_clk (the quad's ch0 txoutclk/rxoutclk through
--- BUFG_GTs, 156.25 MHz each, unrelated phase).  Everything that crosses goes
--- through a two-flop synchronizer or the toggle handshake below; the counters
--- are read by SNAPSHOT so software never sees a torn word.
+-- BUFG_GTs, 156.25 MHz each, unrelated phase), and gt_refclk_mon, a fabric
+-- copy of the transceiver's reference clock (IBUFDS_GTE5 ODIV2 through a
+-- BUFG_GT; ODIV2 = O with the primitive's default REFCLK_HROW_CK_SEL = 0,
+-- AM002).  Everything that crosses goes through a two-flop synchronizer or
+-- the toggle handshake below; the counters are read by SNAPSHOT so software
+-- never sees a torn word.
+--
+-- When the transceiver is reset (2026-11-11).  The bridge's reset sequence
+-- only completes if the reference clock is right while it runs, and on the
+-- VCK190 the reference (the user SI570) is 100 MHz at power-up and becomes
+-- 156.25 MHz only when Linux programs it -- long after the PL came out of
+-- reset.  So the block does not reset the transceiver at a fixed time; it
+-- resets it when the reference clock is GOOD: a monitor counts
+-- gt_refclk_mon against aclk in windows of REFCLK_WINDOW reference cycles,
+-- refclk_valid asserts after 8 consecutive windows within +/-2.5 % of the
+-- expected ratio (and clears on 2 bad windows or a dead clock), and one
+-- gtreset_in pulse is issued on each rising edge of refclk_valid.  One reset
+-- per "clock became good" event, none if it never does, no retry timer.
+-- Software can still pulse GT_RESET by hand; REFCLK_GOOD_EVENTS counts the
+-- automatic ones (1 after a normal boot).
 --
 -- Register map (4 KB, byte offsets; 0xA403_0000 in the playback design):
 --
@@ -36,6 +53,7 @@
 --                           bit 3  rx_resetdone        bit 4  gt_link_status  bit 5  xcvr_ready (= 1 and 2 and 3)
 --                           bit 6  lanes_ready         bit 7  link_ready      bit 8  snapshot busy
 --                           bit 9  tx_clk alive        bit 10 rx_clk alive    (toggled within the last 2.5 us)
+--                           bit 11 refclk_valid        (reference clock at the expected frequency, see above)
 --   0x0C  SAMPLES_SENT  RO  snapshot  I/Q samples handed to the ESIstream TX  (tx_clk counter)
 --   0x10  SAMPLES_RCVD  RO  snapshot  I/Q samples out of the ESIstream RX      (rx_clk counter)
 --   0x14  SEQ_ERRORS    RO  snapshot  sequence-number breaks                  (rx_clk)
@@ -45,6 +63,9 @@
 --   0x24  RX_CLK_COUNT  RO  snapshot  free-running rx_clk cycle counter
 --   0x28  ACLK_COUNT    RO  snapshot  free-running aclk cycle counter, latched with the request
 --   0x2C  LINK_DROPS    RO  times link_ready fell since reset (aclk view)
+--   0x30  REFCLK_PERIOD RO  aclk cycles in the last REFCLK_WINDOW-cycle window of the reference
+--                           clock: 655 at 156.25 MHz (1024 x 100/156.25), 1024 at 100 MHz, 4095 = dead
+--   0x34  REFCLK_GOOD_EVENTS RO  rising edges of refclk_valid = automatic transceiver resets issued
 --
 --   Two snapshots some time apart give the clock ratios: (TX_CLK_COUNT delta) /
 --   (ACLK_COUNT delta) should be 1.5625 if the GT user clock really is
@@ -64,6 +85,11 @@ library work;
 use work.esistream_pkg.all;
 
 entity esi_link_hw is
+    generic (
+        ACLK_HZ       : natural := 100_000_000;
+        REFCLK_HZ     : natural := 156_250_000;   -- what the monitor expects on gt_refclk_mon
+        REFCLK_WINDOW : natural := 1024           -- reference cycles per measurement window
+    );
     port (
         -- receiver clock domain (100 MHz PL clock; also the quad/bridge apb3clk)
         aclk            : in  std_logic;
@@ -108,6 +134,7 @@ entity esi_link_hw is
         gt_tx_resetdone : in  std_logic;                          -- gt_bridge_ip tx_resetdone_out
         gt_rx_resetdone : in  std_logic;                          -- gt_bridge_ip rx_resetdone_out
         gt_link_status  : in  std_logic;                          -- gt_bridge_ip link_status_out
+        gt_refclk_mon   : in  std_logic;                          -- gt_refclk_buf IBUF_DS_ODIV2 via bufg_gt_ref: the reference clock itself
         gt_reset        : out std_logic;                          -- -> gt_bridge_ip gtreset_in (aclk = apb3clk)
         gt_loopback     : out std_logic_vector(2 downto 0);       -- -> gt_quad_base ch0_loopback and ch1_loopback
 
@@ -129,8 +156,21 @@ architecture rtl of esi_link_hw is
     signal stats_clr_cnt  : unsigned(4 downto 0) := (others => '0');
     signal gt_reset_r     : std_logic := '0';
     signal gt_reset_cnt   : unsigned(3 downto 0) := (others => '0');
-    signal boot_cnt       : unsigned(5 downto 0) := (others => '0');   -- one gt_reset pulse after aresetn
-    signal booted         : std_logic := '0';
+
+    -- reference-clock monitor
+    constant REF_EXPECT   : natural := (REFCLK_WINDOW * (ACLK_HZ / 1000)) / (REFCLK_HZ / 1000);   -- 655
+    constant REF_TOL      : natural := REF_EXPECT / 40 + 1;                                       -- +/-2.5 %
+    signal ref_cnt        : unsigned(15 downto 0) := (others => '0');  -- gt_refclk_mon domain
+    signal ref_tog        : std_logic := '0';                          -- toggles every REFCLK_WINDOW ref cycles
+    signal ref_tog_a      : std_logic;
+    signal ref_tog_d      : std_logic := '0';
+    signal win_cnt        : unsigned(11 downto 0) := (others => '0');  -- aclk cycles since the last toggle
+    signal ref_period     : unsigned(11 downto 0) := (others => '1');  -- last window, aclk cycles (4095 = dead)
+    signal good_streak    : unsigned(3 downto 0) := (others => '0');
+    signal bad_streak     : unsigned(1 downto 0) := (others => '0');
+    signal refclk_valid   : std_logic := '0';
+    signal refclk_valid_d : std_logic := '0';
+    signal ref_good_events: unsigned(31 downto 0) := (others => '0');
 
     -- link status into aclk
     signal xcvr_ready     : std_logic;
@@ -274,7 +314,7 @@ begin
         port map (clk => rx_clk, reg_async(0) => snap_req_t, reg_sync(0) => snap_req_rx);
 
     u_to_aclk : entity work.ff_synchronizer_array
-        generic map (REG_WIDTH => 6)
+        generic map (REG_WIDTH => 7)
         port map (clk => aclk,
                   reg_async(0) => snap_ack_tx_t,
                   reg_async(1) => snap_ack_rx_t,
@@ -282,12 +322,32 @@ begin
                   reg_async(3) => rx_tog,
                   reg_async(4) => lanes_ready_l,
                   reg_async(5) => link_ready_l,
+                  reg_async(6) => ref_tog,
                   reg_sync(0)  => snap_ack_tx_a,
                   reg_sync(1)  => snap_ack_rx_a,
                   reg_sync(2)  => tx_tog_a,
                   reg_sync(3)  => rx_tog_a,
                   reg_sync(4)  => lanes_ready_a,
-                  reg_sync(5)  => link_ready_a);
+                  reg_sync(5)  => link_ready_a,
+                  reg_sync(6)  => ref_tog_a);
+
+    ---------------------------------------------------------------------------
+    -- Reference-clock monitor.  In the reference domain: a toggle every
+    -- REFCLK_WINDOW cycles.  In aclk: the number of aclk between toggles is
+    -- the window's length; REF_EXPECT +/- REF_TOL means the reference is at
+    -- REFCLK_HZ.  No toggle for 4096 aclk means no clock at all.
+    ---------------------------------------------------------------------------
+    p_ref : process(gt_refclk_mon)
+    begin
+        if rising_edge(gt_refclk_mon) then
+            if ref_cnt = REFCLK_WINDOW - 1 then
+                ref_cnt <= (others => '0');
+                ref_tog <= not ref_tog;
+            else
+                ref_cnt <= ref_cnt + 1;
+            end if;
+        end if;
+    end process;
 
     snap_busy <= (snap_req_t xor snap_ack_tx_a) or (snap_req_t xor snap_ack_rx_a);
     tx_alive  <= '0' when tx_alive_cnt = x"FF" else '1';
@@ -308,9 +368,16 @@ begin
             rx_tog_d    <= rx_tog_a;
             link_ready_d <= link_ready_a;
 
+            ref_tog_d      <= ref_tog_a;
+            refclk_valid_d <= refclk_valid;
+
             if aresetn = '0' then
-                boot_cnt      <= (others => '0');
-                booted        <= '0';
+                win_cnt        <= (others => '0');
+                ref_period     <= (others => '1');
+                good_streak    <= (others => '0');
+                bad_streak     <= (others => '0');
+                refclk_valid   <= '0';
+                ref_good_events <= (others => '0');
                 gt_reset_r    <= '0';
                 gt_reset_cnt  <= (others => '0');
                 sync_req_r    <= '0';
@@ -368,13 +435,31 @@ begin
                     stats_clear_r <= '0';
                 end if;
 
-                -- one automatic gt_reset, 32 clocks after reset release
-                if booted = '0' then
-                    boot_cnt <= boot_cnt + 1;
-                    if boot_cnt = 31 then
-                        gt_reset_cnt <= x"8";
-                        booted       <= '1';
+                -- reference-clock monitor: window length, streaks, validity
+                if ref_tog_a /= ref_tog_d then
+                    ref_period <= win_cnt + 1;
+                    win_cnt    <= (others => '0');
+                    if win_cnt + 1 >= REF_EXPECT - REF_TOL and win_cnt + 1 <= REF_EXPECT + REF_TOL then
+                        bad_streak <= (others => '0');
+                        if good_streak /= 8 then good_streak <= good_streak + 1; end if;
+                        if good_streak = 7 then refclk_valid <= '1'; end if;
+                    else
+                        good_streak <= (others => '0');
+                        if bad_streak /= 3 then bad_streak <= bad_streak + 1; end if;
+                        if bad_streak >= 1 then refclk_valid <= '0'; end if;
                     end if;
+                elsif win_cnt = x"FFF" then                 -- no toggle in 4096 aclk: no clock
+                    ref_period   <= (others => '1');
+                    good_streak  <= (others => '0');
+                    refclk_valid <= '0';
+                else
+                    win_cnt <= win_cnt + 1;
+                end if;
+
+                -- the qualified reset: once, when the reference clock has become good
+                if refclk_valid = '1' and refclk_valid_d = '0' then
+                    gt_reset_cnt    <= x"8";
+                    ref_good_events <= ref_good_events + 1;
                 end if;
 
                 -- register writes (both channels captured)
@@ -445,7 +530,7 @@ begin
 
     status_word <= (0 => gt_powergood, 1 => gt_lcpll_lock, 2 => gt_tx_resetdone, 3 => gt_rx_resetdone,
                     4 => gt_link_status, 5 => xcvr_ready, 6 => lanes_ready_a, 7 => link_ready_a,
-                    8 => snap_busy, 9 => tx_alive, 10 => rx_alive, others => '0');
+                    8 => snap_busy, 9 => tx_alive, 10 => rx_alive, 11 => refclk_valid, others => '0');
 
     p_axi_r : process(aclk)
     begin
@@ -471,6 +556,8 @@ begin
                         when "001001" => rdata_i <= std_logic_vector(reg_rxclk);               -- 0x24
                         when "001010" => rdata_i <= std_logic_vector(reg_aclk);                -- 0x28
                         when "001011" => rdata_i <= std_logic_vector(link_drops);              -- 0x2C
+                        when "001100" => rdata_i <= x"00000" & std_logic_vector(ref_period);            -- 0x30
+                        when "001101" => rdata_i <= std_logic_vector(ref_good_events);         -- 0x34
                         when others   => rdata_i <= (others => '0');
                     end case;
                 end if;
