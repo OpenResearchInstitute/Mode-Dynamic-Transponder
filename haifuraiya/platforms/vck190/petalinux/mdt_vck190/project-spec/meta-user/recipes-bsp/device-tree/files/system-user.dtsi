@@ -40,3 +40,53 @@
 &rx {
 	compatible = "generic-uio";
 };
+
+/* tier 2 only: the ESIstream link block (esi_link_hw, 0xA4030000) as
+ * /dev/uio1, map0 -- opv_play reads its status and counters there.  The
+ * label is the device-tree generator's for the block-design cell
+ * playback_i/esi_link/esi; CONFIRM it in the generated pl.dtsi after
+ * `make vck190-import-xsa` (grep -n a4030000 ... pl.dtsi) before
+ * `make vck190-build`, and change it here if it differs.  A tier-1 import
+ * has no such node, and this reference would then fail the device-tree
+ * build: comment it out for a tier-1 image. */
+&esi_link_esi {
+	compatible = "generic-uio";
+};
+
+/* The GTY reference clock for tier 2 and tier 3: the board's user SI570
+ * (U205) on PMC I2C0 (i2c2, f1000000) behind TCA9548A switch U33, channel
+ * 6, address 0x5F (UG1366, "PMC MIO 46-47 I2C0 Bus"; the System Controller's
+ * VCK190.json calls it SI570_USER1_FMC, default 100 MHz).  The kernel's
+ * clk-si570 driver programs clock-frequency at every boot, so the clock is
+ * part of the image: nothing to do after a power cycle, no System
+ * Controller involved.  U33's address is 0x74 in UG1366's text and 0x75 in
+ * its table -- confirm with `i2cdetect -y -r 2` on the board (i2c-tools is
+ * in the rootfs for this) and change it here if the switch answers at 0x75.
+ * temperature-stability 50 ppm and factory-fout 100 MHz are the driver's
+ * required inputs: 50 is the conservative grade (10-945 MHz range), 100 MHz
+ * is the documented power-up frequency; both assumed, not measured. */
+&i2c2 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+	i2c-mux@74 {
+		compatible = "nxp,pca9548";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x74>;
+		i2c@6 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <6>;
+			si570_user1: clock-generator@5f {
+				#clock-cells = <0>;
+				compatible = "silabs,si570";
+				reg = <0x5f>;
+				temperature-stability = <50>;
+				factory-fout = <100000000>;
+				clock-frequency = <156250000>;
+				clock-output-names = "si570_user1";
+			};
+		};
+	};
+};

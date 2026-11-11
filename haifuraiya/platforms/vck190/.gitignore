@@ -15,3 +15,4 @@ syn/*.ltx
 # Ignore the waveform files
 logs/*.wdb
 logs/*/*.wdb
+sim/esi/work_esi_link*/

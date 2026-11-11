@@ -325,7 +325,7 @@ begin
 
     -- ESI: the splice.  IDEAL_LINK: TX words wired to RX words, no transceiver.
     u_esi : entity work.esi_link_loop
-        generic map (NB_LANES => 8, IDEAL_LINK => true)
+        generic map (NB_LANES => 2, IDEAL_LINK => true)
         port map (
             aclk => aclk, aresetn => aresetn,
             s_axis_tdata  => s_axis_data_tdata,
@@ -334,7 +334,10 @@ begin
             m_axis_tdata  => esi_tdata,
             m_axis_tvalid => esi_tvalid,
             m_axis_tready => esi_tready,
-            link_clk => link_clk, link_rstn => link_rstn,
+            -- one link clock in simulation: the hardware's TX and RX user clocks
+            -- are both 156.25 MHz, and in IDEAL_LINK they may be the same clock
+            tx_clk => link_clk, tx_rstn => link_rstn,
+            rx_clk => link_clk, rx_rstn => link_rstn,
             link_ready    => esi_link_ready,
             seq_errors    => esi_seq_errors,
             marker_errors => esi_marker_errors,

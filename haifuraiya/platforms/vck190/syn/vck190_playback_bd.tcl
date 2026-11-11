@@ -28,6 +28,8 @@
 set bd_name playback
 create_bd_design $bd_name
 current_bd_design $bd_name
+# tier is set by vck190_playback_project.tcl (VCK190_TIER); 1 when sourced alone
+if {![info exists tier]} { set tier 1 }
 
 # -----------------------------------------------------------------------------
 # 1. CIPS + NoC + DDR4 from the board preset.
@@ -170,6 +172,100 @@ connect_bd_intf_net [get_bd_intf_pins rx/m_axis_soft_bit]  [get_bd_intf_pins wid
 connect_bd_intf_net [get_bd_intf_pins widen/m_axis]        [get_bd_intf_pins axi_dma/S_AXIS_S2MM]
 
 # -----------------------------------------------------------------------------
+# 4t. Tier 2 (VCK190_TIER=2): the ESIstream digital loopback between the pacer
+#     and the receiver, around a real GTY quad in near-end PMA loopback.
+#
+#       pacer --> esi_link/esi (esi_link_hw: packer, Teledyne TX, [GT], Teledyne RX,
+#                 reassembler, AXI-Lite registers at 0xA403_0000) --> rx
+#
+#     The GT cells and their wiring are Teledyne's gty_txrx_8lanes_64b block
+#     design reduced to one quad and channels 0-1 (validated stand-alone in
+#     gt_scratch.tcl, 2026-11-09; ESISTREAM_NOTES.md section 4.2 tells the story):
+#       gt_bridge_ip 1.1   pass-through ("bypass") mode, 2 lanes, Teledyne's
+#                          line-rate settings verbatim: 10.0 Gb/s, LCPLL,
+#                          156.25 MHz refclk R0, RAW 64/64, buffered TX and RX
+#       gt_quad_base 1.1   the GTY quad; refclk0 from an IBUFDS_GTE on the
+#                          FMC1 GBTCLK/SI570 pins (xdc), ch0 tx/rxoutclk through
+#                          BUFG_GTs as the user clocks of the bridge AND all four
+#                          channels (validate insists on all four)
+#     Only txdata_ext/rxdata_ext (63:0 of 128) carry data, as in Teledyne's
+#     wrapper; the bridge's other *_ext ports stay at their defaults.
+# -----------------------------------------------------------------------------
+if {$tier == 2} {
+    # the splice: break pacer -> rx and put the link in between
+    delete_bd_objs [get_bd_intf_nets -of_objects [get_bd_intf_pins pacer/m_axis]]
+    create_bd_cell -type module -reference esi_link_hw esi
+    connect_bd_net $pl_clk  [get_bd_pins esi/aclk]
+    connect_bd_net $pl_rstn [get_bd_pins esi/aresetn]
+    connect_bd_intf_net [get_bd_intf_pins pacer/m_axis] [get_bd_intf_pins esi/s_axis]
+    connect_bd_intf_net [get_bd_intf_pins esi/m_axis]   [get_bd_intf_pins rx/s_axis_data]
+
+    # --- the transceiver: Teledyne's cells, one quad, two lanes
+    set br [create_bd_cell -type ip -vlnv xilinx.com:ip:gt_bridge_ip:1.1 gt_bridge_ip]
+    set lr0 "PRESET None RX_PAM_SEL NRZ TX_PAM_SEL NRZ RX_GRAY_BYP true TX_GRAY_BYP true RX_GRAY_LITTLEENDIAN true TX_GRAY_LITTLEENDIAN true RX_PRECODE_BYP true TX_PRECODE_BYP true RX_PRECODE_LITTLEENDIAN false TX_PRECODE_LITTLEENDIAN false INTERNAL_PRESET None GT_TYPE GTY GT_DIRECTION DUPLEX TX_LINE_RATE 10.0 TX_PLL_TYPE LCPLL TX_REFCLK_FREQUENCY 156.25 TX_ACTUAL_REFCLK_FREQUENCY 156.250000000000 TX_FRACN_ENABLED false TX_FRACN_NUMERATOR 0 TX_REFCLK_SOURCE R0 TX_DATA_ENCODING RAW TX_USER_DATA_WIDTH 64 TX_INT_DATA_WIDTH 64 TX_BUFFER_MODE 1 TX_BUFFER_BYPASS_MODE Fast_Sync TX_PIPM_ENABLE false TX_OUTCLK_SOURCE TXPLLREFCLK TXPROGDIV_FREQ_ENABLE false TXPROGDIV_FREQ_SOURCE LCPLL TXPROGDIV_FREQ_VAL 322.265625 TX_DIFF_SWING_EMPH_MODE CUSTOM TX_64B66B_SCRAMBLER false TX_64B66B_ENCODER false TX_64B66B_CRC false TX_RATE_GROUP A RX_LINE_RATE 10.0 RX_PLL_TYPE LCPLL RX_REFCLK_FREQUENCY 156.25 RX_ACTUAL_REFCLK_FREQUENCY 156.250000000000 RX_FRACN_ENABLED false RX_FRACN_NUMERATOR 0 RX_REFCLK_SOURCE R0 RX_DATA_DECODING RAW RX_USER_DATA_WIDTH 64 RX_INT_DATA_WIDTH 64 RX_BUFFER_MODE 1 RX_OUTCLK_SOURCE RXPLLREFCLK RXPROGDIV_FREQ_ENABLE false RXPROGDIV_FREQ_SOURCE LCPLL RXPROGDIV_FREQ_VAL 322.265625 INS_LOSS_NYQ 20 RX_EQ_MODE AUTO RX_COUPLING AC RX_TERMINATION PROGRAMMABLE RX_RATE_GROUP A RX_TERMINATION_PROG_VALUE 800 RX_PPM_OFFSET 0 RX_64B66B_DESCRAMBLER false RX_64B66B_DECODER false RX_64B66B_CRC false OOB_ENABLE false RX_COMMA_ALIGN_WORD 1 RX_COMMA_SHOW_REALIGN_ENABLE true PCIE_ENABLE false TX_LANE_DESKEW_HDMI_ENABLE false RX_COMMA_P_ENABLE false RX_COMMA_M_ENABLE false RX_COMMA_DOUBLE_ENABLE false RX_COMMA_P_VAL 0101111100 RX_COMMA_M_VAL 1010000011 RX_COMMA_MASK 0000000000 RX_SLIDE_MODE OFF RX_SSC_PPM 0 RX_CB_NUM_SEQ 0 RX_CB_LEN_SEQ 1 RX_CB_MAX_SKEW 1 RX_CB_MAX_LEVEL 1 RX_CB_MASK_0_0 false RX_CB_VAL_0_0 00000000 RX_CB_K_0_0 false RX_CB_DISP_0_0 false RX_CB_MASK_0_1 false RX_CB_VAL_0_1 00000000 RX_CB_K_0_1 false RX_CB_DISP_0_1 false RX_CB_MASK_0_2 false RX_CB_VAL_0_2 00000000 RX_CB_K_0_2 false RX_CB_DISP_0_2 false RX_CB_MASK_0_3 false RX_CB_VAL_0_3 00000000 RX_CB_K_0_3 false RX_CB_DISP_0_3 false RX_CB_MASK_1_0 false RX_CB_VAL_1_0 00000000 RX_CB_K_1_0 false RX_CB_DISP_1_0 false RX_CB_MASK_1_1 false RX_CB_VAL_1_1 00000000 RX_CB_K_1_1 false RX_CB_DISP_1_1 false RX_CB_MASK_1_2 false RX_CB_VAL_1_2 00000000 RX_CB_K_1_2 false RX_CB_DISP_1_2 false RX_CB_MASK_1_3 false RX_CB_VAL_1_3 00000000 RX_CB_K_1_3 false RX_CB_DISP_1_3 false RX_CC_NUM_SEQ 0 RX_CC_LEN_SEQ 1 RX_CC_PERIODICITY 5000 RX_CC_KEEP_IDLE DISABLE RX_CC_PRECEDENCE ENABLE RX_CC_REPEAT_WAIT 0 RX_CC_VAL 00000000000000000000000000000000000000000000000000000000000000000000000000000000 RX_CC_MASK_0_0 false RX_CC_VAL_0_0 00000000 RX_CC_K_0_0 false RX_CC_DISP_0_0 false RX_CC_MASK_0_1 false RX_CC_VAL_0_1 00000000 RX_CC_K_0_1 false RX_CC_DISP_0_1 false RX_CC_MASK_0_2 false RX_CC_VAL_0_2 00000000 RX_CC_K_0_2 false RX_CC_DISP_0_2 false RX_CC_MASK_0_3 false RX_CC_VAL_0_3 00000000 RX_CC_K_0_3 false RX_CC_DISP_0_3 false RX_CC_MASK_1_0 false RX_CC_VAL_1_0 00000000 RX_CC_K_1_0 false RX_CC_DISP_1_0 false RX_CC_MASK_1_1 false RX_CC_VAL_1_1 00000000 RX_CC_K_1_1 false RX_CC_DISP_1_1 false RX_CC_MASK_1_2 false RX_CC_VAL_1_2 00000000 RX_CC_K_1_2 false RX_CC_DISP_1_2 false RX_CC_MASK_1_3 false RX_CC_VAL_1_3 00000000 RX_CC_K_1_3 false RX_CC_DISP_1_3 false PCIE_USERCLK2_FREQ 250 PCIE_USERCLK_FREQ 250 RX_JTOL_FC 5.9988002 RX_JTOL_LF_SLOPE -20 RX_BUFFER_BYPASS_MODE Fast_Sync RX_BUFFER_BYPASS_MODE_LANE MULTI RX_BUFFER_RESET_ON_CB_CHANGE ENABLE RX_BUFFER_RESET_ON_COMMAALIGN DISABLE RX_BUFFER_RESET_ON_RATE_CHANGE ENABLE TX_BUFFER_RESET_ON_RATE_CHANGE ENABLE RESET_SEQUENCE_INTERVAL 0 RX_COMMA_PRESET NONE RX_COMMA_VALID_ONLY 0"
+    set_property -dict [list CONFIG.BYPASS_MODE {true} CONFIG.IP_NO_OF_LANES {2} CONFIG.IP_LR0_SETTINGS $lr0] $br
+    set quad [create_bd_cell -type ip -vlnv xilinx.com:ip:gt_quad_base:1.1 gt_quad_base]
+    set_property CONFIG.REFCLK_STRING {HSCLK0_LCPLLGTREFCLK0 refclk_PROT0_R0_156.25_MHz_unique1 HSCLK1_LCPLLGTREFCLK0 refclk_PROT0_R0_156.25_MHz_unique1} $quad
+    create_bd_cell -type ip -vlnv xilinx.com:ip:bufg_gt:1.0 bufg_gt_tx
+    create_bd_cell -type ip -vlnv xilinx.com:ip:bufg_gt:1.0 bufg_gt_rx
+    set dsbuf [create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.2 gt_refclk_buf]
+    set_property CONFIG.C_BUF_TYPE {IBUFDSGTE} $dsbuf
+
+    foreach n {0 1} {
+        connect_bd_intf_net [get_bd_intf_pins gt_bridge_ip/GT_TX$n] [get_bd_intf_pins gt_quad_base/TX${n}_GT_IP_Interface]
+        connect_bd_intf_net [get_bd_intf_pins gt_bridge_ip/GT_RX$n] [get_bd_intf_pins gt_quad_base/RX${n}_GT_IP_Interface]
+    }
+    # reference clock: board pins (xdc) -> IBUFDS_GTE -> quad refclk0
+    create_bd_intf_port -mode Slave -vlnv xilinx.com:interface:diff_clock_rtl:1.0 esi_refclk
+    set_property CONFIG.FREQ_HZ 156250000 [get_bd_intf_ports esi_refclk]
+    connect_bd_intf_net [get_bd_intf_ports esi_refclk] [get_bd_intf_pins gt_refclk_buf/CLK_IN_D]
+    connect_bd_net [get_bd_pins gt_refclk_buf/IBUF_OUT] [get_bd_pins gt_quad_base/GT_REFCLK0]
+    # serial lanes to the FMC1 DP0/DP1 pins (xdc)
+    create_bd_intf_port -mode Master -vlnv xilinx.com:interface:gt_rtl:1.0 esi_gt
+    connect_bd_intf_net [get_bd_intf_ports esi_gt] [get_bd_intf_pins gt_quad_base/GT_Serial]
+    # user clocks: ch0 outclks -> BUFG_GT -> bridge, all four channels, and the link
+    connect_bd_net [get_bd_pins gt_quad_base/ch0_txoutclk] [get_bd_pins bufg_gt_tx/outclk]
+    connect_bd_net [get_bd_pins gt_quad_base/ch0_rxoutclk] [get_bd_pins bufg_gt_rx/outclk]
+    connect_bd_net [get_bd_pins bufg_gt_tx/usrclk] [get_bd_pins gt_bridge_ip/gt_txusrclk] [get_bd_pins esi/tx_clk] \
+        [get_bd_pins gt_quad_base/ch0_txusrclk] [get_bd_pins gt_quad_base/ch1_txusrclk] \
+        [get_bd_pins gt_quad_base/ch2_txusrclk] [get_bd_pins gt_quad_base/ch3_txusrclk]
+    connect_bd_net [get_bd_pins bufg_gt_rx/usrclk] [get_bd_pins gt_bridge_ip/gt_rxusrclk] [get_bd_pins esi/rx_clk] \
+        [get_bd_pins gt_quad_base/ch0_rxusrclk] [get_bd_pins gt_quad_base/ch1_rxusrclk] \
+        [get_bd_pins gt_quad_base/ch2_rxusrclk] [get_bd_pins gt_quad_base/ch3_rxusrclk]
+    # APB3 clock (configuration interface) = the PL clock
+    connect_bd_net $pl_clk [get_bd_pins gt_bridge_ip/apb3clk] [get_bd_pins gt_quad_base/apb3clk]
+    # power good, straight across
+    connect_bd_net [get_bd_pins gt_quad_base/gtpowergood] [get_bd_pins gt_bridge_ip/gtpowergood] [get_bd_pins esi/gt_powergood]
+    # the two lanes' data, 128-bit bridge ports, 63:0 used
+    connect_bd_net [get_bd_pins esi/gt_tx_data_ch0] [get_bd_pins gt_bridge_ip/ch0_txdata_ext]
+    connect_bd_net [get_bd_pins esi/gt_tx_data_ch1] [get_bd_pins gt_bridge_ip/ch1_txdata_ext]
+    connect_bd_net [get_bd_pins gt_bridge_ip/ch0_rxdata_ext] [get_bd_pins esi/gt_rx_data_ch0]
+    connect_bd_net [get_bd_pins gt_bridge_ip/ch1_rxdata_ext] [get_bd_pins esi/gt_rx_data_ch1]
+    # status to the registers, reset and loopback mode from them
+    # PLL lock comes from the QUAD's HSCLK0 LCPLL (the one our two lanes use),
+    # as in Teledyne's wrapper (hsclk*_lcplllock) -- NOT the bridge's
+    # lcpll_lock_out, which never asserted in bypass mode on the board
+    # (2026-11-10: resetdone high, user clocks at 156.25 MHz, lock_out low).
+    # HSCLK1 is not in the two-lane reference-clock string; leave it out.
+    connect_bd_net [get_bd_pins gt_quad_base/hsclk0_lcplllock] [get_bd_pins esi/gt_lcpll_lock]
+    connect_bd_net [get_bd_pins gt_bridge_ip/tx_resetdone_out] [get_bd_pins esi/gt_tx_resetdone]
+    connect_bd_net [get_bd_pins gt_bridge_ip/rx_resetdone_out] [get_bd_pins esi/gt_rx_resetdone]
+    connect_bd_net [get_bd_pins gt_bridge_ip/link_status_out]  [get_bd_pins esi/gt_link_status]
+    connect_bd_net [get_bd_pins esi/gt_reset]    [get_bd_pins gt_bridge_ip/gtreset_in]
+    connect_bd_net [get_bd_pins esi/gt_loopback] [get_bd_pins gt_quad_base/ch0_loopback] [get_bd_pins gt_quad_base/ch1_loopback]
+    # bridge inputs we do not use: rate select 0 (the one line rate), datapath resets 0
+    create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant:1.1 gt_zero4
+    set_property -dict [list CONFIG.CONST_WIDTH {4} CONFIG.CONST_VAL {0}] [get_bd_cells gt_zero4]
+    connect_bd_net [get_bd_pins gt_zero4/dout] [get_bd_pins gt_bridge_ip/rate_sel]
+    create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant:1.1 gt_zero1
+    set_property -dict [list CONFIG.CONST_WIDTH {1} CONFIG.CONST_VAL {0}] [get_bd_cells gt_zero1]
+    connect_bd_net [get_bd_pins gt_zero1/dout] [get_bd_pins gt_bridge_ip/reset_rx_datapath_in] \
+        [get_bd_pins gt_bridge_ip/reset_rx_pll_and_datapath_in] [get_bd_pins gt_bridge_ip/reset_tx_datapath_in] \
+        [get_bd_pins gt_bridge_ip/reset_tx_pll_and_datapath_in]
+    puts "INFO: tier 2 -- ESIstream link and GTY quad inserted between pacer and rx"
+}
+
+# -----------------------------------------------------------------------------
 # 4a. (debug build only) System ILA on the soft-bit path.
 #     First hardware run, 2026-10-24: receiver locked, FRAMES_RECEIVED 24,
 #     SOFT_DROPPED 0, yet the DMA S2MM channel sat running/not-idle with zero
@@ -249,7 +345,7 @@ if {[info exists ::env(VCK190_ILA)] && $::env(VCK190_ILA) ne "0"} {
 # 5. Control plane: CIPS M_AXI_FPD -> smartconnect -> three AXI-Lite slaves
 # -----------------------------------------------------------------------------
 create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 ctrl_sc
-set_property -dict [list CONFIG.NUM_SI {1} CONFIG.NUM_MI {3}] [get_bd_cells ctrl_sc]
+set_property -dict [list CONFIG.NUM_SI {1} CONFIG.NUM_MI [expr {$tier == 2 ? 4 : 3}]] [get_bd_cells ctrl_sc]
 connect_bd_net $pl_clk  [get_bd_pins ctrl_sc/aclk]
 connect_bd_net $pl_rstn [get_bd_pins ctrl_sc/aresetn]
 connect_bd_net $pl_clk  [get_bd_pins cips/m_axi_fpd_aclk]
@@ -257,6 +353,12 @@ connect_bd_intf_net [get_bd_intf_pins cips/M_AXI_FPD]  [get_bd_intf_pins ctrl_sc
 connect_bd_intf_net [get_bd_intf_pins ctrl_sc/M00_AXI] [get_bd_intf_pins axi_dma/S_AXI_LITE]
 connect_bd_intf_net [get_bd_intf_pins ctrl_sc/M01_AXI] [get_bd_intf_pins rx/s_axi_ctrl]
 connect_bd_intf_net [get_bd_intf_pins ctrl_sc/M02_AXI] [get_bd_intf_pins rx/s_axi_demod]
+if {$tier == 2} {
+    connect_bd_intf_net [get_bd_intf_pins ctrl_sc/M03_AXI] [get_bd_intf_pins esi/s_axi]
+    # one box in the diagram for everything tier 2 added (after the last
+    # connection to it, so the hierarchy pins are made for us)
+    group_bd_cells esi_link [get_bd_cells {esi gt_bridge_ip gt_quad_base bufg_gt_tx bufg_gt_rx gt_refclk_buf gt_zero4 gt_zero1}]
+}
 
 # -----------------------------------------------------------------------------
 # 6. Addresses.  PL peripherals in the FPD PL window (0xA400_0000 up on
@@ -265,6 +367,7 @@ connect_bd_intf_net [get_bd_intf_pins ctrl_sc/M02_AXI] [get_bd_intf_pins rx/s_ax
 #      axi_dma   0xA400_0000
 #      rx ctrl   0xA401_0000   (channelizer registers, 4 KB used)
 #      rx demod  0xA402_0000   (demod registers, 4 KB used)
+#      esi link  0xA403_0000   (tier 2 only: ESIstream link registers, 64 B used)
 # -----------------------------------------------------------------------------
 set fpd [get_bd_addr_spaces cips/M_AXI_FPD]
 # control plane: fixed offsets, slave segments named by their own paths, so
@@ -273,6 +376,9 @@ set fpd [get_bd_addr_spaces cips/M_AXI_FPD]
 assign_bd_address -target_address_space $fpd -offset 0xA4000000 -range 64K [get_bd_addr_segs axi_dma/S_AXI_LITE/Reg]
 assign_bd_address -target_address_space $fpd -offset 0xA4010000 -range 64K [get_bd_addr_segs rx/s_axi_ctrl/*]
 assign_bd_address -target_address_space $fpd -offset 0xA4020000 -range 64K [get_bd_addr_segs rx/s_axi_demod/*]
+if {$tier == 2} {
+    assign_bd_address -target_address_space $fpd -offset 0xA4030000 -range 64K [get_bd_addr_segs esi_link/esi/s_axi/*]
+}
 # everything else (the DMA's three masters onto the DDR) as Vivado sees fit
 assign_bd_address
 foreach s [get_bd_addr_segs -of_objects $fpd] {
@@ -282,4 +388,4 @@ foreach s [get_bd_addr_segs -of_objects $fpd] {
 regenerate_bd_layout
 validate_bd_design
 save_bd_design
-puts "INFO: vck190 playback BD built: DMA 0xA4000000, rx ctrl 0xA4010000, rx demod 0xA4020000"
+puts "INFO: vck190 playback BD built: DMA 0xA4000000, rx ctrl 0xA4010000, rx demod 0xA4020000[expr {$tier == 2 ? ", esi link 0xA4030000" : ""}]"

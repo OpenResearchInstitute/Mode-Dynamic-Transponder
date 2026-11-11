@@ -401,6 +401,152 @@ make vck190-clean          # removes the Vivado project dir and logs, keeps the 
 make vck190-license-down   # drops the license tunnel
 ```
 
+## How to Build and Run the Digital Loopback (tier 2)
+
+_Designed and benched 2026-11-09 (`ESISTREAM_NOTES.md` §4.2). The steps
+below have **not** yet been run on chococat or the board; the first one that
+has will say so here. Same board, same cable, no card in the FMC slot._
+
+Tier 2 is tier 1 with the samples taking the long way round: pacer → Teledyne
+ESIstream TX → a GTY transceiver pair talking to itself (near-end PMA
+loopback) → Teledyne ESIstream RX → receiver. The receiver, `opv_play`, the
+stimulus and the grade are unchanged. What is new: one more register block
+at 0xA403_0000 (the link's status and scoreboard), two make targets, one
+constraints file, and one thing to do after every power cycle (the
+reference clock).
+
+### T1. Build the block design only (minutes; no license needed)
+
+```
+make vck190-project-esi
+```
+
+Expect, in `haifuraiya/platforms/vck190/syn/vck190_project_esi.log`:
+
+```
+grep "INFO: tier\|INFO: M_AXI_FPD\|validate\|CRITICAL WARNING" haifuraiya/platforms/vck190/syn/vck190_project_esi.log
+```
+
+the tier banner (`INFO: tier 2 -> project mdt_vck190_playback_esi`), the
+three tier-1 addresses plus `0x000A4030000` for the link, and the one
+cosmetic 3-bit-port warning from tier 1. Anything else critical: stop and
+look; the GT IP is new to this design and this step is where it will
+complain. The block design has the tier-1 cells plus one hierarchy,
+`esi_link`, holding `esi` (our module), `gt_bridge_ip`, `gt_quad_base`, the
+two `bufg_gt`s, the refclk buffer and two constants.
+
+### T2. Build the bitstream and XSA (license required)
+
+```
+make vck190-xsa-esi
+```
+
+Writes `mdt_vck190_playback_esi.xsa`, `timing_summary_esi.rpt`,
+`utilization_esi.rpt`; the tier-1 XSA is untouched. Read the timing summary
+as in step 5: `clk_pl_0` as before, and now two more clocks from the quad
+(the TX and RX user clocks, 6.400 ns) with their own paths — Teledyne's RX
+at 156.25 MHz is the new timing question. The three clock groups are
+declared asynchronous to each other (`syn/vck190_esi_link.xdc`); a failing
+path *between* them means a crossing was missed, not that the clock is too
+fast.
+
+### T3. Import, build, boot
+
+Exactly steps 7–9 with the tier-2 XSA named:
+
+```
+make vck190-import-xsa VCK190_XSA=haifuraiya/platforms/vck190/syn/mdt_vck190_playback_esi.xsa
+make vck190-build
+# power-cycle the VCK190, wait 30 s, program the SI570 (T4), then:
+make vck190-boot
+ssh-keygen -R 10.73.1.17
+```
+
+`vck190-check-xsa` still looks for the receiver at 0xA4010000, which tier 2
+also has. **Between import and build, confirm one label:** the link block
+is made a UIO device (`/dev/uio1`) by `petalinux/system-user.dtsi`, which
+refers to it by the label the device-tree generator gives the cell
+`playback_i/esi_link/esi`. The file guesses `esi_link_esi`; check with
+
+```
+grep -n a4030000 haifuraiya/platforms/vck190/petalinux/mdt_vck190/components/plnx_workspace/device-tree/device-tree/pl.dtsi
+```
+
+and if the label on that line differs, change `&esi_link_esi` in
+`system-user.dtsi` to match. (A tier-1 import has no such node; the
+reference would fail the device-tree build, so comment it out when going
+back to a tier-1 image.) The receiver's node was found the same way in
+step 7.
+
+### T4. Program the GT reference clock — after EVERY power cycle
+
+The quad's reference clock is the board's user SI570 (U205, through the
+SI53340 buffer onto AB11/AB10, jumper J306 off = default). It **powers up at
+100.000 MHz** and the design needs **156.25 MHz** (10.0 Gb/s = 64 × 156.25
+MHz, and the EV12AQ600's SSO for tier 3). It is programmed over I2C (device
+address 0x5F) through the System Controller — the Board User Interface over
+the J207 USB-UART, the same cable as JTAG, on its clocks page: set the user
+SI570 to 156.25 MHz. It does not survive a power cycle (the System
+Controller's own saved-clock feature is the thing to look for if this gets
+tiresome). Until it is programmed the transceiver's PLL will not lock to
+anything useful and STATUS will show `lcpll_lock` or `xcvr_ready` low — or,
+worse, lock at the wrong rate and never align. T5's `ratio` is the check.
+
+### T5. Look at the link before the first run
+
+`opv_play` is the only thing that reads the link's registers (dōgu
+`tools/opv_play`; rebuild and deploy it after applying
+`dogu_opv_play_esi.patch`, as in step 10). With no stimulus:
+
+```
+ssh root@10.73.1.17 opv_play -l
+```
+
+Expected, on a healthy link, before any data (the register names are the
+ones in `rtl/esi/esi_link_hw.vhd`):
+
+```
+ESI_STATUS 0x000006FF  CONTROL 0x00000020  (loopback mode 2)
+  gt_powergood=1 lcpll_lock=1 tx_resetdone=1 rx_resetdone=1 gt_link_status=1 xcvr_ready=1 lanes_ready=1 link_ready=1 snapshot_busy=0 tx_clk_alive=1 rx_clk_alive=1
+ESI_SAMPLES_SENT 0  ESI_SAMPLES_RCVD 0  (equal)
+ESI_SEQ_ERRORS 0  ESI_MARKER_ERRORS 0  ESI_MULTI_ERRORS 0  ESI_LINK_DROPS 0
+tx_clk / PL clock over 20000000 PL clocks = 1.5625  (156.25 MHz / 100 MHz = 1.5625; 1.0000 = SI570 still at 100 MHz)
+```
+
+(`0x6FF` = bits 0–7, 9, 10 set, bit 8 — snapshot busy — clear; the exact
+`gt_link_status` behaviour of the bridge in bypass mode is the one bit here
+we have not seen in a bench.) If the ratio is 1.0000, the SI570 is still at
+100 MHz: go back to T4, then power-cycle or reboot (the block pulses the
+transceiver reset itself after reset). If `xcvr_ready` is 1 but
+`lanes_ready` stays 0, the serial path is not closing; the CONTROL
+register's loopback mode (bits 6:4; 1 = near-end PCS, no analog path) and
+GT reset (bit 3) are the two experiments, and `opv_play` has no switch for
+them on purpose — if they are needed, that is a finding to record and a
+small `opv_play` option to add, not a reason to poke the register by hand.
+
+### T6. Run the playback and read both scoreboards
+
+Step 10 unchanged — same `opv_play -q` command, same grader, same 24/24.
+With the tier-2 image loaded, `opv_play` refuses to start until the link is
+ready and prints the link's scoreboard after the receiver's readbacks.
+Pass for tier 2 = the grade table from step 10 **and**
+ESI_SAMPLES_SENT = ESI_SAMPLES_RCVD = 20,799,760 (the 25-frame stimulus
+file; the simulation's 20,829,760 included the bench's 30,000-sample tail),
+ESI_SEQ_ERRORS = ESI_MARKER_ERRORS = ESI_MULTI_ERRORS = 0, ESI_LINK_DROPS = 0.
+Record the run in `ESISTREAM_NOTES.md` §4.2 and the tier table in
+`VCK190_PLAYBACK_PLAN.md`.
+
+### T7. The link's unit test, on chococat
+
+The wrapper (`esi_link_hw`: registers, snapshot, two link clocks against the
+PL clock) has a bench of its own under nvc, alongside the link bench of
+step "How to Simulate". It has passed in the sandbox only; run it once on
+chococat so the record says so:
+
+```
+haifuraiya/platforms/vck190/sim/esi/run_esi_link_hw_nvc.sh      # pass = PASS: tb_esi_link_hw, about a minute
+```
+
 ### Things that bit us (keep adding)
 
 - 2026-10-23: forgot the license checkout; synthesis refused at launch. Now
@@ -473,3 +619,17 @@ make vck190-license-down   # drops the license tunnel
   781.25 kHz); the golden channelizer model put tier 2 on the designed
   phase; a byte-identical re-run after the fix proved it. Fix:
   `wait until rising_edge(aclk)` after the `wait for` (two places).
+- 2026-11-09: the whole-file delivery of the ESI bench on 2026-11-08 was
+  built from a base one commit too old and silently put `NB_LANES => 8` back
+  (the 2026-11-07 commit had made it 2). Caught while splitting the link
+  clocks; it is 2 again. Whole-file deliveries need a `git diff --stat`
+  against HEAD before committing, not just a look at the hunk you asked for.
+- 2026-11-09: `vck190_playback_project.tcl` still listed `axi_mon_tap.vhd`
+  (deleted 2026-11-02) and counted it, so `make vck190-project` would have
+  failed the manifest check. Removed from the list; the count is 35 (+23
+  for tier 2).
+- 2026-11-09: Vivado's GUI froze on the GT bridge's block automation and the
+  journal was never flushed, so the session left no record. The GT work is
+  done in batch scripts (`syn/gt_scratch.tcl`) that print what they find;
+  the IP's block-automation rule names are not public, so the GT pair is
+  built cell by cell from Teledyne's block design instead.

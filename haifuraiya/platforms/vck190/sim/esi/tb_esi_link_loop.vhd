@@ -79,7 +79,7 @@ begin
             aclk => aclk, aresetn => aresetn,
             s_axis_tdata => s_tdata, s_axis_tvalid => s_tvalid, s_axis_tready => s_tready,
             m_axis_tdata => m_tdata, m_axis_tvalid => m_tvalid, m_axis_tready => '1',
-            link_clk => link_clk, link_rstn => link_rstn,
+            tx_clk => link_clk, tx_rstn => link_rstn, rx_clk => link_clk, rx_rstn => link_rstn,
             link_ready => link_ready,
             seq_errors => seq_errors, marker_errors => marker_errors, multi_errors => multi_errors,
             samples_sent => samples_sent, samples_rcvd => samples_rcvd);
@@ -90,7 +90,7 @@ begin
             aclk => aclk, aresetn => aresetn,
             s_axis_tdata => s_tdata, s_axis_tvalid => s_tvalid, s_axis_tready => sw_tready,
             m_axis_tdata => sw_tdata, m_axis_tvalid => sw_tvalid, m_axis_tready => '1',
-            link_clk => link_clk, link_rstn => link_rstn, xcvr_ready => '1',
+            tx_clk => link_clk, tx_rstn => link_rstn, rx_clk => link_clk, rx_rstn => link_rstn, xcvr_ready => '1',
             xcvr_tx_data => x_tx, xcvr_rx_data => x_rx,
             link_ready => sw_ready,
             seq_errors => sw_seq_errors, marker_errors => sw_marker_errors, multi_errors => sw_multi_errors,

@@ -34,6 +34,7 @@ VCK190_USER_DTSI  := $(VCK190_DIR)/petalinux/system-user.dtsi
 VCK190_RX_CTRL_ADDR := A4010000
 
 .PHONY: vck190-help vck190-license-up vck190-license-down vck190-check-license vck190-check-vivado vck190-check-env vck190-xsa vck190-xsa-ila vck190-project \
+        vck190-project-esi vck190-xsa-esi \
         vck190-petalinux-create vck190-import-xsa vck190-check-xsa vck190-build \
         vck190-boot vck190-clean
 
@@ -44,6 +45,8 @@ vck190-help:
 	@echo "  make vck190-project           Vivado batch: project + block design + wrapper only (fast; validates the BD)."
 	@echo "  make vck190-xsa               ... plus synth/impl/device image -> $(notdir $(VCK190_XSA)), timing + utilization reports."
 	@echo "  make vck190-xsa-ila           Debug variant: same, plus a System ILA on the soft-bit path -> mdt_vck190_playback_ila.xsa/.ltx."
+	@echo "  make vck190-project-esi       Tier 2: project + BD with the ESIstream link and the GTY quad (no synthesis)."
+	@echo "  make vck190-xsa-esi           Tier 2: ... plus synth/impl/device image -> mdt_vck190_playback_esi.xsa."
 	@echo "  make vck190-petalinux-create  One-time: create the PetaLinux 2022.2 Versal project under platforms/vck190/petalinux/."
 	@echo "  make vck190-import-xsa        Import the XSA into the PetaLinux project (+ apply system-user.dtsi)."
 	@echo "  make vck190-check-xsa         Verify the imported XSA carries the receiver at 0x$(VCK190_RX_CTRL_ADDR)."
@@ -112,6 +115,25 @@ vck190-xsa-ila: vck190-check-vivado vck190-check-license
 	@echo "    To boot it: make vck190-import-xsa VCK190_XSA=$(VCK190_XSA_ILA) && make vck190-build && make vck190-boot"
 	@echo "    Then Vivado Hardware Manager: open_hw, connect, refresh device with the .ltx, arm trigger on tvalid."
 
+# Tier 2 (ESISTREAM_NOTES.md section 5): the same project scripts with
+# VCK190_TIER=2 -- separate project dir, XSA, reports and log, so the tier-1
+# image stays.  The link's registers sit at 0xA4030000 (VCK190_ESI_ADDR).
+VCK190_XSA_ESI  := $(VCK190_SYN)/mdt_vck190_playback_esi.xsa
+VCK190_ESI_ADDR := A4030000
+vck190-project-esi: vck190-check-vivado
+	@echo "==> Vivado batch (TIER 2): VCK190 playback project + block design with the ESIstream link (no synthesis)..."
+	cd $(VCK190_SYN) && VCK190_TIER=2 vivado -mode batch -nojournal -log vck190_project_esi.log -source vck190_playback_project.tcl
+	@echo "==> Block design validated. Log: $(VCK190_SYN)/vck190_project_esi.log"
+
+vck190-xsa-esi: vck190-check-vivado vck190-check-license
+	@echo "==> Vivado batch (TIER 2): project, synthesis, implementation, device image, XSA..."
+	@echo "    Output: $(VCK190_XSA_ESI)"
+	cd $(VCK190_SYN) && VCK190_TIER=2 vivado -mode batch -nojournal -log vck190_build_esi.log -source vck190_playback_project.tcl -tclargs build
+	@test -f $(VCK190_XSA_ESI) || { echo "ERROR: XSA not produced at $(VCK190_XSA_ESI) -- see $(VCK190_SYN)/vck190_build_esi.log"; exit 1; }
+	@echo "==> Tier-2 XSA built: $(VCK190_XSA_ESI)"
+	@echo "    Reports: $(VCK190_SYN)/timing_summary_esi.rpt  $(VCK190_SYN)/utilization_esi.rpt"
+	@echo "==> Next: make vck190-import-xsa VCK190_XSA=$(VCK190_XSA_ESI)   (then vck190-build, power cycle, SI570 to 156.25 MHz, vck190-boot)"
+
 vck190-petalinux-create: vck190-check-env
 	@test ! -d $(VCK190_PL_PROJECT) || { echo "PetaLinux project already exists at $(VCK190_PL_PROJECT)"; exit 0; }
 	@mkdir -p $(VCK190_PL_DIR)
@@ -156,6 +178,6 @@ vck190-boot: vck190-check-env
 	cd $(VCK190_PL_PROJECT) && petalinux-boot --jtag --prebuilt 3
 
 vck190-clean:
-	rm -rf $(VCK190_SYN)/mdt_vck190_playback_project $(VCK190_SYN)/*.log $(VCK190_SYN)/*.jou \
-	       $(VCK190_SYN)/timing_summary.rpt $(VCK190_SYN)/utilization.rpt
+	rm -rf $(VCK190_SYN)/mdt_vck190_playback_project $(VCK190_SYN)/mdt_vck190_playback_esi_project $(VCK190_SYN)/*.log $(VCK190_SYN)/*.jou \
+	       $(VCK190_SYN)/timing_summary.rpt $(VCK190_SYN)/utilization.rpt $(VCK190_SYN)/timing_summary_esi.rpt $(VCK190_SYN)/utilization_esi.rpt
 	@echo "==> Vivado project removed (XSA kept: $(VCK190_XSA))"

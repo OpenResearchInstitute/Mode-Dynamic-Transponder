@@ -21,7 +21,19 @@ set project_name "mdt_vck190_playback"
 # a System ILA on the soft-bit path (rx -> widen -> DMA S2MM).  Separate
 # project dir, XSA and reports so the working image is never overwritten.
 set with_ila [expr {[info exists ::env(VCK190_ILA)] && $::env(VCK190_ILA) ne "0"}]
+# Tier (VCK190_TIER in the environment; `make vck190-project-esi` / `vck190-xsa-esi`):
+#   1 (default) memory loopback, the receiver fed straight from the pacer
+#   2           ESIstream digital loopback: Teledyne's TX/RX around a real GTY
+#               quad in near-end PMA loopback, between the pacer and the
+#               receiver (rtl/esi/esi_link_hw.vhd; ESISTREAM_NOTES.md section 4.2)
+# Separate project dir, XSA and reports per tier, so the tier-1 image is never
+# overwritten by a tier-2 build.
+set tier [expr {[info exists ::env(VCK190_TIER)] ? $::env(VCK190_TIER) : 1}]
+if {$tier ni {1 2}} { error "VCK190_TIER must be 1 or 2 (got '$tier')" }
+if {$tier == 2} { append project_name "_esi" }
 if {$with_ila} { append project_name "_ila" }
+puts "INFO: tier $tier -> project $project_name"
+
 set project_dir  [file join $script_dir "${project_name}_project"]
 set part_name    "xcvc1902-vsva2197-2MP-e-S"
 set board_ref    "xilinx.com:vck190:part0:2.2"
@@ -85,21 +97,66 @@ safe_add_files sources_1 {
     ../../../rtl/rx/haifuraiya_rx_axi.vhd
 }
 # --- platform blocks (this directory tree) + the ZCU102 widener, read-only reuse
+# (axi_mon_tap.vhd left the tree 2026-11-02; the manifest count follows)
 safe_add_files sources_1 {
     ../rtl/axis_sample_pacer.vhd
     ../rtl/axis_softbit_tap.vhd
-    ../rtl/axi_mon_tap.vhd
     ../../../syn/zcu102_with_adrv9001/axis_softbit_widen.vhd
 }
+set n_expected 35
+set module_ref_tops {haifuraiya_rx_axi.vhd axis_sample_pacer.vhd axis_softbit_widen.vhd axis_softbit_tap.vhd}
+
+# --- tier 2: Teledyne e2v's ESIstream TX/RX (public domain, vendored under
+# third_party/esistream_vck190/ -- see README_ORI.md there) and our splice
+# (rtl/esi/).  The same list the sim runner uses, plus the hardware wrapper.
+# The real rx_xpm_async_fifo (XPM) is used; Vivado has XPM.
+if {$tier == 2} {
+    set esi ../../../third_party/esistream_vck190
+    if {![file exists [file normalize [file join $script_dir $esi/src_pkg/esistream_pkg_64b.vhd]]]} {
+        error "tier 2 needs the Teledyne ESIstream package extracted under third_party/esistream_vck190/ (README_ORI.md)"
+    }
+    safe_add_files sources_1 [list \
+        $esi/src_pkg/esistream_pkg_64b.vhd \
+        $esi/src_common/two_flop_synchronizer.vhd \
+        $esi/src_common/ff_synchronizer_array.vhd \
+        $esi/src_rx/rx_delay.vhd \
+        $esi/src_rx/rx_xpm_async_fifo.vhd \
+        $esi/src_rx/rx_xpm_output_buffer.vhd \
+        $esi/src_rx/rx_frame_alignment.vhd \
+        $esi/src_rx/rx_lfsr_init.vhd \
+        $esi/src_rx/rx_decoding.vhd \
+        $esi/src_rx/rx_lane_decoding.vhd \
+        $esi/src_rx/rx_control.vhd \
+        $esi/src_rx/rx_esistream.vhd \
+        $esi/src_tx/tx_lfsr.vhd \
+        $esi/src_tx/tx_scrambling.vhd \
+        $esi/src_tx/tx_disparity_word_16b.vhd \
+        $esi/src_tx/tx_disparity.vhd \
+        $esi/src_tx/tx_encoding.vhd \
+        $esi/src_tx/tx_esistream.vhd \
+        ../rtl/esi/esi_loop_pkg.vhd \
+        ../rtl/esi/esi_sample_packer.vhd \
+        ../rtl/esi/esi_sample_reassembler.vhd \
+        ../rtl/esi/esi_link_loop.vhd \
+        ../rtl/esi/esi_link_hw.vhd \
+    ]
+    incr n_expected 23
+    lappend module_ref_tops esi_link_hw.vhd
+    # GT reference clock pins, lane pins, the GT clocks as asynchronous to the PL clock
+    add_files -fileset constrs_1 -norecurse [file normalize [file join $script_dir vck190_esi_link.xdc]]
+    # after the GT IP's own constraints, so the clock names it creates exist
+    set_property PROCESSING_ORDER LATE [get_files vck190_esi_link.xdc]
+}
+
 set n_added [llength [get_files -of_objects [get_filesets sources_1]]]
-if {$n_added != 36} {
-    error "source manifest short ($n_added/36) -- see SKIP lines (submodules initialized?)"
+if {$n_added != $n_expected} {
+    error "source manifest short ($n_added/$n_expected) -- see SKIP lines (submodules initialized?)"
 }
 set_property file_type {VHDL 2008} [get_files -of_objects [get_filesets sources_1]]
 
 # module-reference tops must be plain VHDL (the flow's rule, not ours);
 # everything they instantiate stays VHDL 2008
-set_property file_type {VHDL} [get_files {haifuraiya_rx_axi.vhd axis_sample_pacer.vhd axis_softbit_widen.vhd axis_softbit_tap.vhd axi_mon_tap.vhd}]
+set_property file_type {VHDL} [get_files $module_ref_tops]
 
 update_compile_order -fileset sources_1
 
@@ -117,7 +174,7 @@ if {$do_build} {
     launch_runs impl_1 -to_step write_device_image -jobs 8
     wait_on_run impl_1
     open_run impl_1
-    set rpt_sfx [expr {$with_ila ? "_ila" : ""}]
+    set rpt_sfx [expr {$tier == 2 ? "_esi" : ""}][expr {$with_ila ? "_ila" : ""}]
     report_timing_summary -file [file join $script_dir "timing_summary${rpt_sfx}.rpt"]
     report_utilization    -file [file join $script_dir "utilization${rpt_sfx}.rpt"]
     write_hw_platform -fixed -include_bit -force -file [file join $script_dir "${project_name}.xsa"]
