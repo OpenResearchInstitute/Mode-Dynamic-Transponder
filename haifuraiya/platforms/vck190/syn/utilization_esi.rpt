@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
 ----------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2022.2 (lin64) Build 3671981 Fri Oct 14 04:59:54 MDT 2022
-| Date         : Tue Nov 10 22:52:50 2026
+| Date         : Wed Nov 11 14:57:35 2026
 | Host         : chococat running 64-bit Ubuntu 22.04.5 LTS
 | Command      : report_utilization -file /home/abraxas3d/vck190/Mode-Dynamic-Transponder/haifuraiya/platforms/vck190/syn/utilization_esi.rpt
 | Design       : playback_wrapper
@@ -33,17 +33,17 @@ Table of Contents
 +----------------------------+--------+-------+------------+-----------+-------+
 |          Site Type         |  Used  | Fixed | Prohibited | Available | Util% |
 +----------------------------+--------+-------+------------+-----------+-------+
-| Registers                  | 124539 |     0 |          0 |   1799680 |  6.92 |
-|   Register as Flip Flop    | 124539 |     0 |          0 |   1799680 |  6.92 |
+| Registers                  | 124617 |     0 |          0 |   1799680 |  6.92 |
+|   Register as Flip Flop    | 124617 |     0 |          0 |   1799680 |  6.92 |
 |   Register as Latch        |      0 |     0 |          0 |   1799680 |  0.00 |
-| CLB LUTs                   | 149038 |     0 |          0 |    899840 | 16.56 |
-|   LUT as Logic             | 144505 |     0 |          0 |    899840 | 16.06 |
+| CLB LUTs                   | 149150 |     0 |          0 |    899840 | 16.58 |
+|   LUT as Logic             | 144617 |     0 |          0 |    899840 | 16.07 |
 |   LUT as Memory            |   4533 |     0 |          0 |    449920 |  1.01 |
 |     LUT as Distributed RAM |   3504 |     0 |            |           |       |
 |     LUT as Shift Register  |   1029 |     0 |            |           |       |
 |       Variable Length      |    162 |     0 |            |           |       |
 |       Fixed Length         |    867 |     0 |            |           |       |
-| LOOKAHEAD8                 |  13047 |     0 |          0 |    112480 | 11.60 |
+| LOOKAHEAD8                 |  13051 |     0 |          0 |    112480 | 11.60 |
 +----------------------------+--------+-------+------------+-----------+-------+
 * Warning! LUT value is adjusted to account for LUT combining.
 
@@ -54,15 +54,15 @@ Table of Contents
 +-----------------------------------------------+--------+-------+------------+-----------+-------+
 |                   Site Type                   |  Used  | Fixed | Prohibited | Available | Util% |
 +-----------------------------------------------+--------+-------+------------+-----------+-------+
-| SLICE                                         |  33850 |     0 |          0 |    112480 | 30.09 |
-|   SLICEL                                      |  17104 |     0 |            |           |       |
-|   SLICEM                                      |  16746 |     0 |            |           |       |
-|      using Distributed RAM or Shift Registers |   2076 |     0 |            |           |       |
-| CLB LUTs                                      | 149038 |     0 |          0 |    899840 | 16.56 |
-|    using CASCADE                              |  90901 |     0 |          0 |    899840 | 10.10 |
-|   LUT as Logic                                | 144505 |     0 |          0 |    899840 | 16.06 |
-|     single output                             |  33458 |       |            |           |       |
-|     dual output                               | 111047 |       |            |           |       |
+| SLICE                                         |  33791 |     0 |          0 |    112480 | 30.04 |
+|   SLICEL                                      |  17039 |     0 |            |           |       |
+|   SLICEM                                      |  16752 |     0 |            |           |       |
+|      using Distributed RAM or Shift Registers |   2070 |     0 |            |           |       |
+| CLB LUTs                                      | 149150 |     0 |          0 |    899840 | 16.58 |
+|    using CASCADE                              |  90935 |     0 |          0 |    899840 | 10.11 |
+|   LUT as Logic                                | 144617 |     0 |          0 |    899840 | 16.07 |
+|     single output                             |  33521 |       |            |           |       |
+|     dual output                               | 111096 |       |            |           |       |
 |   LUT as Memory                               |   4533 |     0 |          0 |    449920 |  1.01 |
 |     LUT as Distributed RAM                    |   3504 |     0 |            |           |       |
 |       single output                           |   3496 |       |            |           |       |
@@ -70,14 +70,14 @@ Table of Contents
 |     LUT as Shift Register                     |   1029 |     0 |            |           |       |
 |       single output                           |    743 |       |            |           |       |
 |       dual output                             |    286 |       |            |           |       |
-| CLB Registers                                 | 124539 |     0 |          0 |   1799680 |  6.92 |
-|   Register driven from within the CLB         |  41778 |       |            |           |       |
-|   Register driven from outside the CLB        |  82761 |       |            |           |       |
-|     LUT in front of the register is unused    |  76555 |       |            |           |       |
-|     LUT in front of the register is used      |   6206 |       |            |           |       |
+| CLB Registers                                 | 124617 |     0 |          0 |   1799680 |  6.92 |
+|   Register driven from within the CLB         |  41903 |       |            |           |       |
+|   Register driven from outside the CLB        |  82714 |       |            |           |       |
+|     LUT in front of the register is unused    |  76683 |       |            |           |       |
+|     LUT in front of the register is used      |   6031 |       |            |           |       |
 | CLB Imux registers                            |      0 |     0 |            |           |       |
 |   Pipelining                                  |      0 |       |            |           |       |
-| Unique Control Sets                           |   1039 |       |          0 |    224960 |  0.46 |
+| Unique Control Sets                           |   1045 |       |          0 |    224960 |  0.46 |
 +-----------------------------------------------+--------+-------+------------+-----------+-------+
 * * Note: Available Control Sets calculated as Slices * 2, Review the Control Sets Report for more information regarding control sets.
 
@@ -149,10 +149,10 @@ Table of Contents
 +--------------------------+------+-------+------------+-----------+-------+
 |         Site Type        | Used | Fixed | Prohibited | Available | Util% |
 +--------------------------+------+-------+------------+-----------+-------+
-| GLOBAL CLOCK BUFFERs     |    5 |     0 |          0 |       980 |  0.51 |
+| GLOBAL CLOCK BUFFERs     |    6 |     0 |          0 |       980 |  0.61 |
 |   BUFGCE_DIV/MBUFGCE_DIV |    0 |     0 |          0 |        40 |  0.00 |
 |   BUFG_PS/MBUFG_PS       |    1 |     0 |          0 |        12 |  8.33 |
-|   BUFG_GT/MBUFG_GT       |    2 |     0 |          0 |       168 |  1.19 |
+|   BUFG_GT/MBUFG_GT       |    3 |     0 |          0 |       168 |  1.79 |
 |   BUFGCE/MBUFGCE         |    0 |     0 |          0 |       296 |  0.00 |
 |   BUFGCTRL/MBUFGCTRL*    |    0 |     0 |          0 |        80 |  0.00 |
 |   BUFG_FABRIC            |    2 |     0 |          0 |       384 |  0.52 |
@@ -223,21 +223,21 @@ Table of Contents
 +--------------+--------+---------------------+
 |   Ref Name   |  Used  | Functional Category |
 +--------------+--------+---------------------+
-| FDRE         | 123555 |            Register |
-| LUTCY2       |  94908 |                 CLB |
-| LUTCY1       |  94908 |                 CLB |
-| LUT6         |  27725 |                 CLB |
-| LOOKAHEAD8   |  13047 |                 CLB |
-| LUT3         |  11707 |                 CLB |
-| LUT5         |  10401 |                 CLB |
-| LUT4         |  10113 |                 CLB |
-| LUT2         |   3341 |                 CLB |
-| LUT1         |   2449 |                 CLB |
+| FDRE         | 123622 |            Register |
+| LUTCY2       |  94940 |                 CLB |
+| LUTCY1       |  94940 |                 CLB |
+| LUT6         |  27787 |                 CLB |
+| LOOKAHEAD8   |  13051 |                 CLB |
+| LUT3         |  11711 |                 CLB |
+| LUT5         |  10402 |                 CLB |
+| LUT4         |  10126 |                 CLB |
+| LUT2         |   3355 |                 CLB |
+| LUT1         |   2452 |                 CLB |
 | RAMS64E5     |   2112 |                 CLB |
 | DSP58        |   1534 |          Arithmetic |
 | RAMD64E5     |   1384 |                 CLB |
 | SRL16E       |   1171 |                 CLB |
-| FDSE         |    695 |            Register |
+| FDSE         |    706 |            Register |
 | FDCE         |    203 |            Register |
 | RAMB36E5_INT |    164 |            BLOCKRAM |
 | SRLC32E      |    144 |                 CLB |
@@ -251,10 +251,10 @@ Table of Contents
 | NOC_NMU128   |      6 |            Advanced |
 | XPLL         |      3 |               Clock |
 | NOC_NMU512   |      3 |            Advanced |
+| BUFG_GT_SYNC |      3 |               Clock |
+| BUFG_GT      |      3 |               Clock |
 | RAMS32       |      2 |                 CLB |
 | RAMB18E5_INT |      2 |            BLOCKRAM |
-| BUFG_GT_SYNC |      2 |               Clock |
-| BUFG_GT      |      2 |               Clock |
 | BUFG_FABRIC  |      2 |               Clock |
 | PS9          |      1 |            Advanced |
 | OBUFDS       |      1 |                 I/O |
@@ -292,6 +292,7 @@ Table of Contents
 | playback_ctrl_sc_0       |    1 |
 | playback_bufg_gt_tx_0    |    1 |
 | playback_bufg_gt_rx_0    |    1 |
+| playback_bufg_gt_ref_0   |    1 |
 | playback_axi_noc_0_0     |    1 |
 | playback_axi_dma_0       |    1 |
 | bd_88c9_MC0_ddrc_0_phy   |    1 |

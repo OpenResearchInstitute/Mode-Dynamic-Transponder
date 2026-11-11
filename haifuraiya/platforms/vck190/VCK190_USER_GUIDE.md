@@ -552,35 +552,38 @@ watches a copy of the reference clock and resets the transceiver **when
 the clock becomes good** (`ESISTREAM_NOTES.md` §4.2, "the qualified
 reset"): nothing to do after boot. `opv_play -l` shows it —
 `refclk_valid=1`, `ESI_REFCLK_PERIOD 655 (reference clock 156.25 MHz)`,
-`ESI_REFCLK_GOOD_EVENTS 1`. _Verified on the board: not yet — the first
-boot of that build will say so here._ `-r` remains for experiments.
+`ESI_REFCLK_GOOD_EVENTS 1`. **Verified on the board 2026-11-11 15:52**
+(`sim/logs/hw_tier2_20261111_1552.txt`): straight after boot, nothing
+touched, `opv_play -l` read exactly that, and the playback passed 24/24
+with the same table as the day before. `-r` remains for experiments.
 
 ### T5. Look at the link before the first run
 
 `opv_play` is the only thing that reads the link's registers (dōgu
 `tools/opv_play`, step 10 builds and deploys it). `opv_play -l` reads the
-link without playing; `-r` resets the transceiver first (T4). Measured
-2026-11-10, straight after boot:
+link without playing; `-r` resets the transceiver by hand (T4; not needed
+since the 2026-11-11 build). Measured 2026-11-11 15:52, straight after
+boot, nothing touched:
 
 ```
+$ dmesg | grep si570
+[    6.376577] si570 9-005f: registered, current frequency 156250000 Hz
 $ opv_play -l
-ESI_STATUS 0x00000001  CONTROL 0x00000020  (loopback mode 2)
-  gt_powergood=1 lcpll_lock=0 tx_resetdone=0 rx_resetdone=0 gt_link_status=0 xcvr_ready=0 lanes_ready=0 link_ready=0 snapshot_busy=0 tx_clk_alive=0 rx_clk_alive=0
-ESIstream link: snapshot never completed -- a link clock is not running
-$ opv_play -r
-transceiver reset pulsed; waiting 500 ms for the bridge's reset sequence
-ESI_STATUS 0x000006EF  CONTROL 0x00000020  (loopback mode 2)
-  gt_powergood=1 lcpll_lock=1 tx_resetdone=1 rx_resetdone=1 gt_link_status=0 xcvr_ready=1 lanes_ready=1 link_ready=1 snapshot_busy=0 tx_clk_alive=1 rx_clk_alive=1
+ESI_STATUS 0x00000EEF  CONTROL 0x00000020  (loopback mode 2)
+  gt_powergood=1 lcpll_lock=1 tx_resetdone=1 rx_resetdone=1 gt_link_status=0 xcvr_ready=1 lanes_ready=1 link_ready=1 snapshot_busy=0 tx_clk_alive=1 rx_clk_alive=1 refclk_valid=1
 ESI_SAMPLES_SENT 0  ESI_SAMPLES_RCVD 0  (equal)
 ESI_SEQ_ERRORS 0  ESI_MARKER_ERRORS 0  ESI_MULTI_ERRORS 0  ESI_LINK_DROPS 0
-tx_clk / PL clock over 20006224 PL clocks = 1.5625  (156.25 MHz / 100 MHz = 1.5625; 1.0000 = SI570 still at 100 MHz)
+ESI_REFCLK_PERIOD 655  (reference clock 156.34 MHz; 156.25 expected)  ESI_REFCLK_GOOD_EVENTS 1
+tx_clk / PL clock over 20008025 PL clocks = 1.5625  (156.25 MHz / 100 MHz = 1.5625; 1.0000 = SI570 still at 100 MHz)
 ```
 
-`0x6EF` was the healthy word for that build; with the clock monitor
-(2026-11-11 build) it is `0xEEF` — bit 11 `refclk_valid` added — and the
-`-l` straight after boot should read it without any `-r`. Bit 4
-(`gt_link_status`) is the bridge's own link indicator for its protocol
-modes and stays 0 in bypass mode; it is not part of the pass. Reading the failures: ratio 1.0000 =
+`0xEEF` is the healthy word: every bit but 4. (`gt_link_status`, bit 4, is
+the bridge's own link indicator for its protocol modes and stays 0 in
+bypass mode; it is not part of the pass. The "156.34 MHz" is the
+655-count's resolution, not the oscillator; the 1.5625 ratio over 20
+million clocks is the precise figure.) The 2026-11-10 build, before the
+clock monitor, read `0x001` here and needed `opv_play -r` to reach
+`0x6EF`; that transcript is `sim/logs/hw_tier2_20261110_2311_linkup.txt`. Reading the failures: ratio 1.0000 =
 the oscillator is at 100 MHz (the device tree did not take — check
 `dmesg` as in T4); `lcpll_lock=0` with both clocks alive after `-r` is the
 2026-11-10 miswiring, fixed in `8f1d612` (the lock signal must be the
@@ -740,3 +743,22 @@ haifuraiya/platforms/vck190/sim/esi/run_esi_link_hw_nvc.sh      # pass = PASS: t
   timed out waiting for DONE") — the 2026-10-25 lesson again, and it cost
   the quick "reset after clock" experiment, which then needed `-r` in
   `opv_play` instead. Power cycle, 30 s, boot: there is no shortcut.
+- 2026-11-11: `i2cdetect` "not found" over `ssh` was PATH: it is
+  `/usr/sbin/i2cdetect`, and a non-interactive `ssh` shell does not have
+  `/usr/sbin` on its PATH. The rootfs line had worked.
+- 2026-11-11: `opv_play` run again on a board that had already run once
+  (no reboot in between) delivered 0 frames — frame sync gone, CFO at the
+  rail — while the link underneath was perfect (41.6 million samples, no
+  errors). `opv_play` does not reset the receiver; step 10 says reboot
+  between runs; it now refuses on a warm receiver unless told `-w`.
+- 2026-11-11: `make vck190-boot` failed with "PLM stalled during
+  programming" and then `xsdb` showed the Versal as a bare `DAP (AXI AP
+  transaction error, DAP status 0x30000021)` with no `xcvc1902` entry and
+  `plm log` unreadable. Not the image: `pkill -f hw_server`, a full power
+  cycle with the 30 s wait, and the next boot went through. If `xsdb
+  -eval 'connect; targets'` does not list `Versal xcvc1902`, there is no
+  point programming; re-seat the USB cable (J207) and power cycle again.
+- 2026-11-11: a test was run against the previous day's bitstream because
+  the rebuild had not happened before a meeting. The registers said so
+  (`SAMPLES_SENT` already 20,799,760 at the start; the new registers read
+  0). Read the counters before believing a run; a fresh boot starts at 0.

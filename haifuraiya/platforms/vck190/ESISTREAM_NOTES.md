@@ -262,8 +262,13 @@ switches it at 80 µs the way Linux does, and checks: no reset and
 REFCLK_PERIOD 1024 before; exactly one reset, `refclk_valid`,
 REFCLK_PERIOD 656 and link-up after; then drops the reference and brings it
 back — `link_ready` falls, a second reset, REFCLK_GOOD_EVENTS 2, link back.
-PASS (nvc, 2026-11-11). On the board the expectation is `opv_play -l`
-straight after boot reading 0xEEF with no `-r`, and REFCLK_GOOD_EVENTS 1.
+PASS (nvc, 2026-11-11). **On the board, 2026-11-11 15:52** (commit
+`8302671`, dōgu `debe311`; `sim/logs/hw_tier2_20261111_1552.txt`):
+`opv_play -l` straight after boot, nothing touched — STATUS 0xEEF,
+`refclk_valid`, REFCLK_PERIOD 655, REFCLK_GOOD_EVENTS 1, link_ready; then
+the playback: 24/24 decodable with the same per-frame table as 2026-11-10
+to the last digit, sent = received = 20,799,760, zero link errors. Tier 2
+needs nothing manual between power-on and a passing run.
 
 **Pass criterion (tier 2, hardware):** `opv_play -q`, same command as tier
 1: 24/24 decodable on the acceptance stimulus with the §4.1 table, and in the
@@ -302,12 +307,11 @@ System Controller's console dark (the device-tree route above replaced it);
 and the bridge's `lcpll_lock_out` never asserting in bypass mode (the quad's
 `hsclk0_lcplllock` is the signal, as in Teledyne's wrapper).
 
-**Still open:** the qualified reset is designed and benched, not yet built
-and booted (the next `make vck190-xsa-esi`); `tb_esi_link_hw` has run under nvc in the
-sandbox only, not yet on chococat; `i2c-tools` is `=y` in the rootfs config
-but `i2cdetect` did not appear in the image (not needed — the kernel found
-the switch and the oscillator itself — but a config line that does nothing
-is a question). **Decided:** `system.xsa` stays in git, so a clone can
+**Still open:** `tb_esi_link_hw` has run under nvc in the sandbox only,
+not yet on chococat. **Closed:** the qualified reset — built, booted and
+measured 2026-11-11 (above); `i2cdetect` — it is in the image at
+`/usr/sbin/i2cdetect`, the "not found" was a non-interactive `ssh` PATH.
+**Decided:** `system.xsa` stays in git, so a clone can
 reproduce the board without rebuilding the design. **Explained:** the
 System Controller's console was dark because the VCK190's System
 Controller boots from a microSD card in **its own slot, J206** (not the
@@ -387,7 +391,7 @@ we want that in writing since the risk is the FPGA's banks.
    link counters sent = rcvd, zero errors.~~ **PASS 2026-11-10** (§4.2).
 4a. ~~The link block retries the transceiver reset~~ The link block resets
    the transceiver when its reference clock becomes good (§4.2, "the
-   qualified reset"): designed and benched 2026-11-11; build, boot,
-   `opv_play -l` with no `-r` next.
+   qualified reset"): designed, benched, **built and passed on the board
+   2026-11-11**. No manual step remains in tier 2.
 5. Downconverter design pass on paper (mode/clock per §5), then its bench,
    then fabric — for tier 3, when the card arrives.

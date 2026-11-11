@@ -1,0 +1,82 @@
+abraxas3d@chococat:~/vck190/Mode-Dynamic-Transponder$ ssh-keygen -R 10.73.1.17
+scp ~/dogu/tools/opv_play/opv_play root@10.73.1.17:/home/root/
+ssh root@10.73.1.17 'dmesg | grep si570; /home/root/opv_play -l'
+# Host 10.73.1.17 found: line 24
+/home/abraxas3d/.ssh/known_hosts updated.
+Original contents retained as /home/abraxas3d/.ssh/known_hosts.old
+ssh: connect to host 10.73.1.17 port 22: No route to host
+lost connection
+The authenticity of host '10.73.1.17 (10.73.1.17)' can't be established.
+RSA key fingerprint is SHA256:/Jag8NnlILS6VUvEOr6U5YRG31aFjV7bDrxcbI9XC8I.
+This key is not known by any other names
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '10.73.1.17' (RSA) to the list of known hosts.
+root@10.73.1.17's password: 
+[    6.376577] si570 9-005f: registered, current frequency 156250000 Hz
+sh: line 1: /home/root/opv_play: No such file or directory
+abraxas3d@chococat:~/vck190/Mode-Dynamic-Transponder$ scp ~/dogu/tools/opv_play/opv_play root@10.73.1.17:/home/root/
+root@10.73.1.17's password: 
+opv_play                                                                                                 100%   23KB 542.2KB/s   00:00    
+abraxas3d@chococat:~/vck190/Mode-Dynamic-Transponder$ ssh root@10.73.1.17 'dmesg | grep si570; /home/root/opv_play -l'
+root@10.73.1.17's password: 
+[    6.376577] si570 9-005f: registered, current frequency 156250000 Hz
+ESI_STATUS 0x00000EEF  CONTROL 0x00000020  (loopback mode 2)
+  gt_powergood=1 lcpll_lock=1 tx_resetdone=1 rx_resetdone=1 gt_link_status=0 xcvr_ready=1 lanes_ready=1 link_ready=1 snapshot_busy=0 tx_clk_alive=1 rx_clk_alive=1 refclk_valid=1 
+ESI_SAMPLES_SENT 0  ESI_SAMPLES_RCVD 0  (equal)
+ESI_SEQ_ERRORS 0  ESI_MARKER_ERRORS 0  ESI_MULTI_ERRORS 0  ESI_LINK_DROPS 0
+ESI_REFCLK_PERIOD 655  (reference clock 156.34 MHz; 156.25 expected)  ESI_REFCLK_GOOD_EVENTS 1
+tx_clk / PL clock over 20008025 PL clocks = 1.5625  (156.25 MHz / 100 MHz = 1.5625; 1.0000 = SI570 still at 100 MHz)
+abraxas3d@chococat:~/vck190/Mode-Dynamic-Transponder$ scp /tmp/opv_chan_stim.bin root@10.73.1.17:/home/root/
+root@10.73.1.17's password: 
+opv_chan_stim.bin                                                                                        100%   79MB  32.6MB/s   00:02    
+abraxas3d@chococat:~/vck190/Mode-Dynamic-Transponder$ ssh root@10.73.1.17 '/home/root/opv_play -i /home/root/opv_chan_stim.bin -o /home/root/soft.bin -q'
+root@10.73.1.17's password: 
+stimulus: 83199040 bytes = 20799760 samples = 1.040 s at 20 MSps, 20 DMA buffers
+ESIstream link present (tier 2): STATUS 0x00000EEF
+24 frames (51456 soft bits) in 4.22 s (includes the 3000 ms end-of-run timeout)
+channelizer VERSION 0x00010000   demod VERSION 0x00060600
+DEMOD_STATUS 0x00000003  (frame_sync_locked=1 sym_locked=1)
+FRAMES_RECEIVED 24   SOFT_DROPPED 0
+CFO_STATE 3  CFO_ESTIMATE 498 Hz  CFO_QUALITY 6763
+SYM_CLK_OFFSET -2203 (Q24 samples/symbol = -11.39 ppm)
+ESI_STATUS 0x00000EEF  CONTROL 0x00000020  (loopback mode 2)
+  gt_powergood=1 lcpll_lock=1 tx_resetdone=1 rx_resetdone=1 gt_link_status=0 xcvr_ready=1 lanes_ready=1 link_ready=1 snapshot_busy=0 tx_clk_alive=1 rx_clk_alive=1 refclk_valid=1 
+ESI_SAMPLES_SENT 20799760  ESI_SAMPLES_RCVD 20799760  (equal)
+ESI_SEQ_ERRORS 0  ESI_MARKER_ERRORS 0  ESI_MULTI_ERRORS 0  ESI_LINK_DROPS 0
+ESI_REFCLK_PERIOD 655  (reference clock 156.34 MHz; 156.25 expected)  ESI_REFCLK_GOOD_EVENTS 1
+tier 2 pass: the tier-1 grade, and SAMPLES_SENT = SAMPLES_RCVD = 20799760, all error counters 0
+abraxas3d@chococat:~/vck190/Mode-Dynamic-Transponder$ scp root@10.73.1.17:/home/root/soft.bin /tmp/ && python3 haifuraiya/platforms/vck190/tools/opv_soft_bin2txt.py /tmp/soft.bin /tmp/soft.txt && python3 haifuraiya/sim/grade_payload_ber.py /tmp/soft.txt --stim-dir haifuraiya/sim
+root@10.73.1.17's password: 
+soft.bin                                                                                                 100%   50KB  25.5MB/s   00:00    
+51456 soft bits = 24.00 frames -> /tmp/soft.txt
+/tmp/soft.txt: 51456 softs = 24.00 frames (quantized 3-bit; sign at >=4)
+FEC decodability limit: 8.0% pre-FEC BER (K=7 R=1/2 soft-decision, approximate)
+
+frame   BER      pol  verdict
+    1    0.42%   +   DECODABLE
+    2    0.47%   +   DECODABLE
+    3    0.19%   +   DECODABLE
+    4    0.00%   +   DECODABLE
+    5    0.19%   +   DECODABLE
+    6    0.37%   +   DECODABLE
+    7    0.09%   +   DECODABLE
+    8    0.09%   +   DECODABLE
+    9    0.28%   +   DECODABLE
+   10    0.09%   +   DECODABLE
+   11    0.19%   +   DECODABLE
+   12    0.19%   +   DECODABLE
+   13    0.19%   +   DECODABLE
+   14    0.37%   +   DECODABLE
+   15    0.19%   +   DECODABLE
+   16    0.19%   +   DECODABLE
+   17    0.19%   +   DECODABLE
+   18    0.56%   +   DECODABLE
+   19    0.09%   +   DECODABLE
+   20    0.09%   +   DECODABLE
+   21    0.28%   +   DECODABLE
+   22    0.09%   +   DECODABLE
+   23    0.09%   +   DECODABLE
+   24    0.19%   +   DECODABLE
+
+24/24 frames decodable
+abraxas3d@chococat:~/vck190/Mode-Dynamic-Transponder$ 

@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
 ---------------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version      : Vivado v.2022.2 (lin64) Build 3671981 Fri Oct 14 04:59:54 MDT 2022
-| Date              : Tue Nov 10 22:52:45 2026
+| Date              : Wed Nov 11 14:57:30 2026
 | Host              : chococat running 64-bit Ubuntu 22.04.5 LTS
 | Command           : report_timing_summary -file /home/abraxas3d/vck190/Mode-Dynamic-Transponder/haifuraiya/platforms/vck190/syn/timing_summary_esi.rpt
 | Design            : playback_wrapper
@@ -137,7 +137,7 @@ Table of Contents
 
     WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
     -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
-      0.266        0.000                      0               469114        0.010        0.000                      0               469114        0.000        0.000                       0                131448  
+      0.333        0.000                      0               469288        0.016        0.000                      0               469288        0.000        0.000                       0                131527  
 
 
 All user specified timing constraints are met.
@@ -170,7 +170,7 @@ esi_gt_refclk              {0.000 3.200}          6.400           156.250
 
 Clock                          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
 -----                          -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
-clk_pl_0                         0.266        0.000                      0               454319        0.010        0.000                      0               454319        3.501        0.000                       0                126780  
+clk_pl_0                         0.333        0.000                      0               454460        0.016        0.000                      0               454460        3.501        0.000                       0                126841  
 ddr4_dimm1_sma_clk_clk_p                                                                                                                                                     2.109        0.000                       0                     1  
   bank1_clkout0                                                                                                                                                              0.000        0.000                       0                     3  
     pll_clktoxphy[0]                                                                                                                                                         0.054        0.000                       0                     9  
@@ -178,9 +178,9 @@ ddr4_dimm1_sma_clk_clk_p                                                        
   bank1_xpll0_fifo_rd_clk                                                                                                                                                    0.000        0.000                       0                    24  
   mc_clk_xpll                                                                                                                                                                0.000        0.000                       0                     1  
   pll_clk_xpll                                                                                                                                                               0.054        0.000                       0                    10  
-esi_gt_refclk                                                                                                                                                                2.713        0.000                       0                     1  
-  ch0_rxoutclk                   1.655        0.000                      0                12976        0.012        0.000                      0                12976        2.594        0.000                       0                  3723  
-  ch0_txoutclk                   2.010        0.000                      0                 1663        0.066        0.000                      0                 1663        2.624        0.000                       0                   889  
+esi_gt_refclk                    4.686        0.000                      0                   33        0.126        0.000                      0                   33        2.713        0.000                       0                    19  
+  ch0_rxoutclk                   1.659        0.000                      0                12976        0.022        0.000                      0                12976        2.594        0.000                       0                  3723  
+  ch0_txoutclk                   2.059        0.000                      0                 1663        0.060        0.000                      0                 1663        2.624        0.000                       0                   889  
 
 
 ------------------------------------------------------------------------------------------------
@@ -199,8 +199,8 @@ From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS
 
 Path Group         From Clock         To Clock               WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints      WHS(ns)      THS(ns)  THS Failing Endpoints  THS Total Endpoints  
 ----------         ----------         --------               -------      -------  ---------------------  -------------------      -------      -------  ---------------------  -------------------  
-**async_default**  ch0_txoutclk       ch0_txoutclk             3.937        0.000                      0                  122        0.836        0.000                      0                  122  
-**async_default**  clk_pl_0           clk_pl_0                 9.128        0.000                      0                   34        0.175        0.000                      0                   34  
+**async_default**  ch0_txoutclk       ch0_txoutclk             4.642        0.000                      0                  122        0.445        0.000                      0                  122  
+**async_default**  clk_pl_0           clk_pl_0                 9.122        0.000                      0                   34        0.216        0.000                      0                   34  
 
 
 ------------------------------------------------------------------------------------------------
@@ -213,34 +213,34 @@ Path Group         From Clock         To Clock               WNS(ns)      TNS(ns
 From Clock:  clk_pl_0
   To Clock:  clk_pl_0
 
-Setup :            0  Failing Endpoints,  Worst Slack        0.266ns,  Total Violation        0.000ns
-Hold  :            0  Failing Endpoints,  Worst Slack        0.010ns,  Total Violation        0.000ns
+Setup :            0  Failing Endpoints,  Worst Slack        0.333ns,  Total Violation        0.000ns
+Hold  :            0  Failing Endpoints,  Worst Slack        0.016ns,  Total Violation        0.000ns
 PW    :            0  Failing Endpoints,  Worst Slack        3.501ns,  Total Violation        0.000ns
 ---------------------------------------------------------------------------------------------------
 
 
 Max Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             0.266ns  (required time - arrival time)
-  Source:                 playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/fc_d0_reg/C
+Slack (MET) :             0.333ns  (required time - arrival time)
+  Source:                 playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/fc_d2_reg/C
                             (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[57].q_reg[2]/DSP58C<0>_INST/DSP_OUTPUT58_INST/CEP
-                            (rising edge-triggered cell DSP_OUTPUT58 clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[30].mac_reg_reg[10]/CE
+                            (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk_pl_0
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk_pl_0 rise@10.000ns - clk_pl_0 rise@0.000ns)
-  Data Path Delay:        9.341ns  (logic 0.091ns (0.974%)  route 9.250ns (99.026%))
+  Data Path Delay:        9.310ns  (logic 0.090ns (0.967%)  route 9.220ns (99.033%))
   Logic Levels:           0  
-  Clock Path Skew:        0.130ns (DCD - SCD + CPR)
-    Destination Clock Delay (DCD):    2.966ns = ( 12.966 - 10.000 ) 
-    Source Clock Delay      (SCD):    2.997ns
-    Clock Pessimism Removal (CPR):    0.161ns
+  Clock Path Skew:        -0.158ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.324ns = ( 12.324 - 10.000 ) 
+    Source Clock Delay      (SCD):    2.591ns
+    Clock Pessimism Removal (CPR):    0.109ns
   Clock Uncertainty:      0.111ns  (CJ)/2 + PE + PJ
     Clock Jitter             (CJ):    0.222ns
     Phase Error              (PE):    0.000ns
     Phase Jitter             (PJ):    0.000ns
-  Clock Net Delay (Source):      2.894ns (routing 1.033ns, distribution 1.861ns)
-  Clock Net Delay (Destination): 2.852ns (routing 0.888ns, distribution 1.964ns)
+  Clock Net Delay (Source):      2.488ns (routing 0.677ns, distribution 1.811ns)
+  Clock Net Delay (Destination): 2.269ns (routing 0.615ns, distribution 1.654ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -250,13 +250,13 @@ Slack (MET) :             0.266ns  (required time - arrival time)
                          net (fo=1, routed)           0.000     0.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.103     0.103 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X5Y2 (CLOCK_ROOT)    net (fo=126887, routed)      2.894     2.997    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
-    SLICE_X192Y137       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/fc_d0_reg/C
+    X3Y2 (CLOCK_ROOT)    net (fo=126948, routed)      2.488     2.591    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
+    SLICE_X149Y241       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/fc_d2_reg/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X192Y137       FDRE (Prop_AFF_SLICEL_C_Q)
-                                                      0.091     3.088 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/fc_d0_reg/Q
-                         net (fo=6597, routed)        9.250    12.338    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[57].q_reg[2]/DSP58C<0>_INST/CEP
-    DSP_X0Y8             DSP_OUTPUT58                                 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[57].q_reg[2]/DSP58C<0>_INST/DSP_OUTPUT58_INST/CEP
+    SLICE_X149Y241       FDRE (Prop_HFF_SLICEM_C_Q)
+                                                      0.090     2.681 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/fc_d2_reg/Q
+                         net (fo=2560, routed)        9.220    11.900    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/fc_d2
+    SLICE_X159Y178       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[30].mac_reg_reg[10]/CE
   -------------------------------------------------------------------    -------------------
 
                          (clock clk_pl_0 rise edge)
@@ -265,20 +265,17 @@ Slack (MET) :             0.266ns  (required time - arrival time)
                          net (fo=1, routed)           0.000    10.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.055    10.055 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X5Y2 (CLOCK_ROOT)    net (fo=126887, routed)      2.852    12.907    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[57].q_reg[2]/DSP58C<0>_INST/CLK
-    DSP_X0Y8             DSP_SRCMX_OPTINV (Prop_SRCMXINV_DSP58_CLK_IN_CLK)
-                                                      0.059    12.966 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[57].q_reg[2]/DSP58C<0>_INST/DSP_SRCMX_OPTINV_INST/CLK
-                         net (fo=6, routed)           0.000    12.966    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[57].q_reg[2]/DSP58C<0>_INST/DSP_SRCMX_OPTINV.CLK
-    DSP_X0Y8             DSP_OUTPUT58                                 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[57].q_reg[2]/DSP58C<0>_INST/DSP_OUTPUT58_INST/CLK
-                         clock pessimism              0.161    13.127    
-                         clock uncertainty           -0.111    13.016    
-    DSP_X0Y8             DSP_OUTPUT58 (Setup_DSP_OUTPUT_DSP58_CLK_CEP)
-                                                     -0.412    12.604    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[57].q_reg[2]/DSP58C<0>_INST/DSP_OUTPUT58_INST
+    X3Y2 (CLOCK_ROOT)    net (fo=126948, routed)      2.269    12.324    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
+    SLICE_X159Y178       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[30].mac_reg_reg[10]/C
+                         clock pessimism              0.109    12.433    
+                         clock uncertainty           -0.111    12.322    
+    SLICE_X159Y178       FDRE (Setup_CFF_SLICEM_C_CE)
+                                                     -0.089    12.233    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/gen_branches[30].mac_reg_reg[10]
   -------------------------------------------------------------------
-                         required time                         12.604    
-                         arrival time                         -12.338    
+                         required time                         12.233    
+                         arrival time                         -11.900    
   -------------------------------------------------------------------
-                         slack                                  0.266    
+                         slack                                  0.333    
 
 
 
@@ -286,22 +283,22 @@ Slack (MET) :             0.266ns  (required time - arrival time)
 
 Min Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             0.010ns  (arrival time - required time)
-  Source:                 playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[1025][10]/C
+Slack (MET) :             0.016ns  (arrival time - required time)
+  Source:                 playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_i/xbuf_reg[1090][14]/C
                             (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[1026][10]/D
+  Destination:            playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_i/xbuf_reg[1091][14]/D
                             (rising edge-triggered cell FDRE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk_pl_0
   Path Type:              Hold (Min at Slow Process Corner)
   Requirement:            0.000ns  (clk_pl_0 rise@0.000ns - clk_pl_0 rise@0.000ns)
-  Data Path Delay:        0.356ns  (logic 0.071ns (19.944%)  route 0.285ns (80.056%))
+  Data Path Delay:        0.481ns  (logic 0.070ns (14.559%)  route 0.411ns (85.441%))
   Logic Levels:           0  
-  Clock Path Skew:        0.306ns (DCD - SCD - CPR)
-    Destination Clock Delay (DCD):    3.174ns
-    Source Clock Delay      (SCD):    2.624ns
-    Clock Pessimism Removal (CPR):    0.244ns
-  Clock Net Delay (Source):      2.569ns (routing 0.888ns, distribution 1.681ns)
-  Clock Net Delay (Destination): 3.071ns (routing 1.033ns, distribution 2.038ns)
+  Clock Path Skew:        0.426ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    3.145ns
+    Source Clock Delay      (SCD):    2.540ns
+    Clock Pessimism Removal (CPR):    0.180ns
+  Clock Net Delay (Source):      2.485ns (routing 0.615ns, distribution 1.870ns)
+  Clock Net Delay (Destination): 3.042ns (routing 0.677ns, distribution 2.365ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -311,13 +308,13 @@ Slack (MET) :             0.010ns  (arrival time - required time)
                          net (fo=1, routed)           0.000     0.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.055     0.055 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X5Y2 (CLOCK_ROOT)    net (fo=126887, routed)      2.569     2.624    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
-    SLICE_X192Y7         FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[1025][10]/C
+    X3Y2 (CLOCK_ROOT)    net (fo=126948, routed)      2.485     2.540    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_i/aclk
+    SLICE_X241Y235       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_i/xbuf_reg[1090][14]/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X192Y7         FDRE (Prop_AFF2_SLICEL_C_Q)
-                                                      0.071     2.695 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[1025][10]/Q
-                         net (fo=1, routed)           0.285     2.980    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[1025]_1091[10]
-    SLICE_X186Y7         FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[1026][10]/D
+    SLICE_X241Y235       FDRE (Prop_CFF2_SLICEM_C_Q)
+                                                      0.070     2.610 r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_i/xbuf_reg[1090][14]/Q
+                         net (fo=2, routed)           0.411     3.021    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_i/xbuf_reg[1090]_179[14]
+    SLICE_X271Y235       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_i/xbuf_reg[1091][14]/D
   -------------------------------------------------------------------    -------------------
 
                          (clock clk_pl_0 rise edge)
@@ -326,16 +323,16 @@ Slack (MET) :             0.010ns  (arrival time - required time)
                          net (fo=1, routed)           0.000     0.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.103     0.103 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X5Y2 (CLOCK_ROOT)    net (fo=126887, routed)      3.071     3.174    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/aclk
-    SLICE_X186Y7         FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[1026][10]/C
-                         clock pessimism             -0.244     2.930    
-    SLICE_X186Y7         FDRE (Hold_AFF_SLICEL_C_D)
-                                                      0.040     2.970    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_q/xbuf_reg[1026][10]
+    X3Y2 (CLOCK_ROOT)    net (fo=126948, routed)      3.042     3.145    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_i/aclk
+    SLICE_X271Y235       FDRE                                         r  playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_i/xbuf_reg[1091][14]/C
+                         clock pessimism             -0.180     2.966    
+    SLICE_X271Y235       FDRE (Hold_EFF_SLICEM_C_D)
+                                                      0.039     3.005    playback_i/rx/U0/u_rx/u_chan/u_chan/u_filterbank_i/xbuf_reg[1091][14]
   -------------------------------------------------------------------
-                         required time                         -2.970    
-                         arrival time                           2.980    
+                         required time                         -3.005    
+                         arrival time                           3.021    
   -------------------------------------------------------------------
-                         slack                                  0.010    
+                         slack                                  0.016    
 
 
 
@@ -527,10 +524,153 @@ High Pulse Width  Slow    XPHY/PLL_CLK  n/a            0.102         0.156      
 From Clock:  esi_gt_refclk
   To Clock:  esi_gt_refclk
 
-Setup :           NA  Failing Endpoints,  Worst Slack           NA  ,  Total Violation           NA
-Hold  :           NA  Failing Endpoints,  Worst Slack           NA  ,  Total Violation           NA
+Setup :            0  Failing Endpoints,  Worst Slack        4.686ns,  Total Violation        0.000ns
+Hold  :            0  Failing Endpoints,  Worst Slack        0.126ns,  Total Violation        0.000ns
 PW    :            0  Failing Endpoints,  Worst Slack        2.713ns,  Total Violation        0.000ns
 ---------------------------------------------------------------------------------------------------
+
+
+Max Delay Paths
+--------------------------------------------------------------------------------------
+Slack (MET) :             4.686ns  (required time - arrival time)
+  Source:                 playback_i/esi_link/esi/U0/ref_cnt_reg[1]/C
+                            (rising edge-triggered cell FDRE clocked by esi_gt_refclk  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            playback_i/esi_link/esi/U0/ref_cnt_reg[12]/R
+                            (rising edge-triggered cell FDRE clocked by esi_gt_refclk  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             esi_gt_refclk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            6.400ns  (esi_gt_refclk rise@6.400ns - esi_gt_refclk rise@0.000ns)
+  Data Path Delay:        1.476ns  (logic 0.403ns (27.311%)  route 1.073ns (72.689%))
+  Logic Levels:           3  (LUT4=1 LUT5=1 LUT6=1)
+  Clock Path Skew:        -0.060ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    3.093ns = ( 9.493 - 6.400 ) 
+    Source Clock Delay      (SCD):    3.627ns
+    Clock Pessimism Removal (CPR):    0.475ns
+  Clock Uncertainty:      0.055ns  (CJ)/2 + PE + PJ
+    Clock Jitter             (CJ):    0.110ns
+    Phase Error              (PE):    0.000ns
+    Phase Jitter             (PJ):    0.000ns
+  Clock Net Delay (Source):      2.531ns (routing 1.164ns, distribution 1.367ns)
+  Clock Net Delay (Destination): 2.274ns (routing 1.063ns, distribution 1.211ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock esi_gt_refclk rise edge)
+                                                      0.000     0.000 r  
+    GTY_REFCLK_X1Y2                                   0.000     0.000 r  esi_refclk_clk_p[0] (IN)
+                         net (fo=0)                   0.000     0.000    playback_i/esi_link/gt_refclk_buf/U0/IBUF_DS_P[0]
+    GTY_REFCLK_X1Y2      IBUFDS_GTE5 (Prop_GTY_IBUFDS_GTY_REFCLK_I_ODIV2)
+                                                      0.218     0.218 r  playback_i/esi_link/gt_refclk_buf/U0/USE_IBUFDS_GTE5.GEN_IBUFDS_GTE5[0].IBUFDS_GTE5_I/ODIV2
+                         net (fo=2, routed)           0.669     0.887    playback_i/esi_link/bufg_gt_ref/inst/outclk
+    BUFG_GT_X1Y17        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.209     1.096 r  playback_i/esi_link/bufg_gt_ref/inst/bufg_gt_usrclk_inst/O
+    X3Y1 (CLOCK_ROOT)    net (fo=17, routed)          2.531     3.627    playback_i/esi_link/esi/U0/gt_refclk_mon
+    SLICE_X138Y40        FDRE                                         r  playback_i/esi_link/esi/U0/ref_cnt_reg[1]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X138Y40        FDRE (Prop_DFF2_SLICEL_C_Q)
+                                                      0.093     3.720 r  playback_i/esi_link/esi/U0/ref_cnt_reg[1]/Q
+                         net (fo=4, routed)           0.248     3.968    playback_i/esi_link/esi/U0/ref_cnt[1]
+    SLICE_X138Y40        LUT4 (Prop_C5LUT_SLICEL_I1_O)
+                                                      0.134     4.102 r  playback_i/esi_link/esi/U0/ref_cnt[7]_i_2/O
+                         net (fo=6, routed)           0.235     4.337    playback_i/esi_link/esi/U0/ref_cnt[7]_i_2_n_0
+    SLICE_X136Y40        LUT5 (Prop_B6LUT_SLICEL_I0_O)
+                                                      0.048     4.385 r  playback_i/esi_link/esi/U0/ref_cnt[15]_i_3/O
+                         net (fo=8, routed)           0.259     4.644    playback_i/esi_link/esi/U0/ref_cnt[15]_i_3_n_0
+    SLICE_X137Y40        LUT6 (Prop_G6LUT_SLICEM_I0_O)
+                                                      0.128     4.772 r  playback_i/esi_link/esi/U0/ref_cnt[15]_i_1/O
+                         net (fo=17, routed)          0.331     5.103    playback_i/esi_link/esi/U0/ref_tog
+    SLICE_X137Y40        FDRE                                         r  playback_i/esi_link/esi/U0/ref_cnt_reg[12]/R
+  -------------------------------------------------------------------    -------------------
+
+                         (clock esi_gt_refclk rise edge)
+                                                      6.400     6.400 r  
+    GTY_REFCLK_X1Y2                                   0.000     6.400 r  esi_refclk_clk_p[0] (IN)
+                         net (fo=0)                   0.000     6.400    playback_i/esi_link/gt_refclk_buf/U0/IBUF_DS_P[0]
+    GTY_REFCLK_X1Y2      IBUFDS_GTE5 (Prop_GTY_IBUFDS_GTY_REFCLK_I_ODIV2)
+                                                      0.152     6.552 r  playback_i/esi_link/gt_refclk_buf/U0/USE_IBUFDS_GTE5.GEN_IBUFDS_GTE5[0].IBUFDS_GTE5_I/ODIV2
+                         net (fo=2, routed)           0.507     7.059    playback_i/esi_link/bufg_gt_ref/inst/outclk
+    BUFG_GT_X1Y17        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.160     7.219 r  playback_i/esi_link/bufg_gt_ref/inst/bufg_gt_usrclk_inst/O
+    X3Y1 (CLOCK_ROOT)    net (fo=17, routed)          2.274     9.493    playback_i/esi_link/esi/U0/gt_refclk_mon
+    SLICE_X137Y40        FDRE                                         r  playback_i/esi_link/esi/U0/ref_cnt_reg[12]/C
+                         clock pessimism              0.475     9.967    
+                         clock uncertainty           -0.055     9.912    
+    SLICE_X137Y40        FDRE (Setup_DFF2_SLICEM_C_R)
+                                                     -0.123     9.789    playback_i/esi_link/esi/U0/ref_cnt_reg[12]
+  -------------------------------------------------------------------
+                         required time                          9.789    
+                         arrival time                          -5.103    
+  -------------------------------------------------------------------
+                         slack                                  4.686    
+
+
+
+
+
+Min Delay Paths
+--------------------------------------------------------------------------------------
+Slack (MET) :             0.126ns  (arrival time - required time)
+  Source:                 playback_i/esi_link/esi/U0/ref_cnt_reg[2]/C
+                            (rising edge-triggered cell FDRE clocked by esi_gt_refclk  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            playback_i/esi_link/esi/U0/ref_cnt_reg[3]/D
+                            (rising edge-triggered cell FDRE clocked by esi_gt_refclk  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Path Group:             esi_gt_refclk
+  Path Type:              Hold (Min at Fast Process Corner)
+  Requirement:            0.000ns  (esi_gt_refclk rise@0.000ns - esi_gt_refclk rise@0.000ns)
+  Data Path Delay:        0.189ns  (logic 0.080ns (42.345%)  route 0.109ns (57.655%))
+  Logic Levels:           1  (LUT4=1)
+  Clock Path Skew:        0.028ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.666ns
+    Source Clock Delay      (SCD):    2.196ns
+    Clock Pessimism Removal (CPR):    0.442ns
+  Clock Net Delay (Source):      1.587ns (routing 0.724ns, distribution 0.863ns)
+  Clock Net Delay (Destination): 1.793ns (routing 0.804ns, distribution 0.989ns)
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock esi_gt_refclk rise edge)
+                                                      0.000     0.000 r  
+    GTY_REFCLK_X1Y2                                   0.000     0.000 r  esi_refclk_clk_p[0] (IN)
+                         net (fo=0)                   0.000     0.000    playback_i/esi_link/gt_refclk_buf/U0/IBUF_DS_P[0]
+    GTY_REFCLK_X1Y2      IBUFDS_GTE5 (Prop_GTY_IBUFDS_GTY_REFCLK_I_ODIV2)
+                                                      0.141     0.141 r  playback_i/esi_link/gt_refclk_buf/U0/USE_IBUFDS_GTE5.GEN_IBUFDS_GTE5[0].IBUFDS_GTE5_I/ODIV2
+                         net (fo=2, routed)           0.356     0.497    playback_i/esi_link/bufg_gt_ref/inst/outclk
+    BUFG_GT_X1Y17        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.112     0.609 r  playback_i/esi_link/bufg_gt_ref/inst/bufg_gt_usrclk_inst/O
+    X3Y1 (CLOCK_ROOT)    net (fo=17, routed)          1.587     2.196    playback_i/esi_link/esi/U0/gt_refclk_mon
+    SLICE_X138Y40        FDRE                                         r  playback_i/esi_link/esi/U0/ref_cnt_reg[2]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X138Y40        FDRE (Prop_DFF_SLICEL_C_Q)
+                                                      0.049     2.245 r  playback_i/esi_link/esi/U0/ref_cnt_reg[2]/Q
+                         net (fo=3, routed)           0.092     2.337    playback_i/esi_link/esi/U0/ref_cnt[2]
+    SLICE_X138Y40        LUT4 (Prop_C6LUT_SLICEL_I3_O)
+                                                      0.031     2.368 r  playback_i/esi_link/esi/U0/ref_cnt[3]_i_1/O
+                         net (fo=1, routed)           0.017     2.385    playback_i/esi_link/esi/U0/ref_cnt[3]_i_1_n_0
+    SLICE_X138Y40        FDRE                                         r  playback_i/esi_link/esi/U0/ref_cnt_reg[3]/D
+  -------------------------------------------------------------------    -------------------
+
+                         (clock esi_gt_refclk rise edge)
+                                                      0.000     0.000 r  
+    GTY_REFCLK_X1Y2                                   0.000     0.000 r  esi_refclk_clk_p[0] (IN)
+                         net (fo=0)                   0.000     0.000    playback_i/esi_link/gt_refclk_buf/U0/IBUF_DS_P[0]
+    GTY_REFCLK_X1Y2      IBUFDS_GTE5 (Prop_GTY_IBUFDS_GTY_REFCLK_I_ODIV2)
+                                                      0.217     0.217 r  playback_i/esi_link/gt_refclk_buf/U0/USE_IBUFDS_GTE5.GEN_IBUFDS_GTE5[0].IBUFDS_GTE5_I/ODIV2
+                         net (fo=2, routed)           0.505     0.722    playback_i/esi_link/bufg_gt_ref/inst/outclk
+    BUFG_GT_X1Y17        BUFG_GT (Prop_BUFG_GT_I_O)
+                                                      0.151     0.873 r  playback_i/esi_link/bufg_gt_ref/inst/bufg_gt_usrclk_inst/O
+    X3Y1 (CLOCK_ROOT)    net (fo=17, routed)          1.793     2.666    playback_i/esi_link/esi/U0/gt_refclk_mon
+    SLICE_X138Y40        FDRE                                         r  playback_i/esi_link/esi/U0/ref_cnt_reg[3]/C
+                         clock pessimism             -0.442     2.224    
+    SLICE_X138Y40        FDRE (Hold_CFF2_SLICEL_C_D)
+                                                      0.035     2.259    playback_i/esi_link/esi/U0/ref_cnt_reg[3]
+  -------------------------------------------------------------------
+                         required time                         -2.259    
+                         arrival time                           2.385    
+  -------------------------------------------------------------------
+                         slack                                  0.126    
+
+
+
 
 
 Pulse Width Checks
@@ -551,34 +691,34 @@ High Pulse Width  Slow    GTYE5_QUAD/HSCLK0_LCPLLGTREFCLK0  n/a            0.487
 From Clock:  ch0_rxoutclk
   To Clock:  ch0_rxoutclk
 
-Setup :            0  Failing Endpoints,  Worst Slack        1.655ns,  Total Violation        0.000ns
-Hold  :            0  Failing Endpoints,  Worst Slack        0.012ns,  Total Violation        0.000ns
+Setup :            0  Failing Endpoints,  Worst Slack        1.659ns,  Total Violation        0.000ns
+Hold  :            0  Failing Endpoints,  Worst Slack        0.022ns,  Total Violation        0.000ns
 PW    :            0  Failing Endpoints,  Worst Slack        2.594ns,  Total Violation        0.000ns
 ---------------------------------------------------------------------------------------------------
 
 
 Max Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             1.655ns  (required time - arrival time)
-  Source:                 playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_sdpram.xpm_memory_base_inst/gen_rd_b.gen_rd_b_synth_template.gen_rf_narrow_reg.doutb_reg_reg[13]/C
+Slack (MET) :             1.659ns  (required time - arrival time)
+  Source:                 playback_i/esi_link/esi/U0/u_loop/release_rx_reg/C
                             (rising edge-triggered cell FDRE clocked by ch0_rxoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
-  Destination:            playback_i/esi_link/esi/U0/u_loop/u_reasm/c_seq_reg[18]/CE
+  Destination:            playback_i/esi_link/esi/U0/u_loop/u_reasm/p_unpack.slot_reg[0][9]/CE
                             (rising edge-triggered cell FDRE clocked by ch0_rxoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
   Path Group:             ch0_rxoutclk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            6.400ns  (ch0_rxoutclk rise@6.400ns - ch0_rxoutclk rise@0.000ns)
-  Data Path Delay:        4.845ns  (logic 0.437ns (9.020%)  route 4.408ns (90.980%))
-  Logic Levels:           4  (LUT5=1 LUT6=3)
-  Clock Path Skew:        0.257ns (DCD - SCD + CPR)
-    Destination Clock Delay (DCD):    2.477ns = ( 8.877 - 6.400 ) 
-    Source Clock Delay      (SCD):    2.372ns
-    Clock Pessimism Removal (CPR):    0.152ns
+  Data Path Delay:        4.309ns  (logic 0.162ns (3.760%)  route 4.147ns (96.240%))
+  Logic Levels:           1  (LUT3=1)
+  Clock Path Skew:        -0.274ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.311ns = ( 8.711 - 6.400 ) 
+    Source Clock Delay      (SCD):    2.785ns
+    Clock Pessimism Removal (CPR):    0.200ns
   Clock Uncertainty:      0.067ns  (CJ)/2 + PE + PJ
     Clock Jitter             (CJ):    0.135ns
     Phase Error              (PE):    0.000ns
     Phase Jitter             (PJ):    0.000ns
-  Clock Net Delay (Source):      1.791ns (routing 0.195ns, distribution 1.596ns)
-  Clock Net Delay (Destination): 2.026ns (routing 0.174ns, distribution 1.852ns)
+  Clock Net Delay (Source):      2.204ns (routing 0.705ns, distribution 1.499ns)
+  Clock Net Delay (Destination): 1.860ns (routing 0.646ns, distribution 1.214ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -588,25 +728,16 @@ Slack (MET) :             1.655ns  (required time - arrival time)
                          net (fo=2, routed)           0.372     0.372    playback_i/esi_link/bufg_gt_rx/inst/outclk
     BUFG_GT_X1Y21        BUFG_GT (Prop_BUFG_GT_I_O)
                                                       0.209     0.581 r  playback_i/esi_link/bufg_gt_rx/inst/bufg_gt_usrclk_inst/O
-    X9Y1 (CLOCK_ROOT)    net (fo=3722, routed)        1.791     2.372    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_sdpram.xpm_memory_base_inst/clkb
-    SLICE_X329Y143       FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_sdpram.xpm_memory_base_inst/gen_rd_b.gen_rd_b_synth_template.gen_rf_narrow_reg.doutb_reg_reg[13]/C
+    X7Y1 (CLOCK_ROOT)    net (fo=3722, routed)        2.204     2.785    playback_i/esi_link/esi/U0/u_loop/rx_clk
+    SLICE_X345Y59        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/release_rx_reg/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X329Y143       FDRE (Prop_AFF_SLICEM_C_Q)
-                                                      0.090     2.462 r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_sdpram.xpm_memory_base_inst/gen_rd_b.gen_rd_b_synth_template.gen_rf_narrow_reg.doutb_reg_reg[13]/Q
-                         net (fo=57, routed)          1.052     3.513    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/delay_decoding_vld/p_unpack.slot_reg[1][11][0]
-    SLICE_X350Y145       LUT6 (Prop_H6LUT_SLICEL_I2_O)
-                                                      0.075     3.588 r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/delay_decoding_vld/p_unpack.slot[3][3]_i_1/O
-                         net (fo=8, routed)           0.457     4.045    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/delay_decoding_vld/esi_slot_seq[3]
-    SLICE_X347Y139       LUT6 (Prop_F6LUT_SLICEM_I5_O)
-                                                      0.121     4.166 r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/delay_decoding_vld/c_seq[31]_i_10/O
-                         net (fo=1, routed)           0.155     4.321    playback_i/esi_link/esi/U0/u_loop/u_reasm/c_seq_reg[31]_0
-    SLICE_X345Y139       LUT6 (Prop_H6LUT_SLICEM_I1_O)
-                                                      0.077     4.398 r  playback_i/esi_link/esi/U0/u_loop/u_reasm/c_seq[31]_i_5/O
-                         net (fo=1, routed)           0.147     4.545    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/delay_decoding_vld/c_seq_reg[31]
-    SLICE_X344Y139       LUT5 (Prop_F6LUT_SLICEL_I1_O)
-                                                      0.074     4.619 r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/delay_decoding_vld/c_seq[31]_i_2/O
-                         net (fo=32, routed)          2.597     7.216    playback_i/esi_link/esi/U0/u_loop/u_reasm/c_seq_reg[31]_1[0]
-    SLICE_X191Y184       FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_reasm/c_seq_reg[18]/CE
+    SLICE_X345Y59        FDRE (Prop_BFF2_SLICEM_C_Q)
+                                                      0.091     2.876 r  playback_i/esi_link/esi/U0/u_loop/release_rx_reg/Q
+                         net (fo=31, routed)          2.230     5.105    playback_i/esi_link/esi/U0/u_loop/u_sync_rx/gen_risingedge[2].two_flop_synchronizer_1/read_data_en
+    SLICE_X198Y52        LUT3 (Prop_A6LUT_SLICEL_I0_O)
+                                                      0.071     5.176 r  playback_i/esi_link/esi/U0/u_loop/u_sync_rx/gen_risingedge[2].two_flop_synchronizer_1/p_unpack.slot[3][13]_i_1/O
+                         net (fo=55, routed)          1.917     7.094    playback_i/esi_link/esi/U0/u_loop/u_reasm/p_unpack.slot_reg[3][13]_1[0]
+    SLICE_X328Y59        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_reasm/p_unpack.slot_reg[0][9]/CE
   -------------------------------------------------------------------    -------------------
 
                          (clock ch0_rxoutclk rise edge)
@@ -615,17 +746,17 @@ Slack (MET) :             1.655ns  (required time - arrival time)
                          net (fo=2, routed)           0.291     6.691    playback_i/esi_link/bufg_gt_rx/inst/outclk
     BUFG_GT_X1Y21        BUFG_GT (Prop_BUFG_GT_I_O)
                                                       0.160     6.851 r  playback_i/esi_link/bufg_gt_rx/inst/bufg_gt_usrclk_inst/O
-    X9Y1 (CLOCK_ROOT)    net (fo=3722, routed)        2.026     8.877    playback_i/esi_link/esi/U0/u_loop/u_reasm/rx_clk
-    SLICE_X191Y184       FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_reasm/c_seq_reg[18]/C
-                         clock pessimism              0.152     9.029    
-                         clock uncertainty           -0.067     8.962    
-    SLICE_X191Y184       FDRE (Setup_HFF2_SLICEM_C_CE)
-                                                     -0.090     8.872    playback_i/esi_link/esi/U0/u_loop/u_reasm/c_seq_reg[18]
+    X7Y1 (CLOCK_ROOT)    net (fo=3722, routed)        1.860     8.711    playback_i/esi_link/esi/U0/u_loop/u_reasm/rx_clk
+    SLICE_X328Y59        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_reasm/p_unpack.slot_reg[0][9]/C
+                         clock pessimism              0.200     8.910    
+                         clock uncertainty           -0.067     8.843    
+    SLICE_X328Y59        FDRE (Setup_GFF_SLICEL_C_CE)
+                                                     -0.090     8.753    playback_i/esi_link/esi/U0/u_loop/u_reasm/p_unpack.slot_reg[0][9]
   -------------------------------------------------------------------
-                         required time                          8.872    
-                         arrival time                          -7.216    
+                         required time                          8.753    
+                         arrival time                          -7.094    
   -------------------------------------------------------------------
-                         slack                                  1.655    
+                         slack                                  1.659    
 
 
 
@@ -633,22 +764,22 @@ Slack (MET) :             1.655ns  (required time - arrival time)
 
 Min Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             0.012ns  (arrival time - required time)
-  Source:                 playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[1].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/dest_graysync_ff_reg[1][2]/C
+Slack (MET) :             0.022ns  (arrival time - required time)
+  Source:                 playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[1].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/src_gray_ff_reg[2]/C
                             (rising edge-triggered cell FDRE clocked by ch0_rxoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
-  Destination:            playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[1].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rpw_gray_reg/reg_out_i_reg[0]/D
+  Destination:            playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[1].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/dest_graysync_ff_reg[0][2]/D
                             (rising edge-triggered cell FDRE clocked by ch0_rxoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
   Path Group:             ch0_rxoutclk
   Path Type:              Hold (Min at Fast Process Corner)
   Requirement:            0.000ns  (ch0_rxoutclk rise@0.000ns - ch0_rxoutclk rise@0.000ns)
-  Data Path Delay:        0.309ns  (logic 0.080ns (25.931%)  route 0.229ns (74.069%))
-  Logic Levels:           1  (LUT4=1)
-  Clock Path Skew:        0.261ns (DCD - SCD - CPR)
-    Destination Clock Delay (DCD):    1.722ns
-    Source Clock Delay      (SCD):    1.320ns
-    Clock Pessimism Removal (CPR):    0.140ns
-  Clock Net Delay (Source):      1.003ns (routing 0.122ns, distribution 0.881ns)
-  Clock Net Delay (Destination): 1.292ns (routing 0.141ns, distribution 1.151ns)
+  Data Path Delay:        0.301ns  (logic 0.050ns (16.611%)  route 0.251ns (83.389%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.244ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.029ns
+    Source Clock Delay      (SCD):    1.612ns
+    Clock Pessimism Removal (CPR):    0.173ns
+  Clock Net Delay (Source):      1.295ns (routing 0.432ns, distribution 0.863ns)
+  Clock Net Delay (Destination): 1.599ns (routing 0.485ns, distribution 1.114ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -658,16 +789,13 @@ Slack (MET) :             0.012ns  (arrival time - required time)
                          net (fo=2, routed)           0.205     0.205    playback_i/esi_link/bufg_gt_rx/inst/outclk
     BUFG_GT_X1Y21        BUFG_GT (Prop_BUFG_GT_I_O)
                                                       0.112     0.317 r  playback_i/esi_link/bufg_gt_rx/inst/bufg_gt_usrclk_inst/O
-    X9Y1 (CLOCK_ROOT)    net (fo=3722, routed)        1.003     1.320    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[1].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/dest_clk
-    SLICE_X332Y131       FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[1].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/dest_graysync_ff_reg[1][2]/C
+    X7Y1 (CLOCK_ROOT)    net (fo=3722, routed)        1.295     1.612    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[1].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/src_clk
+    SLICE_X328Y65        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[1].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/src_gray_ff_reg[2]/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X332Y131       FDRE (Prop_HFF_SLICEL_C_Q)
-                                                      0.049     1.369 r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[1].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/dest_graysync_ff_reg[1][2]/Q
-                         net (fo=3, routed)           0.205     1.574    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[1].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/dest_graysync_ff[1][2]
-    SLICE_X330Y131       LUT4 (Prop_B6LUT_SLICEL_I1_O)
-                                                      0.031     1.605 r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[1].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/dest_out_bin[0]_INST_0/O
-                         net (fo=1, routed)           0.024     1.629    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[1].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rpw_gray_reg/D[0]
-    SLICE_X330Y131       FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[1].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rpw_gray_reg/reg_out_i_reg[0]/D
+    SLICE_X328Y65        FDRE (Prop_BFF2_SLICEL_C_Q)
+                                                      0.050     1.662 r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[1].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/src_gray_ff_reg[2]/Q
+                         net (fo=1, routed)           0.251     1.913    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[1].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/async_path[2]
+    SLICE_X332Y65        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[1].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/dest_graysync_ff_reg[0][2]/D
   -------------------------------------------------------------------    -------------------
 
                          (clock ch0_rxoutclk rise edge)
@@ -676,16 +804,16 @@ Slack (MET) :             0.012ns  (arrival time - required time)
                          net (fo=2, routed)           0.279     0.279    playback_i/esi_link/bufg_gt_rx/inst/outclk
     BUFG_GT_X1Y21        BUFG_GT (Prop_BUFG_GT_I_O)
                                                       0.151     0.430 r  playback_i/esi_link/bufg_gt_rx/inst/bufg_gt_usrclk_inst/O
-    X9Y1 (CLOCK_ROOT)    net (fo=3722, routed)        1.292     1.722    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[1].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rpw_gray_reg/wr_clk
-    SLICE_X330Y131       FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[1].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rpw_gray_reg/reg_out_i_reg[0]/C
-                         clock pessimism             -0.140     1.582    
-    SLICE_X330Y131       FDRE (Hold_BFF2_SLICEL_C_D)
-                                                      0.035     1.617    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[1].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rpw_gray_reg/reg_out_i_reg[0]
+    X7Y1 (CLOCK_ROOT)    net (fo=3722, routed)        1.599     2.029    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[1].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/dest_clk
+    SLICE_X332Y65        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[1].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/dest_graysync_ff_reg[0][2]/C
+                         clock pessimism             -0.173     1.856    
+    SLICE_X332Y65        FDRE (Hold_HFF2_SLICEL_C_D)
+                                                      0.035     1.891    playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[1].rx_lane_decoding_1/i_output_buffer/gen_output_buffer[0].rx_xpm_async_fifo_1/xpm_fifo_async_inst/gnuram_async_fifo.xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst/dest_graysync_ff_reg[0][2]
   -------------------------------------------------------------------
-                         required time                         -1.617    
-                         arrival time                           1.629    
+                         required time                         -1.891    
+                         arrival time                           1.913    
   -------------------------------------------------------------------
-                         slack                                  0.012    
+                         slack                                  0.022    
 
 
 
@@ -698,10 +826,10 @@ Waveform(ns):       { 0.000 3.200 }
 Period(ns):         6.400
 Sources:            { playback_i/esi_link/gt_quad_base/inst/quad_inst/CH0_RXOUTCLK }
 
-Check Type        Corner  Lib Pin                  Reference Pin  Required(ns)  Actual(ns)  Slack(ns)  Location        Pin
-Min Period        n/a     GTYE5_QUAD/CH0_RXUSRCLK  n/a            1.280         6.400       5.120      GTY_QUAD_X1Y1   playback_i/esi_link/gt_quad_base/inst/quad_inst/CH0_RXUSRCLK
-Low Pulse Width   Slow    SRL16E/CLK               n/a            0.606         3.200       2.594      SLICE_X345Y132  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/delay_decoding_rdy/sr_reg[5]_srl5___U0_u_loop_u_rx_lane_decoding_gen_r_3/CLK
-High Pulse Width  Slow    SRL16E/CLK               n/a            0.606         3.200       2.594      SLICE_X345Y132  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/delay_decoding_rdy/sr_reg[5]_srl5___U0_u_loop_u_rx_lane_decoding_gen_r_3/CLK
+Check Type        Corner  Lib Pin                  Reference Pin  Required(ns)  Actual(ns)  Slack(ns)  Location       Pin
+Min Period        n/a     GTYE5_QUAD/CH0_RXUSRCLK  n/a            1.280         6.400       5.120      GTY_QUAD_X1Y1  playback_i/esi_link/gt_quad_base/inst/quad_inst/CH0_RXUSRCLK
+Low Pulse Width   Slow    SRL16E/CLK               n/a            0.606         3.200       2.594      SLICE_X345Y55  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/delay_decoding_rdy/sr_reg[5]_srl5___U0_u_loop_u_rx_lane_decoding_gen_r_3/CLK
+High Pulse Width  Slow    SRL16E/CLK               n/a            0.606         3.200       2.594      SLICE_X345Y55  playback_i/esi_link/esi/U0/u_loop/u_rx/lane_decoding_gen[0].rx_lane_decoding_1/delay_decoding_rdy/sr_reg[5]_srl5___U0_u_loop_u_rx_lane_decoding_gen_r_3/CLK
 
 
 
@@ -709,34 +837,34 @@ High Pulse Width  Slow    SRL16E/CLK               n/a            0.606         
 From Clock:  ch0_txoutclk
   To Clock:  ch0_txoutclk
 
-Setup :            0  Failing Endpoints,  Worst Slack        2.010ns,  Total Violation        0.000ns
-Hold  :            0  Failing Endpoints,  Worst Slack        0.066ns,  Total Violation        0.000ns
+Setup :            0  Failing Endpoints,  Worst Slack        2.059ns,  Total Violation        0.000ns
+Hold  :            0  Failing Endpoints,  Worst Slack        0.060ns,  Total Violation        0.000ns
 PW    :            0  Failing Endpoints,  Worst Slack        2.624ns,  Total Violation        0.000ns
 ---------------------------------------------------------------------------------------------------
 
 
 Max Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             2.010ns  (required time - arrival time)
-  Source:                 playback_i/esi_link/esi/U0/u_loop/u_packer/u_fifo/tvalid_int_reg/C
+Slack (MET) :             2.059ns  (required time - arrival time)
+  Source:                 playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/dw_reg[6]/C
                             (rising edge-triggered cell FDRE clocked by ch0_txoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
-  Destination:            playback_i/esi_link/esi/U0/u_loop/u_packer/data_out_reg[0][3][0]/R
+  Destination:            playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/rd_reg[6]/D
                             (rising edge-triggered cell FDRE clocked by ch0_txoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
   Path Group:             ch0_txoutclk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            6.400ns  (ch0_txoutclk rise@6.400ns - ch0_txoutclk rise@0.000ns)
-  Data Path Delay:        3.298ns  (logic 0.268ns (8.125%)  route 3.030ns (91.875%))
-  Logic Levels:           2  (LUT2=1 LUT3=1)
-  Clock Path Skew:        -0.902ns (DCD - SCD + CPR)
-    Destination Clock Delay (DCD):    1.857ns = ( 8.257 - 6.400 ) 
-    Source Clock Delay      (SCD):    2.819ns
-    Clock Pessimism Removal (CPR):    0.061ns
+  Data Path Delay:        4.204ns  (logic 1.164ns (27.689%)  route 3.040ns (72.311%))
+  Logic Levels:           10  (LUT2=1 LUT5=2 LUT6=7)
+  Clock Path Skew:        -0.078ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.430ns = ( 8.830 - 6.400 ) 
+    Source Clock Delay      (SCD):    2.771ns
+    Clock Pessimism Removal (CPR):    0.263ns
   Clock Uncertainty:      0.067ns  (CJ)/2 + PE + PJ
     Clock Jitter             (CJ):    0.135ns
     Phase Error              (PE):    0.000ns
     Phase Jitter             (PJ):    0.000ns
-  Clock Net Delay (Source):      2.226ns (routing 0.195ns, distribution 2.031ns)
-  Clock Net Delay (Destination): 1.398ns (routing 0.174ns, distribution 1.224ns)
+  Clock Net Delay (Source):      2.178ns (routing 0.684ns, distribution 1.494ns)
+  Clock Net Delay (Destination): 1.971ns (routing 0.627ns, distribution 1.344ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -744,40 +872,64 @@ Slack (MET) :             2.010ns  (required time - arrival time)
                                                       0.000     0.000 r  
     GTY_QUAD_X1Y1        GTYE5_QUAD                   0.000     0.000 r  playback_i/esi_link/gt_quad_base/inst/quad_inst/CH0_TXOUTCLK
                          net (fo=2, routed)           0.384     0.384    playback_i/esi_link/bufg_gt_tx/inst/outclk
-    BUFG_GT_X1Y7         BUFG_GT (Prop_BUFG_GT_I_O)
+    BUFG_GT_X1Y8         BUFG_GT (Prop_BUFG_GT_I_O)
                                                       0.209     0.593 r  playback_i/esi_link/bufg_gt_tx/inst/bufg_gt_usrclk_inst/O
-    X9Y1 (CLOCK_ROOT)    net (fo=888, routed)         2.226     2.819    playback_i/esi_link/esi/U0/u_loop/u_packer/u_fifo/tx_clk
-    SLICE_X206Y148       FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_packer/u_fifo/tvalid_int_reg/C
+    X7Y1 (CLOCK_ROOT)    net (fo=888, routed)         2.178     2.771    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/tx_clk
+    SLICE_X351Y62        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/dw_reg[6]/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X206Y148       FDRE (Prop_AFF2_SLICEL_C_Q)
-                                                      0.092     2.911 f  playback_i/esi_link/esi/U0/u_loop/u_packer/u_fifo/tvalid_int_reg/Q
-                         net (fo=5, routed)           0.399     3.310    playback_i/esi_link/esi/U0/u_loop/u_packer/u_fifo/tvalid_int_reg_0
-    SLICE_X207Y148       LUT2 (Prop_C6LUT_SLICEM_I0_O)
-                                                      0.088     3.398 f  playback_i/esi_link/esi/U0/u_loop/u_packer/u_fifo/lane_ptr[0]_i_1/O
-                         net (fo=122, routed)         2.252     5.650    playback_i/esi_link/esi/U0/u_loop/u_packer/u_fifo/lane_ptr0
-    SLICE_X351Y62        LUT3 (Prop_H6LUT_SLICEM_I0_O)
-                                                      0.088     5.738 r  playback_i/esi_link/esi/U0/u_loop/u_packer/u_fifo/data_out[0][3][13]_i_1/O
-                         net (fo=14, routed)          0.380     6.118    playback_i/esi_link/esi/U0/u_loop/u_packer/u_fifo_n_6
-    SLICE_X351Y61        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_packer/data_out_reg[0][3][0]/R
+    SLICE_X351Y62        FDRE (Prop_GFF_SLICEM_C_Q)
+                                                      0.091     2.862 r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/dw_reg[6]/Q
+                         net (fo=4, routed)           0.206     3.068    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/p_0_in_0
+    SLICE_X354Y63        LUT2 (Prop_E6LUT_SLICEL_I0_O)
+                                                      0.086     3.154 r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/data_out_t[0][15]_i_2/O
+                         net (fo=21, routed)          0.427     3.582    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/v_rd1
+    SLICE_X350Y62        LUT6 (Prop_H6LUT_SLICEL_I1_O)
+                                                      0.075     3.657 r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/data_out_t[1][15]_i_3/O
+                         net (fo=3, routed)           0.250     3.907    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/data_out_t[1][15]_i_3_n_0
+    SLICE_X354Y63        LUT6 (Prop_A6LUT_SLICEL_I5_O)
+                                                      0.071     3.978 r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/data_out_t[1][15]_i_2/O
+                         net (fo=25, routed)          0.344     4.321    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/v_rd12_out
+    SLICE_X350Y62        LUT6 (Prop_D6LUT_SLICEL_I3_O)
+                                                      0.126     4.447 r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/data_out_t[2][15]_i_7__0/O
+                         net (fo=3, routed)           0.246     4.694    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/data_out_t[2][15]_i_7__0_n_0
+    SLICE_X349Y60        LUT6 (Prop_H6LUT_SLICEM_I3_O)
+                                                      0.141     4.835 r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/data_out_t[2][15]_i_5/O
+                         net (fo=6, routed)           0.304     5.138    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/data_out_t[2][15]_i_5_n_0
+    SLICE_X354Y63        LUT6 (Prop_H6LUT_SLICEL_I5_O)
+                                                      0.088     5.226 r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/data_out_t[2][15]_i_2/O
+                         net (fo=21, routed)          0.240     5.466    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/v_rd15_out
+    SLICE_X352Y62        LUT5 (Prop_A5LUT_SLICEL_I1_O)
+                                                      0.122     5.588 r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/rd[6]_i_12/O
+                         net (fo=6, routed)           0.415     6.003    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/dw_reg[2]_0
+    SLICE_X350Y60        LUT6 (Prop_H6LUT_SLICEL_I0_O)
+                                                      0.119     6.122 f  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/rd[4]_i_4/O
+                         net (fo=3, routed)           0.215     6.337    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[3].i_tx_disparity_word_16b/rd_reg[4]
+    SLICE_X353Y61        LUT5 (Prop_H5LUT_SLICEM_I1_O)
+                                                      0.126     6.463 f  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[3].i_tx_disparity_word_16b/rd[6]_i_5/O
+                         net (fo=2, routed)           0.328     6.792    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[3].i_tx_disparity_word_16b/rd[6]_i_5_n_0
+    SLICE_X356Y63        LUT6 (Prop_C6LUT_SLICEL_I3_O)
+                                                      0.119     6.911 r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[3].i_tx_disparity_word_16b/rd[6]_i_2/O
+                         net (fo=1, routed)           0.064     6.975    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[3].i_tx_disparity_word_16b_n_23
+    SLICE_X356Y63        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/rd_reg[6]/D
   -------------------------------------------------------------------    -------------------
 
                          (clock ch0_txoutclk rise edge)
                                                       6.400     6.400 r  
     GTY_QUAD_X1Y1        GTYE5_QUAD                   0.000     6.400 r  playback_i/esi_link/gt_quad_base/inst/quad_inst/CH0_TXOUTCLK
                          net (fo=2, routed)           0.299     6.699    playback_i/esi_link/bufg_gt_tx/inst/outclk
-    BUFG_GT_X1Y7         BUFG_GT (Prop_BUFG_GT_I_O)
+    BUFG_GT_X1Y8         BUFG_GT (Prop_BUFG_GT_I_O)
                                                       0.160     6.859 r  playback_i/esi_link/bufg_gt_tx/inst/bufg_gt_usrclk_inst/O
-    X9Y1 (CLOCK_ROOT)    net (fo=888, routed)         1.398     8.257    playback_i/esi_link/esi/U0/u_loop/u_packer/tx_clk
-    SLICE_X351Y61        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_packer/data_out_reg[0][3][0]/C
-                         clock pessimism              0.061     8.318    
-                         clock uncertainty           -0.067     8.250    
-    SLICE_X351Y61        FDRE (Setup_CFF_SLICEM_C_R)
-                                                     -0.123     8.127    playback_i/esi_link/esi/U0/u_loop/u_packer/data_out_reg[0][3][0]
+    X7Y1 (CLOCK_ROOT)    net (fo=888, routed)         1.971     8.830    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/tx_clk
+    SLICE_X356Y63        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/rd_reg[6]/C
+                         clock pessimism              0.263     9.093    
+                         clock uncertainty           -0.067     9.026    
+    SLICE_X356Y63        FDRE (Setup_CFF2_SLICEL_C_D)
+                                                      0.008     9.034    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/rd_reg[6]
   -------------------------------------------------------------------
-                         required time                          8.127    
-                         arrival time                          -6.118    
+                         required time                          9.034    
+                         arrival time                          -6.975    
   -------------------------------------------------------------------
-                         slack                                  2.010    
+                         slack                                  2.059    
 
 
 
@@ -785,22 +937,22 @@ Slack (MET) :             2.010ns  (required time - arrival time)
 
 Min Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             0.066ns  (arrival time - required time)
-  Source:                 playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[1].i_tx_disparity_word_16b/u_data_in_d_reg[4]/C
-                            (rising edge-triggered cell FDPE clocked by ch0_txoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
-  Destination:            playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/data_out_t_reg[1][4]/D
-                            (rising edge-triggered cell FDSE clocked by ch0_txoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
+Slack (MET) :             0.060ns  (arrival time - required time)
+  Source:                 playback_i/esi_link/esi/U0/tx_clk_count_reg[9]/C
+                            (rising edge-triggered cell FDRE clocked by ch0_txoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
+  Destination:            playback_i/esi_link/esi/U0/snap_txclk_reg[9]/D
+                            (rising edge-triggered cell FDRE clocked by ch0_txoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
   Path Group:             ch0_txoutclk
   Path Type:              Hold (Min at Fast Process Corner)
   Requirement:            0.000ns  (ch0_txoutclk rise@0.000ns - ch0_txoutclk rise@0.000ns)
-  Data Path Delay:        0.189ns  (logic 0.070ns (37.037%)  route 0.119ns (62.963%))
-  Logic Levels:           1  (LUT4=1)
-  Clock Path Skew:        0.088ns (DCD - SCD - CPR)
-    Destination Clock Delay (DCD):    1.585ns
-    Source Clock Delay      (SCD):    1.311ns
-    Clock Pessimism Removal (CPR):    0.186ns
-  Clock Net Delay (Source):      0.988ns (routing 0.122ns, distribution 0.866ns)
-  Clock Net Delay (Destination): 1.146ns (routing 0.141ns, distribution 1.005ns)
+  Data Path Delay:        0.168ns  (logic 0.049ns (29.143%)  route 0.119ns (70.857%))
+  Logic Levels:           0  
+  Clock Path Skew:        0.073ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.283ns
+    Source Clock Delay      (SCD):    1.968ns
+    Clock Pessimism Removal (CPR):    0.242ns
+  Clock Net Delay (Source):      1.645ns (routing 0.422ns, distribution 1.223ns)
+  Clock Net Delay (Destination): 1.844ns (routing 0.473ns, distribution 1.371ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -808,36 +960,33 @@ Slack (MET) :             0.066ns  (arrival time - required time)
                                                       0.000     0.000 r  
     GTY_QUAD_X1Y1        GTYE5_QUAD                   0.000     0.000 r  playback_i/esi_link/gt_quad_base/inst/quad_inst/CH0_TXOUTCLK
                          net (fo=2, routed)           0.211     0.211    playback_i/esi_link/bufg_gt_tx/inst/outclk
-    BUFG_GT_X1Y7         BUFG_GT (Prop_BUFG_GT_I_O)
+    BUFG_GT_X1Y8         BUFG_GT (Prop_BUFG_GT_I_O)
                                                       0.112     0.323 r  playback_i/esi_link/bufg_gt_tx/inst/bufg_gt_usrclk_inst/O
-    X9Y1 (CLOCK_ROOT)    net (fo=888, routed)         0.988     1.311    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[1].i_tx_disparity_word_16b/tx_clk
-    SLICE_X354Y65        FDPE                                         r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[1].i_tx_disparity_word_16b/u_data_in_d_reg[4]/C
+    X7Y1 (CLOCK_ROOT)    net (fo=888, routed)         1.645     1.968    playback_i/esi_link/esi/U0/tx_clk
+    SLICE_X143Y47        FDRE                                         r  playback_i/esi_link/esi/U0/tx_clk_count_reg[9]/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X354Y65        FDPE (Prop_CFF2_SLICEL_C_Q)
-                                                      0.050     1.361 r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[1].i_tx_disparity_word_16b/u_data_in_d_reg[4]/Q
-                         net (fo=1, routed)           0.095     1.456    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/data_out_t_reg[1][13][4]
-    SLICE_X356Y65        LUT4 (Prop_B6LUT_SLICEL_I3_O)
-                                                      0.020     1.476 r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/data_out_t[1][4]_i_1/O
-                         net (fo=1, routed)           0.024     1.500    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b_n_47
-    SLICE_X356Y65        FDSE                                         r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/data_out_t_reg[1][4]/D
+    SLICE_X143Y47        FDRE (Prop_BFF_SLICEM_C_Q)
+                                                      0.049     2.017 r  playback_i/esi_link/esi/U0/tx_clk_count_reg[9]/Q
+                         net (fo=3, routed)           0.119     2.136    playback_i/esi_link/esi/U0/tx_clk_count_reg[9]
+    SLICE_X145Y47        FDRE                                         r  playback_i/esi_link/esi/U0/snap_txclk_reg[9]/D
   -------------------------------------------------------------------    -------------------
 
                          (clock ch0_txoutclk rise edge)
                                                       0.000     0.000 r  
     GTY_QUAD_X1Y1        GTYE5_QUAD                   0.000     0.000 r  playback_i/esi_link/gt_quad_base/inst/quad_inst/CH0_TXOUTCLK
                          net (fo=2, routed)           0.288     0.288    playback_i/esi_link/bufg_gt_tx/inst/outclk
-    BUFG_GT_X1Y7         BUFG_GT (Prop_BUFG_GT_I_O)
+    BUFG_GT_X1Y8         BUFG_GT (Prop_BUFG_GT_I_O)
                                                       0.151     0.439 r  playback_i/esi_link/bufg_gt_tx/inst/bufg_gt_usrclk_inst/O
-    X9Y1 (CLOCK_ROOT)    net (fo=888, routed)         1.146     1.585    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/tx_clk
-    SLICE_X356Y65        FDSE                                         r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/data_out_t_reg[1][4]/C
-                         clock pessimism             -0.186     1.399    
-    SLICE_X356Y65        FDSE (Hold_BFF2_SLICEL_C_D)
-                                                      0.035     1.434    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/data_out_t_reg[1][4]
+    X7Y1 (CLOCK_ROOT)    net (fo=888, routed)         1.844     2.283    playback_i/esi_link/esi/U0/tx_clk
+    SLICE_X145Y47        FDRE                                         r  playback_i/esi_link/esi/U0/snap_txclk_reg[9]/C
+                         clock pessimism             -0.242     2.041    
+    SLICE_X145Y47        FDRE (Hold_DFF2_SLICEM_C_D)
+                                                      0.035     2.076    playback_i/esi_link/esi/U0/snap_txclk_reg[9]
   -------------------------------------------------------------------
-                         required time                         -1.434    
-                         arrival time                           1.500    
+                         required time                         -2.076    
+                         arrival time                           2.136    
   -------------------------------------------------------------------
-                         slack                                  0.066    
+                         slack                                  0.060    
 
 
 
@@ -862,33 +1011,33 @@ Path Group:  **async_default**
 From Clock:  ch0_txoutclk
   To Clock:  ch0_txoutclk
 
-Setup :            0  Failing Endpoints,  Worst Slack        3.937ns,  Total Violation        0.000ns
-Hold  :            0  Failing Endpoints,  Worst Slack        0.836ns,  Total Violation        0.000ns
+Setup :            0  Failing Endpoints,  Worst Slack        4.642ns,  Total Violation        0.000ns
+Hold  :            0  Failing Endpoints,  Worst Slack        0.445ns,  Total Violation        0.000ns
 ---------------------------------------------------------------------------------------------------
 
 
 Max Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             3.937ns  (required time - arrival time)
+Slack (MET) :             4.642ns  (required time - arrival time)
   Source:                 playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/sigb_reg/C
                             (rising edge-triggered cell FDRE clocked by ch0_txoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
-  Destination:            playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[0].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[1].i_tx_disparity_word_16b/u_data_in_d_reg[10]/PRE
+  Destination:            playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[3].i_tx_disparity_word_16b/u_data_in_d_reg[10]/PRE
                             (recovery check against rising-edge clock ch0_txoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
   Path Group:             **async_default**
   Path Type:              Recovery (Max at Slow Process Corner)
   Requirement:            6.400ns  (ch0_txoutclk rise@6.400ns - ch0_txoutclk rise@0.000ns)
-  Data Path Delay:        1.848ns  (logic 0.091ns (4.923%)  route 1.757ns (95.077%))
+  Data Path Delay:        1.485ns  (logic 0.091ns (6.129%)  route 1.394ns (93.871%))
   Logic Levels:           0  
-  Clock Path Skew:        -0.439ns (DCD - SCD + CPR)
-    Destination Clock Delay (DCD):    1.836ns = ( 8.236 - 6.400 ) 
-    Source Clock Delay      (SCD):    2.393ns
-    Clock Pessimism Removal (CPR):    0.118ns
+  Clock Path Skew:        -0.098ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.423ns = ( 8.823 - 6.400 ) 
+    Source Clock Delay      (SCD):    2.784ns
+    Clock Pessimism Removal (CPR):    0.263ns
   Clock Uncertainty:      0.067ns  (CJ)/2 + PE + PJ
     Clock Jitter             (CJ):    0.135ns
     Phase Error              (PE):    0.000ns
     Phase Jitter             (PJ):    0.000ns
-  Clock Net Delay (Source):      1.800ns (routing 0.195ns, distribution 1.605ns)
-  Clock Net Delay (Destination): 1.377ns (routing 0.174ns, distribution 1.203ns)
+  Clock Net Delay (Source):      2.191ns (routing 0.684ns, distribution 1.507ns)
+  Clock Net Delay (Destination): 1.964ns (routing 0.627ns, distribution 1.337ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -896,34 +1045,34 @@ Slack (MET) :             3.937ns  (required time - arrival time)
                                                       0.000     0.000 r  
     GTY_QUAD_X1Y1        GTYE5_QUAD                   0.000     0.000 r  playback_i/esi_link/gt_quad_base/inst/quad_inst/CH0_TXOUTCLK
                          net (fo=2, routed)           0.384     0.384    playback_i/esi_link/bufg_gt_tx/inst/outclk
-    BUFG_GT_X1Y7         BUFG_GT (Prop_BUFG_GT_I_O)
+    BUFG_GT_X1Y8         BUFG_GT (Prop_BUFG_GT_I_O)
                                                       0.209     0.593 r  playback_i/esi_link/bufg_gt_tx/inst/bufg_gt_usrclk_inst/O
-    X9Y1 (CLOCK_ROOT)    net (fo=888, routed)         1.800     2.393    playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/tx_clk
-    SLICE_X328Y147       FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/sigb_reg/C
+    X7Y1 (CLOCK_ROOT)    net (fo=888, routed)         2.191     2.784    playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/tx_clk
+    SLICE_X334Y51        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/sigb_reg/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X328Y147       FDRE (Prop_HFF_SLICEL_C_Q)
-                                                      0.091     2.484 r  playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/sigb_reg/Q
-                         net (fo=124, routed)         1.757     4.241    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[0].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[1].i_tx_disparity_word_16b/u_data_in_d_reg[0]_0
-    SLICE_X351Y49        FDPE                                         f  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[0].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[1].i_tx_disparity_word_16b/u_data_in_d_reg[10]/PRE  (IS_INVERTED)
+    SLICE_X334Y51        FDRE (Prop_HFF_SLICEL_C_Q)
+                                                      0.091     2.875 r  playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/sigb_reg/Q
+                         net (fo=124, routed)         1.394     4.269    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[3].i_tx_disparity_word_16b/u_data_in_d_reg[0]_0
+    SLICE_X355Y63        FDPE                                         f  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[3].i_tx_disparity_word_16b/u_data_in_d_reg[10]/PRE  (IS_INVERTED)
   -------------------------------------------------------------------    -------------------
 
                          (clock ch0_txoutclk rise edge)
                                                       6.400     6.400 r  
     GTY_QUAD_X1Y1        GTYE5_QUAD                   0.000     6.400 r  playback_i/esi_link/gt_quad_base/inst/quad_inst/CH0_TXOUTCLK
                          net (fo=2, routed)           0.299     6.699    playback_i/esi_link/bufg_gt_tx/inst/outclk
-    BUFG_GT_X1Y7         BUFG_GT (Prop_BUFG_GT_I_O)
+    BUFG_GT_X1Y8         BUFG_GT (Prop_BUFG_GT_I_O)
                                                       0.160     6.859 r  playback_i/esi_link/bufg_gt_tx/inst/bufg_gt_usrclk_inst/O
-    X9Y1 (CLOCK_ROOT)    net (fo=888, routed)         1.377     8.236    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[0].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[1].i_tx_disparity_word_16b/tx_clk
-    SLICE_X351Y49        FDPE                                         r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[0].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[1].i_tx_disparity_word_16b/u_data_in_d_reg[10]/C
-                         clock pessimism              0.118     8.354    
-                         clock uncertainty           -0.067     8.286    
-    SLICE_X351Y49        FDPE (Recov_BFF2_SLICEM_C_PRE)
-                                                     -0.108     8.178    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[0].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[1].i_tx_disparity_word_16b/u_data_in_d_reg[10]
+    X7Y1 (CLOCK_ROOT)    net (fo=888, routed)         1.964     8.823    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[3].i_tx_disparity_word_16b/tx_clk
+    SLICE_X355Y63        FDPE                                         r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[3].i_tx_disparity_word_16b/u_data_in_d_reg[10]/C
+                         clock pessimism              0.263     9.086    
+                         clock uncertainty           -0.067     9.019    
+    SLICE_X355Y63        FDPE (Recov_AFF_SLICEM_C_PRE)
+                                                     -0.108     8.911    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[3].i_tx_disparity_word_16b/u_data_in_d_reg[10]
   -------------------------------------------------------------------
-                         required time                          8.178    
-                         arrival time                          -4.241    
+                         required time                          8.911    
+                         arrival time                          -4.269    
   -------------------------------------------------------------------
-                         slack                                  3.937    
+                         slack                                  4.642    
 
 
 
@@ -931,22 +1080,22 @@ Slack (MET) :             3.937ns  (required time - arrival time)
 
 Min Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             0.836ns  (arrival time - required time)
+Slack (MET) :             0.445ns  (arrival time - required time)
   Source:                 playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/sigb_reg/C
                             (rising edge-triggered cell FDRE clocked by ch0_txoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
-  Destination:            playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/u_data_in_d_reg[0]/PRE
+  Destination:            playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[0].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/u_data_in_d_reg[13]/CLR
                             (removal check against rising-edge clock ch0_txoutclk  {rise@0.000ns fall@3.200ns period=6.400ns})
   Path Group:             **async_default**
   Path Type:              Removal (Min at Fast Process Corner)
   Requirement:            0.000ns  (ch0_txoutclk rise@0.000ns - ch0_txoutclk rise@0.000ns)
-  Data Path Delay:        0.879ns  (logic 0.049ns (5.577%)  route 0.830ns (94.423%))
+  Data Path Delay:        0.522ns  (logic 0.049ns (9.379%)  route 0.473ns (90.621%))
   Logic Levels:           0  
-  Clock Path Skew:        0.036ns (DCD - SCD - CPR)
-    Destination Clock Delay (DCD):    1.588ns
-    Source Clock Delay      (SCD):    1.449ns
-    Clock Pessimism Removal (CPR):    0.103ns
-  Clock Net Delay (Source):      1.126ns (routing 0.122ns, distribution 1.004ns)
-  Clock Net Delay (Destination): 1.149ns (routing 0.141ns, distribution 1.008ns)
+  Clock Path Skew:        0.070ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    1.992ns
+    Source Clock Delay      (SCD):    1.703ns
+    Clock Pessimism Removal (CPR):    0.219ns
+  Clock Net Delay (Source):      1.380ns (routing 0.422ns, distribution 0.958ns)
+  Clock Net Delay (Destination): 1.553ns (routing 0.473ns, distribution 1.080ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -954,33 +1103,33 @@ Slack (MET) :             0.836ns  (arrival time - required time)
                                                       0.000     0.000 r  
     GTY_QUAD_X1Y1        GTYE5_QUAD                   0.000     0.000 r  playback_i/esi_link/gt_quad_base/inst/quad_inst/CH0_TXOUTCLK
                          net (fo=2, routed)           0.211     0.211    playback_i/esi_link/bufg_gt_tx/inst/outclk
-    BUFG_GT_X1Y7         BUFG_GT (Prop_BUFG_GT_I_O)
+    BUFG_GT_X1Y8         BUFG_GT (Prop_BUFG_GT_I_O)
                                                       0.112     0.323 r  playback_i/esi_link/bufg_gt_tx/inst/bufg_gt_usrclk_inst/O
-    X9Y1 (CLOCK_ROOT)    net (fo=888, routed)         1.126     1.449    playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/tx_clk
-    SLICE_X328Y147       FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/sigb_reg/C
+    X7Y1 (CLOCK_ROOT)    net (fo=888, routed)         1.380     1.703    playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/tx_clk
+    SLICE_X334Y51        FDRE                                         r  playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/sigb_reg/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X328Y147       FDRE (Prop_HFF_SLICEL_C_Q)
-                                                      0.049     1.498 r  playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/sigb_reg/Q
-                         net (fo=124, routed)         0.830     2.328    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/u_data_in_d_reg[0]_0
-    SLICE_X352Y66        FDPE                                         f  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/u_data_in_d_reg[0]/PRE  (IS_INVERTED)
+    SLICE_X334Y51        FDRE (Prop_HFF_SLICEL_C_Q)
+                                                      0.049     1.752 r  playback_i/esi_link/esi/U0/u_loop/u_sync_tx/gen_risingedge[0].two_flop_synchronizer_1/sigb_reg/Q
+                         net (fo=124, routed)         0.473     2.225    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[0].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/u_data_in_d_reg[0]_0
+    SLICE_X350Y40        FDCE                                         f  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[0].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/u_data_in_d_reg[13]/CLR  (IS_INVERTED)
   -------------------------------------------------------------------    -------------------
 
                          (clock ch0_txoutclk rise edge)
                                                       0.000     0.000 r  
     GTY_QUAD_X1Y1        GTYE5_QUAD                   0.000     0.000 r  playback_i/esi_link/gt_quad_base/inst/quad_inst/CH0_TXOUTCLK
                          net (fo=2, routed)           0.288     0.288    playback_i/esi_link/bufg_gt_tx/inst/outclk
-    BUFG_GT_X1Y7         BUFG_GT (Prop_BUFG_GT_I_O)
+    BUFG_GT_X1Y8         BUFG_GT (Prop_BUFG_GT_I_O)
                                                       0.151     0.439 r  playback_i/esi_link/bufg_gt_tx/inst/bufg_gt_usrclk_inst/O
-    X9Y1 (CLOCK_ROOT)    net (fo=888, routed)         1.149     1.588    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/tx_clk
-    SLICE_X352Y66        FDPE                                         r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/u_data_in_d_reg[0]/C
-                         clock pessimism             -0.103     1.485    
-    SLICE_X352Y66        FDPE (Remov_AFF2_SLICEL_C_PRE)
-                                                      0.007     1.492    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[1].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/u_data_in_d_reg[0]
+    X7Y1 (CLOCK_ROOT)    net (fo=888, routed)         1.553     1.992    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[0].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/tx_clk
+    SLICE_X350Y40        FDCE                                         r  playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[0].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/u_data_in_d_reg[13]/C
+                         clock pessimism             -0.219     1.773    
+    SLICE_X350Y40        FDCE (Remov_BFF2_SLICEL_C_CLR)
+                                                      0.007     1.780    playback_i/esi_link/esi/U0/u_loop/u_tx/gen_sub_encoding[0].i_tx_encoding/i_tx_disparity/gen_tx_disparity_word_16b[0].i_tx_disparity_word_16b/u_data_in_d_reg[13]
   -------------------------------------------------------------------
-                         required time                         -1.492    
-                         arrival time                           2.328    
+                         required time                         -1.780    
+                         arrival time                           2.225    
   -------------------------------------------------------------------
-                         slack                                  0.836    
+                         slack                                  0.445    
 
 
 
@@ -991,33 +1140,33 @@ Path Group:  **async_default**
 From Clock:  clk_pl_0
   To Clock:  clk_pl_0
 
-Setup :            0  Failing Endpoints,  Worst Slack        9.128ns,  Total Violation        0.000ns
-Hold  :            0  Failing Endpoints,  Worst Slack        0.175ns,  Total Violation        0.000ns
+Setup :            0  Failing Endpoints,  Worst Slack        9.122ns,  Total Violation        0.000ns
+Hold  :            0  Failing Endpoints,  Worst Slack        0.216ns,  Total Violation        0.000ns
 ---------------------------------------------------------------------------------------------------
 
 
 Max Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             9.128ns  (required time - arrival time)
+Slack (MET) :             9.122ns  (required time - arrival time)
   Source:                 playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/arststages_ff_reg[2]/C
                             (rising edge-triggered cell FDPE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/grant_store_reg/CLR
+  Destination:            playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/di_reg[0]/CLR
                             (recovery check against rising-edge clock clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             **async_default**
   Path Type:              Recovery (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk_pl_0 rise@10.000ns - clk_pl_0 rise@0.000ns)
-  Data Path Delay:        0.595ns  (logic 0.092ns (15.461%)  route 0.503ns (84.539%))
+  Data Path Delay:        0.595ns  (logic 0.092ns (15.454%)  route 0.503ns (84.546%))
   Logic Levels:           0  
-  Clock Path Skew:        -0.058ns (DCD - SCD + CPR)
-    Destination Clock Delay (DCD):    2.977ns = ( 12.977 - 10.000 ) 
-    Source Clock Delay      (SCD):    3.405ns
-    Clock Pessimism Removal (CPR):    0.370ns
+  Clock Path Skew:        -0.064ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    2.988ns = ( 12.988 - 10.000 ) 
+    Source Clock Delay      (SCD):    3.363ns
+    Clock Pessimism Removal (CPR):    0.311ns
   Clock Uncertainty:      0.111ns  (CJ)/2 + PE + PJ
     Clock Jitter             (CJ):    0.222ns
     Phase Error              (PE):    0.000ns
     Phase Jitter             (PJ):    0.000ns
-  Clock Net Delay (Source):      3.302ns (routing 1.033ns, distribution 2.269ns)
-  Clock Net Delay (Destination): 2.922ns (routing 0.888ns, distribution 2.034ns)
+  Clock Net Delay (Source):      3.260ns (routing 0.677ns, distribution 2.583ns)
+  Clock Net Delay (Destination): 2.933ns (routing 0.615ns, distribution 2.318ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -1027,13 +1176,13 @@ Slack (MET) :             9.128ns  (required time - arrival time)
                          net (fo=1, routed)           0.000     0.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.103     0.103 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X5Y2 (CLOCK_ROOT)    net (fo=126887, routed)      3.302     3.405    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/dest_clk
-    SLICE_X356Y69        FDPE                                         r  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/arststages_ff_reg[2]/C
+    X3Y2 (CLOCK_ROOT)    net (fo=126948, routed)      3.260     3.363    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/dest_clk
+    SLICE_X358Y58        FDPE                                         r  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/arststages_ff_reg[2]/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X356Y69        FDPE (Prop_GFF_SLICEL_C_Q)
-                                                      0.092     3.497 f  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/arststages_ff_reg[2]/Q
-                         net (fo=37, routed)          0.503     4.000    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_in_sync
-    SLICE_X357Y60        FDCE                                         f  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/grant_store_reg/CLR
+    SLICE_X358Y58        FDPE (Prop_GFF_SLICEL_C_Q)
+                                                      0.092     3.455 f  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/arststages_ff_reg[2]/Q
+                         net (fo=37, routed)          0.503     3.958    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_in_sync
+    SLICE_X358Y55        FDCE                                         f  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/di_reg[0]/CLR
   -------------------------------------------------------------------    -------------------
 
                          (clock clk_pl_0 rise edge)
@@ -1042,17 +1191,17 @@ Slack (MET) :             9.128ns  (required time - arrival time)
                          net (fo=1, routed)           0.000    10.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.055    10.055 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X5Y2 (CLOCK_ROOT)    net (fo=126887, routed)      2.922    12.977    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/apb3clk
-    SLICE_X357Y60        FDCE                                         r  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/grant_store_reg/C
-                         clock pessimism              0.370    13.347    
-                         clock uncertainty           -0.111    13.236    
-    SLICE_X357Y60        FDCE (Recov_CFF2_SLICEM_C_CLR)
-                                                     -0.108    13.128    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/grant_store_reg
+    X3Y2 (CLOCK_ROOT)    net (fo=126948, routed)      2.933    12.988    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/apb3clk
+    SLICE_X358Y55        FDCE                                         r  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/di_reg[0]/C
+                         clock pessimism              0.311    13.299    
+                         clock uncertainty           -0.111    13.188    
+    SLICE_X358Y55        FDCE (Recov_GFF_SLICEL_C_CLR)
+                                                     -0.107    13.081    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/di_reg[0]
   -------------------------------------------------------------------
-                         required time                         13.128    
-                         arrival time                          -4.000    
+                         required time                         13.081    
+                         arrival time                          -3.958    
   -------------------------------------------------------------------
-                         slack                                  9.128    
+                         slack                                  9.122    
 
 
 
@@ -1060,22 +1209,22 @@ Slack (MET) :             9.128ns  (required time - arrival time)
 
 Min Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             0.175ns  (arrival time - required time)
+Slack (MET) :             0.216ns  (arrival time - required time)
   Source:                 playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/arststages_ff_reg[2]/C
                             (rising edge-triggered cell FDPE clocked by clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/apb_state_reg[2]/CLR
+  Destination:            playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/apb_state_reg[0]/PRE
                             (removal check against rising-edge clock clk_pl_0  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             **async_default**
   Path Type:              Removal (Min at Fast Process Corner)
   Requirement:            0.000ns  (clk_pl_0 rise@0.000ns - clk_pl_0 rise@0.000ns)
-  Data Path Delay:        0.236ns  (logic 0.050ns (21.202%)  route 0.186ns (78.798%))
+  Data Path Delay:        0.274ns  (logic 0.050ns (18.246%)  route 0.224ns (81.754%))
   Logic Levels:           0  
-  Clock Path Skew:        0.053ns (DCD - SCD - CPR)
-    Destination Clock Delay (DCD):    2.426ns
-    Source Clock Delay      (SCD):    2.045ns
-    Clock Pessimism Removal (CPR):    0.328ns
-  Clock Net Delay (Source):      2.003ns (routing 0.582ns, distribution 1.421ns)
-  Clock Net Delay (Destination): 2.346ns (routing 0.724ns, distribution 1.622ns)
+  Clock Path Skew:        0.052ns (DCD - SCD - CPR)
+    Destination Clock Delay (DCD):    2.382ns
+    Source Clock Delay      (SCD):    2.074ns
+    Clock Pessimism Removal (CPR):    0.256ns
+  Clock Net Delay (Source):      2.032ns (routing 0.411ns, distribution 1.621ns)
+  Clock Net Delay (Destination): 2.302ns (routing 0.468ns, distribution 1.834ns)
 
     Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
   -------------------------------------------------------------------    -------------------
@@ -1085,13 +1234,13 @@ Slack (MET) :             0.175ns  (arrival time - required time)
                          net (fo=1, routed)           0.000     0.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.042     0.042 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X5Y2 (CLOCK_ROOT)    net (fo=126887, routed)      2.003     2.045    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/dest_clk
-    SLICE_X356Y69        FDPE                                         r  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/arststages_ff_reg[2]/C
+    X3Y2 (CLOCK_ROOT)    net (fo=126948, routed)      2.032     2.074    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/dest_clk
+    SLICE_X358Y58        FDPE                                         r  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/arststages_ff_reg[2]/C
   -------------------------------------------------------------------    -------------------
-    SLICE_X356Y69        FDPE (Prop_GFF_SLICEL_C_Q)
-                                                      0.050     2.095 f  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/arststages_ff_reg[2]/Q
-                         net (fo=37, routed)          0.186     2.281    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_in_sync
-    SLICE_X358Y68        FDCE                                         f  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/apb_state_reg[2]/CLR
+    SLICE_X358Y58        FDPE (Prop_GFF_SLICEL_C_Q)
+                                                      0.050     2.124 f  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_xpm_internal_sync/arststages_ff_reg[2]/Q
+                         net (fo=37, routed)          0.224     2.349    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/reset_in_sync
+    SLICE_X359Y56        FDPE                                         f  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/apb_state_reg[0]/PRE
   -------------------------------------------------------------------    -------------------
 
                          (clock clk_pl_0 rise edge)
@@ -1100,16 +1249,16 @@ Slack (MET) :             0.175ns  (arrival time - required time)
                          net (fo=1, routed)           0.000     0.000    playback_i/cips/U0/pspmc_0/U0/pmc_pl_ref_clk[0]
     BUFG_PS_X0Y6         BUFG_PS (Prop_BUFG_PS_I_O)
                                                       0.080     0.080 r  playback_i/cips/U0/pspmc_0/U0/buffer_pl_clk_0.PL_CLK_0_BUFG/O
-    X5Y2 (CLOCK_ROOT)    net (fo=126887, routed)      2.346     2.426    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/apb3clk
-    SLICE_X358Y68        FDCE                                         r  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/apb_state_reg[2]/C
-                         clock pessimism             -0.328     2.098    
-    SLICE_X358Y68        FDCE (Remov_BFF2_SLICEL_C_CLR)
-                                                      0.007     2.105    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/apb_state_reg[2]
+    X3Y2 (CLOCK_ROOT)    net (fo=126948, routed)      2.302     2.382    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/apb3clk
+    SLICE_X359Y56        FDPE                                         r  playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/apb_state_reg[0]/C
+                         clock pessimism             -0.256     2.126    
+    SLICE_X359Y56        FDPE (Remov_HFF2_SLICEM_C_PRE)
+                                                      0.006     2.132    playback_i/esi_link/gt_quad_base/inst/apb_memcell_arb/apb_state_reg[0]
   -------------------------------------------------------------------
-                         required time                         -2.105    
-                         arrival time                           2.281    
+                         required time                         -2.132    
+                         arrival time                           2.349    
   -------------------------------------------------------------------
-                         slack                                  0.175    
+                         slack                                  0.216    
 
 
 
