@@ -145,7 +145,7 @@ Measured:
 
 **Lessons for the runner (fixed 2026-11-05):** a Tcl global that survives between `source`s turned a tier-1 run into tier 2 for a day — the switch is now consumed and unset on every source; the project directory is deleted on every source, which destroyed the 59-hour waveform — every run now archives its log, `.wdb` and outputs before anything else can run.
 
-### 4.2 Tier 2 in hardware — the design (2026-11-09; build and board test pending)
+### 4.2 Tier 2 in hardware — the design (2026-11-09) and the pass (2026-11-10)
 
 This is the part other people will want: how Teledyne's ESIstream VHDL and a
 Versal GTY quad go into a block design that is otherwise a plain DMA-fed
@@ -179,7 +179,8 @@ CIPS M_AXI_FPD --> smartconnect --> axi_dma 0xA400_0000, rx ctrl 0xA401_0000, rx
 | `syn/vck190_playback_project.tcl` | `VCK190_TIER=2` in the environment adds the 23 ESIstream/esi sources (the sim runner's list plus `esi_link_hw.vhd`) and the constraints file, names the project `mdt_vck190_playback_esi`, and writes `timing_summary_esi.rpt` / `utilization_esi.rpt` / `mdt_vck190_playback_esi.xsa`. Tier 1 is untouched (and its manifest no longer lists the deleted `axi_mon_tap.vhd`, which had made `make vck190-project` fail the 36-file count). |
 | `syn/vck190_esi_link.xdc` | Refclk pins AB11/AB10 + `create_clock -period 6.400`; lane pins for quad 201 ch0/ch1 (= FMC1 DP0/DP1, Teledyne's lanes 0/1); `set_clock_groups -asynchronous` between `clk_pl_0` and the two BUFG_GT clocks (`PROCESSING_ORDER LATE` so the GT IP's clock names exist). |
 | `vck190.mk` | `make vck190-project-esi` (BD only, minutes) and `make vck190-xsa-esi` (the bitstream); separate project directory, XSA, reports and log. |
-| `petalinux/system-user.dtsi` | The link block as `/dev/uio1` (generic-uio), beside the receiver's `/dev/uio0`. Label to be confirmed from the generated `pl.dtsi` after the first tier-2 import. |
+| `petalinux/system-user.dtsi` | Two things. The link block as a generic-uio device (label `esi_link_esi`, confirmed from the generated `pl.dtsi` 2026-11-10 — note the kernel numbers UIO devices in device-tree order, so on the tier-2 image the link is `/dev/uio0` and the receiver `/dev/uio1`; `opv_play` finds both by name). And the **GT reference clock**: a `clk-si570` node for the board's user SI570 (U205) on PMC I2C0 (`i2c2`) behind TCA9548A U33 channel 6 at 0x5F, `clock-frequency = <156250000>` — the kernel programs the oscillator at every boot (`si570 9-005f: registered, current frequency 156250000 Hz`), so the clock is part of the image. |
+| `sim/logs/hw_tier2_20261110_2325.txt`, `hw_tier2_20261110_2311_linkup.txt` | The console transcripts of the first hardware pass: the playback with `-q` and the grade table (Michelle's capture), and the link-up before it — the `dmesg` clock lines, the UIO names, `opv_play -l` before the reset and `-r` after. |
 | dōgu `tools/opv_play` | The one place the link's registers are read (patch `dogu_opv_play_esi.patch`, 2026-11-10): refuses to play until `link_ready`; `-q` adds the link scoreboard to the readbacks; `-l` reads the link alone, including the transceiver clock against the PL clock. Same style as the receiver's registers; no separate tool. |
 
 **The transceiver configuration, and where each number comes from.**
@@ -191,11 +192,12 @@ CIPS M_AXI_FPD --> smartconnect --> axi_dma 0xA400_0000, rx ctrl 0xA401_0000, rx
 | Encoding / width | RAW, 64-bit user and internal width, TX and RX **buffer mode** | same string; ESIstream does its own alignment and scrambling, the GT is a bit pipe |
 | User clocks | `ch0_txoutclk` and `ch0_rxoutclk` through `bufg_gt`, each feeding the bridge **and all four channels' `usrclk`** | Teledyne's wiring; `validate_bd_design` fails with ch2/ch3 unconnected |
 | `REFCLK_STRING` | `HSCLK0_LCPLLGTREFCLK0 refclk_PROT0_R0_156.25_MHz_unique1` (+ HSCLK1) | Teledyne's; Vivado reduces it to HSCLK0 for two lanes |
-| Loopback | quad `ch0_loopback`, `ch1_loopback` = `"010"` near-end PMA, from the register block (default); `"001"` near-end PCS and `"000"` normal available | Versal GTY architecture manual loopback encoding; found on the quad with `gt_scratch.tcl` |
+| Loopback | quad `ch0_loopback`, `ch1_loopback` = `"010"` near-end PMA, from the register block (default); `"001"` near-end PCS and `"000"` normal available | Versal GTY architecture manual loopback encoding; found on the quad with `gt_scratch.tcl`. PMA loopback closed at 10 Gb/s with the bridge's default equalization, first try (2026-11-10). |
+| PLL lock | the **quad's** `hsclk0_lcplllock` (HSCLK0 is the PLL the two lanes use) — not the bridge's `lcpll_lock_out`, which never asserted in bypass mode on the board | Teledyne's wrapper: `lcpll_lock <= hsclk0_lcplllock_0 and ...`; measured 2026-11-10 (resetdone high, user clocks at 1.5625 × PL clock, `lcpll_lock_out` low) |
 | `apb3clk` | the 100 MHz PL clock | Teledyne: `sysclk` |
 | `gtreset_in` | from the register block: once automatically, and on demand | Teledyne: 3-cycle stretch of the board reset |
 | `rate_sel`, `reset_*_in` | 0 | Teledyne leaves `rate_sel` = 0 and the four datapath resets undriven |
-| Reference clock source | quad 201 refclk0 = AB11/AB10 = SI570_8A34001_MUX_BUF0: user SI570 **U205** via the SI53340 buffer, J306 off (default). Powers up at **100.000 MHz**; program to 156.25 MHz over I2C (address 0x5F) **after every power cycle**. | UG1366 (GTY and clock tables). Tier 3 moves to refclk1 = FMC1_GBTCLK0 (M15/M14), the ADC's SSO, same frequency — the GT configuration does not change. |
+| Reference clock source | quad 201 refclk0 = AB11/AB10 = SI570_8A34001_MUX_BUF0: user SI570 **U205** via the SI53340 buffer, J306 off (default). Powers up at **100.000 MHz**; **Linux sets it to 156.25 MHz at every boot** from the device tree (U205 is on the Versal's PMC I2C0, `i2c2`, behind TCA9548A U33 channel 6, address 0x5F). The fabric's power-up transceiver reset runs before Linux does this, so one more transceiver reset is needed after boot (`opv_play -r`) until the block retries by itself. | UG1366 "PMC MIO 46-47 I2C0 Bus" table; the System Controller's `VCK190.json` (`SI570_USER1_FMC`, default 100 MHz). Measured 2026-11-10: `tx_clk/aclk` = 1.5625. Tier 3 moves to refclk1 = FMC1_GBTCLK0 (M15/M14), the ADC's SSO, same frequency — the GT configuration does not change. |
 | Lane pins | ch0 TX AB7/AB6, RX AB2/AB1; ch1 TX AA9/AA8, RX AA4/AA3 | UG1366 FMC1 table; identical to Teledyne's `tx_rx_esistream_top_64b.xdc` lanes 0/1 |
 | Validated by Teledyne | the same package on **FMCP1 (J51)** | Marc, 2026-11-05 |
 
@@ -205,7 +207,7 @@ CIPS M_AXI_FPD --> smartconnect --> axi_dma 0xA400_0000, rx ctrl 0xA401_0000, rx
 |---|---|---|---|
 | 0x00 | ID | RO | `0x45534931` "ESI1" |
 | 0x04 | CONTROL | RW | bit 0 LINK_RESET (hold the link logic in reset); bit 1 SYNC_REQ (write 1: one more sync pulse); bit 2 STATS_CLEAR (write 1); bit 3 GT_RESET (write 1: 8-clock pulse to the bridge); bits 6:4 LOOPBACK (010 default); bit 7 SNAPSHOT (write 1: latch the link-domain counters). The pulse bits read 0. |
-| 0x08 | STATUS | RO | 0 gt_powergood, 1 lcpll_lock, 2 tx_resetdone, 3 rx_resetdone, 4 gt_link_status, 5 xcvr_ready, 6 lanes_ready, 7 link_ready, 8 snapshot busy, 9 tx_clk alive, 10 rx_clk alive |
+| 0x08 | STATUS | RO | 0 gt_powergood, 1 lcpll_lock, 2 tx_resetdone, 3 rx_resetdone, 4 gt_link_status (the bridge's, for its protocol modes; stays 0 in bypass mode and means nothing here), 5 xcvr_ready, 6 lanes_ready, 7 link_ready, 8 snapshot busy, 9 tx_clk alive, 10 rx_clk alive. A healthy tier-2 link reads 0x6EF. |
 | 0x0C–0x1C | SAMPLES_SENT, SAMPLES_RCVD, SEQ_ERRORS, MARKER_ERRORS, MULTI_ERRORS | RO | snapshot values |
 | 0x20, 0x24, 0x28 | TX_CLK_COUNT, RX_CLK_COUNT, ACLK_COUNT | RO | snapshot of the free-running cycle counters; two snapshots give the clock ratios (tx/aclk = 1.5625 when the SI570 is right) |
 | 0x2C | LINK_DROPS | RO | times `link_ready` fell since reset |
@@ -230,33 +232,69 @@ XDC declares the three clocks asynchronous and nothing else):
 | `lanes_ready`, `link_ready`, clock-alive toggles → aclk | two-flop synchronizer |
 | Teledyne's own: `sync_in` into `rx_control` (stretched to 4 and resynchronized), `xcvr_ip_ready` into `rx_control` | theirs, unchanged |
 
-**Bring-up sequence, as the hardware will do it** (and as `tb_esi_link_hw`
-plays it): PL reset releases → 32 clocks → `gtreset_in` pulse → bridge
-sequences the quad → `lcpll_lock`, `tx_resetdone`, `rx_resetdone` →
-`xcvr_ready` → 16 `tx_clk` → 4-clock sync pulse to TX and (synchronized) RX
-→ Teledyne's RX aligns the two lanes → `lanes_ready` → 16 `rx_clk` →
-`release_data` = `link_ready` → the packer starts taking samples from the
-pacer. Until then `s_axis_tready` is low and the DMA simply waits: `opv_play`
-needs no change. In the bench, `link_ready` is 2.3 µs after reset release
-with the stand-in's status schedule; on hardware expect the bridge's reset
-sequence to dominate (tens of microseconds).
+**Bring-up sequence** (as `tb_esi_link_hw` plays it and as the board did
+it): PL reset releases → 32 clocks → `gtreset_in` pulse → bridge sequences
+the quad → `lcpll_lock`, `tx_resetdone`, `rx_resetdone` → `xcvr_ready` → 16
+`tx_clk` → 4-clock sync pulse to TX and (synchronized) RX → Teledyne's RX
+aligns the two lanes → `lanes_ready` → 16 `rx_clk` → `release_data` =
+`link_ready` → the packer starts taking samples from the pacer. Until then
+`s_axis_tready` is low and the DMA simply waits: `opv_play` needs no change.
+On the board there is one wrinkle: the fabric's own `gtreset_in` pulse comes
+at PL reset, before Linux has programmed the SI570, so the PLL sees 100 MHz
+and does not lock; the sequence completes after one more reset once the
+clock is right (`opv_play -r`, 2026-11-10: `-l` → STATUS 0x001, `-r` →
+0x6EF within its 500 ms wait). Making the block retry the reset until the
+PLL locks is the next change.
 
 **Pass criterion (tier 2, hardware):** `opv_play -q`, same command as tier
 1: 24/24 decodable on the acceptance stimulus with the §4.1 table, and in the
 readbacks `link_ready`, SAMPLES_SENT = SAMPLES_RCVD = the stimulus length
 (20,799,760 for the 25-frame file), SEQ/MARKER/MULTI errors 0, LINK_DROPS 0;
-`opv_play -l` beforehand shows the clock ratio 1.5625.
+`opv_play -r` beforehand shows STATUS 0x6EF and the clock ratio 1.5625.
 
-**What is not verified yet (2026-11-09):** the Vivado build itself
-(`make vck190-project-esi` is the first check — it validates the block design
-in minutes without a license); timing at 156.25 MHz through Teledyne's RX;
-the generated device-tree label for the link block (`system-user.dtsi`
-guesses `esi_link_esi`; confirm from `pl.dtsi` after the first tier-2
-import); `tb_esi_link_hw` has run only under nvc in the sandbox, not yet on
-chococat; the assumption that PMA loopback closes at 10 Gb/s with the
-bridge's default equalization (Teledyne's `INS_LOSS_NYQ 20`, `RX_EQ_MODE
-AUTO`). If the link does not come up in PMA mode, `loopback 1` (near-end
-PCS, no analog path) splits the question.
+**PASS, 2026-11-10 23:25** (transcript: `sim/logs/hw_tier2_20261110_2325.txt`;
+commit `8f1d612`, dōgu `1e988cd`):
+
+| Measured | Tier 1, 2026-10-25 | Tier 2, 2026-11-10 |
+|---|---|---|
+| Grade | 24/24 decodable, pre-FEC BER 0.00–0.56 %, flat | 24/24 decodable, pre-FEC BER 0.00–0.56 %, flat |
+| CFO estimate (500 Hz injected) | not recorded | 498 Hz, quality 6763 |
+| SYM_CLK_OFFSET (11.5 ppm injected) | not recorded | −2203 Q24 = −11.39 ppm (simulation: −2254; the sign is the stimulus's — it stretches the waveform, so the symbol clock is slow) |
+| Frames received / soft bits dropped | 24 / 0 | 24 / 0 |
+| ESI samples sent / received | — | 20,799,760 / 20,799,760 |
+| ESI sequence / marker / multi-lane errors, link drops | — | 0 / 0 / 0, 0 |
+| `tx_clk` / PL clock | — | 1.5625 (over 20,006,224 PL clocks) |
+| STATUS | — | 0x6EF (everything but bit 4, the bridge's protocol-mode link status) |
+
+The build that did it: `make vck190-project-esi` validated first try (the
+expected warnings plus six `BD 41-1306` for the per-pin connections to the
+bridge's grouped interfaces — intended, Teledyne's design does the same —
+and two cosmetic clock-interface notes for `tx_clk`/`rx_clk`);
+`make vck190-xsa-esi` met timing: `clk_pl_0` WNS 0.374 ns (tier 1: 0.546),
+`ch0_txoutclk` 2.295 ns and `ch0_rxoutclk` 2.013 ns at 6.400 ns, no
+inter-clock paths (the clock groups), `check_timing` with no unconstrained
+endpoints; synthesis 1:20, place 19:40, route 14:16; one GTYE5 quad of 11,
+DSP 77.95 % (unchanged), LUT 16.6 %, block RAM 17.1 %.
+
+**Three things the board taught that the benches could not** (each fixed
+in `8f1d612` / dōgu, each measured; the user guide's "Things that bit us"
+has the detail): the UIO numbering order; the SI570 at 100 MHz with the
+System Controller's console dark (the device-tree route above replaced it);
+and the bridge's `lcpll_lock_out` never asserting in bypass mode (the quad's
+`hsclk0_lcplllock` is the signal, as in Teledyne's wrapper).
+
+**Still open:** the block should retry the transceiver reset until the PLL
+locks (removes `opv_play -r`); `tb_esi_link_hw` has run under nvc in the
+sandbox only, not yet on chococat; `i2c-tools` is `=y` in the rootfs config
+but `i2cdetect` did not appear in the image (not needed — the kernel found
+the switch and the oscillator itself — but a config line that does nothing
+is a question). **Decided:** `system.xsa` stays in git, so a clone can
+reproduce the board without rebuilding the design. **Explained:** the
+System Controller's console was dark because the VCK190's System
+Controller boots from a microSD card in **its own slot, J206** (not the
+Versal's J302), and no card has been in it; the image is AMD's "SC Update"
+release. Not needed for anything here — the device tree sets the clock —
+but that is why.
 
 ## 5. Tier 3 operating point (ADC)
 
@@ -324,10 +362,12 @@ we want that in writing since the risk is the FPGA's banks.
    frames (§4.1, 2026-11-08/09). The bench-tail items are in the tracker.
 3. ~~Bring `tx_esistream`/`rx_esistream` + the package's transceiver block
    into our block design, board clock on refclk0, internal loopback,
-   AXI-Lite control.~~ **Designed and benched 2026-11-09** (§4.2:
-   `VCK190_TIER=2`, `esi_link_hw`, `gt_scratch.tcl`). Next: `make
-   vck190-project-esi` on chococat, then `make vck190-xsa-esi`.
-4. Tier-2 acceptance: `opv_play` unchanged, 24/24 flat, same table as tier 1,
-   link counters sent = rcvd, zero errors (`opv_play -q`, dōgu).
+   AXI-Lite control.~~ **Designed and benched 2026-11-09, built and
+   brought up 2026-11-10** (§4.2).
+4. ~~Tier-2 acceptance: `opv_play` unchanged, 24/24 flat, same table as tier 1,
+   link counters sent = rcvd, zero errors.~~ **PASS 2026-11-10** (§4.2).
+4a. The link block retries the transceiver reset until the PLL locks, so
+   the boot needs no `opv_play -r`; one RTL change, the unit test, one
+   build, one `-l`.
 5. Downconverter design pass on paper (mode/clock per §5), then its bench,
    then fabric — for tier 3, when the card arrives.

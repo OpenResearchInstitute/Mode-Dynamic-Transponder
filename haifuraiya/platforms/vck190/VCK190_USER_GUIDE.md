@@ -82,7 +82,9 @@ the first ~6 frames, and the failures that matter show up later.
 With noise and CFO in the stimulus, the soft codes should leave the rails and 
 populate the middle values, `cfo_word` and `est_hz` in the CFO group should 
 move towards `--carrier-offset`, and `sym_clk_offset` in Symbol_Lock should 
-settle near the ppm we injected.
+settle near **minus** the ppm we injected (−11.5 ppm; the stimulus stretches
+the waveform, so the symbol clock is slow and the loop's correction is
+negative — simulation −2254 Q24, board −2203, both = −11.4 ppm).
 
 We grade the resulting output files from our simulations by using a Python
 script, now in the repo at `haifuraiya/sim/grade_payload_ber.py`:
@@ -185,6 +187,16 @@ prerequisites and tells you what is missing instead of failing halfway.
 - Your ssh key on the ORI license server (ask Paul).
 - The top-level `Makefile` has, at the bottom:
   `include haifuraiya/platforms/vck190/vck190.mk`
+- A cross compiler for the board's software (dōgu). Two levels: Vitis's
+  `aarch64-linux-gnu-gcc` (on PATH after `source
+  /tools/Xilinx/Vitis/2022.2/settings64.sh`) builds plain-C tools such as
+  `opv_play` with no sysroot at all, and is all tier 1 and tier 2 need.
+  dōgu's full `make cross` (libiio, `dma_listen`) additionally needs the
+  PetaLinux SDK sysroot at `~/petalinux-sdk/sysroots/`, which a rebuilt
+  chococat does not have (2026-11-10); generate it from this project
+  (`petalinux-build --sdk`, then `petalinux-package --sysroot -d
+  ~/petalinux-sdk`, an hour or more) when the ADRV9002 tools are wanted
+  on this machine.
 
 ### 1. Open the shell for the build
 
@@ -322,9 +334,20 @@ ssh-keygen -R 10.73.1.17
 
 `petalinux-boot --jtag --prebuilt 3` needs `hw_server` reachable and the
 VCK190 on JTAG. Boot mode switches all ON for JTAG. The board is at
-10.73.1.17 (static), login `root`, no password. The root filesystem is a RAM
-disk, so the ssh host key is new every boot: the `ssh-keygen -R` is not
-optional.
+10.73.1.17 (static), login `root`, password `root` (from `rootfs_config`,
+`CONFIG_ADD_EXTRA_USERS="root:root;…"`; the ZCU102 and libreSDR images use
+`analog`, this one never has). The root filesystem is a RAM disk, so the
+ssh host key is new every boot (the `ssh-keygen -R` is not optional) and
+**nothing copied to the board survives a boot** — `opv_play` and the
+stimulus go over again every time.
+
+The board's USB cable (J207) presents four FTDI channels; channel A is JTAG
+and has no tty (Vivado's hardware server takes it), so on chococat they are
+`ttyUSB1` = Versal UART0 (the Linux console, 115200), `ttyUSB2` = Versal
+UART1, `ttyUSB3` = the System Controller's console (silent on this board: no
+microSD card in its slot J206, see T4 — not needed). The libreSDR on the same host shows up the same
+way as "Xilinx Debugger DebugChannel" on `ttyUSB5–7`.
+`udevadm info -q property /dev/ttyUSBn | grep ID_SERIAL` tells them apart.
 
 Two JTAG facts: the LibreSDR (xc7z020) is on chococat's JTAG chain too, so
 `xsdb` targets list both — the VCK190 is the `xcvc1902` entry. And if the
@@ -353,16 +376,22 @@ file into DDR, programs the receiver's registers, streams it through the
 receiver at 20 MSps, and writes the soft bits to a file.
 
 Build and deploy from chococat. dōgu's `make cross` fails on `dma_listen`
-(it needs the ZCU102 sysroot, which chococat does not have), so build the
-one tool directly with the Vitis cross compiler, then deploy:
+(it needs the PetaLinux SDK sysroot, step 0), so build the one tool
+directly with the Vitis cross compiler, then deploy:
 
 ```
 source /tools/Xilinx/Vitis/2022.2/settings64.sh     # puts aarch64-linux-gnu-gcc on PATH
 cd ~/dogu
-make -C tools/opv_play
+make -C tools/opv_play CC=aarch64-linux-gnu-gcc     # the Makefile defaults to the host cc
+file tools/opv_play/opv_play                        # must say aarch64
 make deploy-vck190
 cd -
 ```
+
+`opv_play` finds the receiver's registers by the UIO device's name
+(`haifuraiya_rx_axi` under `/sys/class/uio/*/name`), never by number: the
+kernel numbers UIO devices in device-tree order, and on the tier-2 image
+the link block sorts first (`/dev/uio0`) and the receiver is `/dev/uio1`.
 
 Convert the stimulus and send it over:
 
@@ -403,17 +432,19 @@ make vck190-license-down   # drops the license tunnel
 
 ## How to Build and Run the Digital Loopback (tier 2)
 
-_Designed and benched 2026-11-09 (`ESISTREAM_NOTES.md` §4.2). The steps
-below have **not** yet been run on chococat or the board; the first one that
-has will say so here. Same board, same cable, no card in the FMC slot._
+_Designed and benched 2026-11-09, built and **passed on the board
+2026-11-10** (`ESISTREAM_NOTES.md` §4.2; transcript
+`sim/logs/hw_tier2_20261110_2325.txt`). Every step below has been run on
+chococat and the board as written. Same board, same cable, no card in the
+FMC slot._
 
 Tier 2 is tier 1 with the samples taking the long way round: pacer → Teledyne
 ESIstream TX → a GTY transceiver pair talking to itself (near-end PMA
 loopback) → Teledyne ESIstream RX → receiver. The receiver, `opv_play`, the
 stimulus and the grade are unchanged. What is new: one more register block
 at 0xA403_0000 (the link's status and scoreboard), two make targets, one
-constraints file, and one thing to do after every power cycle (the
-reference clock).
+constraints file, a device-tree node that sets the transceiver's reference
+clock at boot, and one `opv_play -r` per boot.
 
 ### T1. Build the block design only (minutes; no license needed)
 
@@ -457,72 +488,106 @@ Exactly steps 7–9 with the tier-2 XSA named:
 ```
 make vck190-import-xsa VCK190_XSA=haifuraiya/platforms/vck190/syn/mdt_vck190_playback_esi.xsa
 make vck190-build
-# power-cycle the VCK190, wait 30 s, program the SI570 (T4), then:
+# power-cycle the VCK190, wait 30 s, then:
 make vck190-boot
 ssh-keygen -R 10.73.1.17
+scp ~/dogu/tools/opv_play/opv_play root@10.73.1.17:/home/root/     # every boot: RAM root filesystem
+ssh root@10.73.1.17 /home/root/opv_play -r                          # every boot: transceiver reset after the clock (T4)
 ```
 
 `vck190-check-xsa` still looks for the receiver at 0xA4010000, which tier 2
-also has. **Between import and build, confirm one label:** the link block
-is made a UIO device (`/dev/uio1`) by `petalinux/system-user.dtsi`, which
-refers to it by the label the device-tree generator gives the cell
-`playback_i/esi_link/esi`. The file guesses `esi_link_esi`; check with
+also has. `petalinux/system-user.dtsi` refers to the link block by the
+label the device-tree generator gives the cell `playback_i/esi_link/esi`,
+`esi_link_esi` (confirmed 2026-11-10). The generated `pl.dtsi` is only
+written during the build, not the import, so to see it before committing
+to the full build:
 
 ```
-grep -n a4030000 haifuraiya/platforms/vck190/petalinux/mdt_vck190/components/plnx_workspace/device-tree/device-tree/pl.dtsi
+cd haifuraiya/platforms/vck190/petalinux/mdt_vck190 && petalinux-build -c device-tree && cd -
+grep -n "@a40" haifuraiya/platforms/vck190/petalinux/mdt_vck190/components/plnx_workspace/device-tree/device-tree/pl.dtsi
 ```
 
-and if the label on that line differs, change `&esi_link_esi` in
-`system-user.dtsi` to match. (A tier-1 import has no such node; the
-reference would fail the device-tree build, so comment it out when going
-back to a tier-1 image.) The receiver's node was found the same way in
-step 7.
+Expect `esi_link_esi: esi_link_hw@a4030000` beside `rx:
+haifuraiya_rx_axi@a4010000`. (A tier-1 import has no such node and the
+`&esi_link_esi` reference would fail the device-tree build: comment it out
+when going back to a tier-1 image.) On the booted board,
+`cat /sys/class/uio/uio*/name` lists `esi_link_hw` and
+`haifuraiya_rx_axi` — in that order, as `/dev/uio0` and `/dev/uio1`.
 
-### T4. Program the GT reference clock — after EVERY power cycle
+### T4. The GT reference clock — set by the image, nothing to do
 
 The quad's reference clock is the board's user SI570 (U205, through the
 SI53340 buffer onto AB11/AB10, jumper J306 off = default). It **powers up at
 100.000 MHz** and the design needs **156.25 MHz** (10.0 Gb/s = 64 × 156.25
-MHz, and the EV12AQ600's SSO for tier 3). It is programmed over I2C (device
-address 0x5F) through the System Controller — the Board User Interface over
-the J207 USB-UART, the same cable as JTAG, on its clocks page: set the user
-SI570 to 156.25 MHz. It does not survive a power cycle (the System
-Controller's own saved-clock feature is the thing to look for if this gets
-tiresome). Until it is programmed the transceiver's PLL will not lock to
-anything useful and STATUS will show `lcpll_lock` or `xcvr_ready` low — or,
-worse, lock at the wrong rate and never align. T5's `ratio` is the check.
+MHz, and the EV12AQ600's SSO for tier 3). The oscillator sits on the
+Versal's own PMC I2C0 (`i2c2`, `f1000000`) behind TCA9548A switch U33,
+channel 6, I2C address 0x5F (UG1366, "PMC MIO 46-47 I2C0 Bus"), and
+`petalinux/system-user.dtsi` describes it as a `silabs,si570` clock with
+`clock-frequency = <156250000>`: the kernel's `clk-si570` driver programs
+it at every boot. Check on the board:
+
+```
+dmesg | grep -i "si570\|pca954"
+```
+
+```
+pca954x 2-0074: registered 8 multiplexed busses for I2C switch pca9548
+si570 9-005f: registered, current frequency 156250000 Hz
+```
+
+(The System Controller — the board's separate management processor, a
+Zynq UltraScale+ with its own Linux and I2C access to the same oscillator
+— is AMD's documented way to set this clock, through its BEAM web page or
+`sc_app`. It is not needed here. Its console on `ttyUSB3` is silent on
+this board because the VCK190's System Controller boots from a microSD
+card in **its own slot, J206** — not the Versal's J302 — and none has been
+fitted; AMD's "SC Update" image would go on it.)
+
+One consequence: the fabric resets the transceiver once, when the PL comes
+out of reset at boot, which is **before** Linux programs the oscillator;
+the PLL sees 100 MHz then and does not lock. So after every boot, once:
+
+```
+ssh root@10.73.1.17 /home/root/opv_play -r
+```
+
+which pulses the transceiver reset through the link's register and reports
+the link (T5 shows the output). Until the block retries the reset by
+itself (the next change), this is the one manual step of tier 2.
 
 ### T5. Look at the link before the first run
 
 `opv_play` is the only thing that reads the link's registers (dōgu
-`tools/opv_play`; rebuild and deploy it after applying
-`dogu_opv_play_esi.patch`, as in step 10). With no stimulus:
+`tools/opv_play`, step 10 builds and deploys it). `opv_play -l` reads the
+link without playing; `-r` resets the transceiver first (T4). Measured
+2026-11-10, straight after boot:
 
 ```
-ssh root@10.73.1.17 opv_play -l
-```
-
-Expected, on a healthy link, before any data (the register names are the
-ones in `rtl/esi/esi_link_hw.vhd`):
-
-```
-ESI_STATUS 0x000006FF  CONTROL 0x00000020  (loopback mode 2)
-  gt_powergood=1 lcpll_lock=1 tx_resetdone=1 rx_resetdone=1 gt_link_status=1 xcvr_ready=1 lanes_ready=1 link_ready=1 snapshot_busy=0 tx_clk_alive=1 rx_clk_alive=1
+$ opv_play -l
+ESI_STATUS 0x00000001  CONTROL 0x00000020  (loopback mode 2)
+  gt_powergood=1 lcpll_lock=0 tx_resetdone=0 rx_resetdone=0 gt_link_status=0 xcvr_ready=0 lanes_ready=0 link_ready=0 snapshot_busy=0 tx_clk_alive=0 rx_clk_alive=0
+ESIstream link: snapshot never completed -- a link clock is not running
+$ opv_play -r
+transceiver reset pulsed; waiting 500 ms for the bridge's reset sequence
+ESI_STATUS 0x000006EF  CONTROL 0x00000020  (loopback mode 2)
+  gt_powergood=1 lcpll_lock=1 tx_resetdone=1 rx_resetdone=1 gt_link_status=0 xcvr_ready=1 lanes_ready=1 link_ready=1 snapshot_busy=0 tx_clk_alive=1 rx_clk_alive=1
 ESI_SAMPLES_SENT 0  ESI_SAMPLES_RCVD 0  (equal)
 ESI_SEQ_ERRORS 0  ESI_MARKER_ERRORS 0  ESI_MULTI_ERRORS 0  ESI_LINK_DROPS 0
-tx_clk / PL clock over 20000000 PL clocks = 1.5625  (156.25 MHz / 100 MHz = 1.5625; 1.0000 = SI570 still at 100 MHz)
+tx_clk / PL clock over 20006224 PL clocks = 1.5625  (156.25 MHz / 100 MHz = 1.5625; 1.0000 = SI570 still at 100 MHz)
 ```
 
-(`0x6FF` = bits 0–7, 9, 10 set, bit 8 — snapshot busy — clear; the exact
-`gt_link_status` behaviour of the bridge in bypass mode is the one bit here
-we have not seen in a bench.) If the ratio is 1.0000, the SI570 is still at
-100 MHz: go back to T4, then power-cycle or reboot (the block pulses the
-transceiver reset itself after reset). If `xcvr_ready` is 1 but
-`lanes_ready` stays 0, the serial path is not closing; the CONTROL
-register's loopback mode (bits 6:4; 1 = near-end PCS, no analog path) and
-GT reset (bit 3) are the two experiments, and `opv_play` has no switch for
-them on purpose — if they are needed, that is a finding to record and a
-small `opv_play` option to add, not a reason to poke the register by hand.
+`0x6EF` is the healthy word: every bit but 4 (`gt_link_status` is the
+bridge's own link indicator for its protocol modes and stays 0 in bypass
+mode; it is not part of the pass). Reading the failures: ratio 1.0000 =
+the oscillator is at 100 MHz (the device tree did not take — check
+`dmesg` as in T4); `lcpll_lock=0` with both clocks alive after `-r` is the
+2026-11-10 miswiring, fixed in `8f1d612` (the lock signal must be the
+quad's `hsclk0_lcplllock`, not the bridge's `lcpll_lock_out`);
+`xcvr_ready=1` but `lanes_ready=0` would mean the serial path is not
+closing — the CONTROL register's loopback mode (bits 6:4; 1 = near-end PCS,
+no analog path) is the experiment, and `opv_play` has no switch for it on
+purpose: that would be a finding to record and an option to add, not a
+reason to poke the register by hand.
 
 ### T6. Run the playback and read both scoreboards
 
@@ -533,8 +598,13 @@ Pass for tier 2 = the grade table from step 10 **and**
 ESI_SAMPLES_SENT = ESI_SAMPLES_RCVD = 20,799,760 (the 25-frame stimulus
 file; the simulation's 20,829,760 included the bench's 30,000-sample tail),
 ESI_SEQ_ERRORS = ESI_MARKER_ERRORS = ESI_MULTI_ERRORS = 0, ESI_LINK_DROPS = 0.
-Record the run in `ESISTREAM_NOTES.md` §4.2 and the tier table in
-`VCK190_PLAYBACK_PLAN.md`.
+
+Measured 2026-11-10 23:25 (`sim/logs/hw_tier2_20261110_2325.txt`): 24/24
+decodable, pre-FEC BER 0.00–0.56 % — the tier-1 table — CFO 498 Hz,
+SYM_CLK_OFFSET −11.39 ppm, 24 frames, 0 dropped; 20,799,760 sent =
+20,799,760 received, all link error counters 0, no link drops. Recorded in
+`ESISTREAM_NOTES.md` §4.2 and the tier table in `VCK190_PLAYBACK_PLAN.md`;
+do the same for the next run that changes anything.
 
 ### T7. The link's unit test, on chococat
 
@@ -633,3 +703,38 @@ haifuraiya/platforms/vck190/sim/esi/run_esi_link_hw_nvc.sh      # pass = PASS: t
   done in batch scripts (`syn/gt_scratch.tcl`) that print what they find;
   the IP's block-automation rule names are not public, so the GT pair is
   built cell by cell from Teledyne's block design instead.
+- 2026-11-10: `git clean -f <path>` removes **every** untracked file under
+  the path and, with a path given, descends into untracked directories —
+  it took the PetaLinux template's empty `recipes-apps/` along with the six
+  files it was meant for. Harmless that time; the rule is `git clean -n`
+  first and read the list, and to withdraw a delivery name the files, not
+  the directory.
+- 2026-11-10: a patch cut against `HEAD` was handed over after the previous
+  day's whole-file delivery had already been applied to the tree; it could
+  not apply. Every patch states the commit it applies to, and the tree is
+  checked against that commit before applying.
+- 2026-11-10: the uncommitted `opv_play` on chococat was the version that
+  passed on 2026-10-25 (`RX_AHEAD`, `-L`), newer than the one on GitHub; a
+  patch cut against GitHub would have landed in the wrong places. The
+  passing version was committed first, on its own, then the new work on
+  top.
+- 2026-11-10: `opv_play` opened `/dev/uio0` for the receiver; on the tier-2
+  image `/dev/uio0` is the link (the kernel numbers UIO devices in
+  device-tree order, alphabetical from the generator). Both are found by
+  name now.
+- 2026-11-10: the GT reference clock (user SI570) powers up at 100 MHz, the
+  System Controller that normally sets it was dark on its console, and
+  nothing in the kernel's VCK190 board file describes the I2C clock tree.
+  UG1366's I2C0 table gave the path (switch U33 at 0x74, channel 6, 0x5F) on
+  the Versal's own bus; a `clk-si570` node in `system-user.dtsi` sets it at
+  every boot. The fabric's power-up transceiver reset comes before that, so
+  one `opv_play -r` per boot until the block retries by itself.
+- 2026-11-10: the bridge's `lcpll_lock_out` never asserts in bypass mode.
+  Resetdone high and the user clock measured at exactly 1.5625 × the PL
+  clock said the PLL was locked while the bit said it was not; the quad's
+  `hsclk0_lcplllock` is the signal (Teledyne's wrapper uses it). The
+  block's clock counters were put in for exactly this kind of question.
+- 2026-11-10: a JTAG re-boot without a power cycle fails ("Configuration
+  timed out waiting for DONE") — the 2026-10-25 lesson again, and it cost
+  the quick "reset after clock" experiment, which then needed `-r` in
+  `opv_play` instead. Power cycle, 30 s, boot: there is no shortcut.

@@ -1,0 +1,60 @@
+abraxas3d@chococat:~/vck190/Mode-Dynamic-Transponder$ python3 haifuraiya/platforms/vck190/tools/opv_stim_txt2bin.py haifuraiya/sim/opv_chan_stim.txt /tmp/opv_chan_stim.bin
+scp /tmp/opv_chan_stim.bin root@10.73.1.17:/home/root/
+ssh root@10.73.1.17 '/home/root/opv_play -l | head -2; /home/root/opv_play -i /home/root/opv_chan_stim.bin -o /home/root/soft.bin -q'
+20799760 samples -> /tmp/opv_chan_stim.bin (83199040 bytes, 1.040 s at 20 MSps)
+root@10.73.1.17's password: 
+opv_chan_stim.bin                                                                                        100%   79MB  26.0MB/s   00:03    
+root@10.73.1.17's password: 
+ESI_STATUS 0x000006EF  CONTROL 0x00000020  (loopback mode 2)
+  gt_powergood=1 lcpll_lock=1 tx_resetdone=1 rx_resetdone=1 gt_link_status=0 xcvr_ready=1 lanes_ready=1 link_ready=1 snapshot_busy=0 tx_clk_alive=1 rx_clk_alive=1 
+stimulus: 83199040 bytes = 20799760 samples = 1.040 s at 20 MSps, 20 DMA buffers
+ESIstream link present (tier 2): STATUS 0x000006EF
+24 frames (51456 soft bits) in 4.22 s (includes the 3000 ms end-of-run timeout)
+channelizer VERSION 0x00010000   demod VERSION 0x00060600
+DEMOD_STATUS 0x00000003  (frame_sync_locked=1 sym_locked=1)
+FRAMES_RECEIVED 24   SOFT_DROPPED 0
+CFO_STATE 3  CFO_ESTIMATE 498 Hz  CFO_QUALITY 6763
+SYM_CLK_OFFSET -2203 (Q24 samples/symbol = -11.39 ppm)
+ESI_STATUS 0x000006EF  CONTROL 0x00000020  (loopback mode 2)
+  gt_powergood=1 lcpll_lock=1 tx_resetdone=1 rx_resetdone=1 gt_link_status=0 xcvr_ready=1 lanes_ready=1 link_ready=1 snapshot_busy=0 tx_clk_alive=1 rx_clk_alive=1 
+ESI_SAMPLES_SENT 20799760  ESI_SAMPLES_RCVD 20799760  (equal)
+ESI_SEQ_ERRORS 0  ESI_MARKER_ERRORS 0  ESI_MULTI_ERRORS 0  ESI_LINK_DROPS 0
+tier 2 pass: the tier-1 grade, and SAMPLES_SENT = SAMPLES_RCVD = 20799760, all error counters 0
+abraxas3d@chococat:~/vck190/Mode-Dynamic-Transponder$ scp root@10.73.1.17:/home/root/soft.bin /tmp/
+python3 haifuraiya/platforms/vck190/tools/opv_soft_bin2txt.py /tmp/soft.bin /tmp/soft.txt
+python3 haifuraiya/sim/grade_payload_ber.py /tmp/soft.txt --stim-dir haifuraiya/sim
+root@10.73.1.17's password: 
+soft.bin                                                                                                 100%   50KB  26.7MB/s   00:00    
+51456 soft bits = 24.00 frames -> /tmp/soft.txt
+/tmp/soft.txt: 51456 softs = 24.00 frames (quantized 3-bit; sign at >=4)
+FEC decodability limit: 8.0% pre-FEC BER (K=7 R=1/2 soft-decision, approximate)
+
+frame   BER      pol  verdict
+    1    0.42%   +   DECODABLE
+    2    0.47%   +   DECODABLE
+    3    0.19%   +   DECODABLE
+    4    0.00%   +   DECODABLE
+    5    0.19%   +   DECODABLE
+    6    0.37%   +   DECODABLE
+    7    0.09%   +   DECODABLE
+    8    0.09%   +   DECODABLE
+    9    0.28%   +   DECODABLE
+   10    0.09%   +   DECODABLE
+   11    0.19%   +   DECODABLE
+   12    0.19%   +   DECODABLE
+   13    0.19%   +   DECODABLE
+   14    0.37%   +   DECODABLE
+   15    0.19%   +   DECODABLE
+   16    0.19%   +   DECODABLE
+   17    0.19%   +   DECODABLE
+   18    0.56%   +   DECODABLE
+   19    0.09%   +   DECODABLE
+   20    0.09%   +   DECODABLE
+   21    0.28%   +   DECODABLE
+   22    0.09%   +   DECODABLE
+   23    0.09%   +   DECODABLE
+   24    0.19%   +   DECODABLE
+
+24/24 frames decodable
+abraxas3d@chococat:~/vck190/Mode-Dynamic-Transponder$ 
+
