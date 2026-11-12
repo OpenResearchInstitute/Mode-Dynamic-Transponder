@@ -16,3 +16,4 @@ syn/*.ltx
 logs/*.wdb
 logs/*/*.wdb
 sim/esi/work_esi_link*/
+sim/esi/work_esi_link*_ghdl/

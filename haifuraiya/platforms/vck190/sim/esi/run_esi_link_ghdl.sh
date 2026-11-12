@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# run_esi_link_ghdl.sh -- link-level bench for the tier-2 ESIstream loop, in GHDL
+# (the same bench as run_esi_link_nvc.sh under a second, independent simulator;
+# GHDL 4.x -- Ubuntu 24.04's package, or the release tarball from
+# github.com/ghdl/ghdl on 22.04, whose package is 1.0 and too old).
+#
+# Compiles Teledyne's ESIstream TX/RX (public domain, vendored under
+# haifuraiya/third_party/esistream_vck190/), our packer/reassembler/loop
+# (platforms/vck190/rtl/esi/), the proven axis_async_fifo, and the bench.
+# The one substitution: rx_xpm_async_fifo_sim.vhd stands in for Teledyne's
+# XPM FIFO wrapper (nvc has no Xilinx XPM).  xsim on chococat uses the real one.
+#
+# Usage:  haifuraiya/platforms/vck190/sim/esi/run_esi_link_ghdl.sh [N_SAMPLES]
+# Pass = "PASS: tb_esi_link_loop" in the log.
+set -euo pipefail
+HERE=$(cd "$(dirname "$0")" && pwd)
+HAI=$(cd "$HERE/../../../.." && pwd)                 # haifuraiya/
+ESI="$HAI/third_party/esistream_vck190"
+OURS="$HAI/platforms/vck190/rtl/esi"
+WORK="$HERE/work_esi_link_ghdl"
+N=${1:-3000}
+
+test -f "$ESI/src_pkg/esistream_pkg_64b.vhd" || { echo "ERROR: Teledyne package not found at $ESI (see README_ORI.md)"; exit 1; }
+rm -rf "$WORK"; mkdir -p "$WORK"; cd "$WORK"
+
+# Teledyne sources use the Synopsys std_logic_arith/unsigned packages: --std=2008
+# with nvc's ieee synopsys libs.  Order matters for the packages.
+GHDLFLAGS="--std=08 -fsynopsys -frelaxed --workdir=. --work=work"
+ghdl -a $GHDLFLAGS \
+    "$ESI/src_pkg/esistream_pkg_64b.vhd" \
+    "$ESI/src_common/two_flop_synchronizer.vhd" \
+    "$ESI/src_common/ff_synchronizer_array.vhd" \
+    "$ESI/src_rx/rx_delay.vhd" \
+    "$HERE/rx_xpm_async_fifo_sim.vhd" \
+    "$ESI/src_rx/rx_xpm_output_buffer.vhd" \
+    "$ESI/src_rx/rx_frame_alignment.vhd" \
+    "$ESI/src_rx/rx_lfsr_init.vhd" \
+    "$ESI/src_rx/rx_decoding.vhd" \
+    "$ESI/src_rx/rx_lane_decoding.vhd" \
+    "$ESI/src_rx/rx_control.vhd" \
+    "$ESI/src_rx/rx_esistream.vhd" \
+    "$ESI/src_tx/tx_lfsr.vhd" \
+    "$ESI/src_tx/tx_scrambling.vhd" \
+    "$ESI/src_tx/tx_disparity_word_16b.vhd" \
+    "$ESI/src_tx/tx_disparity.vhd" \
+    "$ESI/src_tx/tx_encoding.vhd" \
+    "$ESI/src_tx/tx_esistream.vhd" \
+    "$HAI/rtl/rx/axis_async_fifo.vhd" \
+    "$OURS/esi_loop_pkg.vhd" \
+    "$OURS/esi_sample_packer.vhd" \
+    "$OURS/esi_sample_reassembler.vhd" \
+    "$OURS/esi_link_loop.vhd" \
+    "$HERE/tb_esi_link_loop.vhd"
+
+ghdl -e $GHDLFLAGS tb_esi_link_loop
+ghdl -r $GHDLFLAGS tb_esi_link_loop -gN_SAMPLES=$N --stop-time=2ms --ieee-asserts=disable-at-0 2>&1 | tee run.log
+grep -q "PASS: tb_esi_link_loop" run.log && echo "RESULT: PASS" || { echo "RESULT: FAIL"; exit 1; }

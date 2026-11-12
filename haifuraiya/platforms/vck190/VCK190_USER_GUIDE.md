@@ -133,7 +133,12 @@ There is also a link-level bench that runs in seconds under nvc, for the
 ESIstream pieces alone:
 `sim/esi/run_esi_link_nvc.sh` (pass = `PASS: tb_esi_link_loop`). It uses
 `sim/esi/rx_xpm_async_fifo_sim.vhd` in place of Teledyne's XPM FIFO wrapper;
-never add that stand-in to a Vivado project.
+never add that stand-in to a Vivado project. The same bench, and the
+wrapper's unit test (T7), also run under GHDL — `run_esi_link_ghdl.sh`,
+`run_esi_link_hw_ghdl.sh` — and the two simulators agree event for event
+(2026-11-11). GHDL 4.x is needed: Ubuntu 24.04's package is fine, 22.04's
+is 1.0 and too old; on 22.04 use a release tarball from
+github.com/ghdl/ghdl (unpack, put its `bin` on PATH).
 
 ## Logs and waveforms after a simulation
 
@@ -620,6 +625,7 @@ chococat so the record says so:
 
 ```
 haifuraiya/platforms/vck190/sim/esi/run_esi_link_hw_nvc.sh      # pass = PASS: tb_esi_link_hw, about a minute
+haifuraiya/platforms/vck190/sim/esi/run_esi_link_hw_ghdl.sh     # the same under GHDL 4.x; either one is the record
 ```
 
 ### Things that bit us (keep adding)
