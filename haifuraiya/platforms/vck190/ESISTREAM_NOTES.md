@@ -1,8 +1,12 @@
 # ESIstream on the VCK190 — package review and plan
 
-_Status 2026-10-31. Everything marked **verified** was read from the named
-document or measured in Vivado; everything marked **estimate** is our
-arithmetic and still has to be confirmed by Teledyne or by a measurement._
+_Status 2026-11-11. Tier 2 — Teledyne's ESIstream over a real GTY pair on
+the VCK190, two lanes, 10 Gb/s — passes on hardware and starts itself from
+power-on (§4.2). Everything marked **verified** was read from the named
+document or measured (Vivado, the benches, the board); everything marked
+**estimate** is our arithmetic and still has to be confirmed by Teledyne or
+by a measurement. Sections 1–3 are the review as written in October with
+the answers folded in; §4 is tier 2 as built; §5–6 are tier 3 as planned._
 
 ## 1. Where this sits
 
@@ -14,10 +18,18 @@ interface in front of the receiver:
 
 - **Tier 2 — digital loopback.** Same `opv_play`, same stimulus, same
   receiver; the ESIstream link spliced into the sample path:
-  DDR → DMA → ESIstream TX → GTY → (loopback) → GTY → ESIstream RX →
-  reassembler → pacer → receiver → DMA → DDR. No ADC.
+  DDR → DMA → pacer → ESIstream TX → GTY → (loopback) → GTY → ESIstream RX →
+  reassembler → receiver → DMA → DDR. No ADC. **Passed** in simulation
+  (bit-identical to tier 1, 2026-11-08) and on the board (2026-11-10, and
+  self-starting 2026-11-11): 24/24, the tier-1 table, 20,799,760 samples
+  through the link with zero errors.
+- **Tier 2½ — the card's clock and pins, no card.** The reference moved to
+  FMC1 GBTCLK0 (where the ADC's SSO will arrive), driven from the bench;
+  then the loopback taken off-chip through the FMC pins. Same image
+  otherwise. Not started; §8.
 - **Tier 3 — RF loopback.** Opulent Voice transmitter → EV12AQ600 on the
   FMC evaluation module → ESIstream RX → digital downconverter → receiver.
+  Waits on the EVM loan (§7).
 
 ## 2. The package (verified)
 
@@ -41,14 +53,24 @@ package is the newer encoding for the next generation of converters
   64-bit transceiver datapath, raw encoding (ESIstream does its own
   alignment, comma `0x00FFFF00`, and descrambling). Fabric sees, per lane,
   **4 × 14-bit samples per 156.25 MHz clock** — 5 G samples/s over 8 lanes.
+  **We run it at 2 lanes** (the tier-3 lane count: the ADC's 4-channel
+  mode, one core, is ASL0/ASL1 = two lanes, §5). `NB_LANES` is a generic
+  throughout Teledyne's IP and ours; the link bench ran at 8, 4 and 2 with
+  the faulty-lane prediction holding at each (§4.1); the system simulation
+  is 2.7 × faster at 2 lanes than at 8; the hardware GT pair is two
+  channels of one quad (§4.2).
 - **Interfaces we meet:** `rx_esistream.data_out` (per lane 4 × 14 bits),
   `valid_out` per lane, `lanes_ready`; `tx_esistream.data_in` of the same
   shape. The IP does not care what the 14 bits mean.
 - **Vivado 2021.1** scripts and block designs; VCK190 board file 2.2 (same as
-  ours). Expect an IP-upgrade pass under 2022.2 (transceiver and CIPS block
-  designs). First step of the port: run `xm107/script_64b.tcl` under 2022.2
-  untouched, into a scratch directory, and read the log.
-- **No user guide in the zip** — requested from Teledyne.
+  ours). The port to 2022.2 did not go through an IP upgrade of Teledyne's
+  block design: the GT pair (`gt_bridge_ip` 1.1 in bypass mode,
+  `gt_quad_base` 1.1) was rebuilt by hand from their block design's
+  settings in a batch script (`syn/gt_scratch.tcl`, §4.2), two lanes
+  instead of eight, and placed in our own playback design. Their VHDL
+  (`src_rx`, `src_tx`, `src_common`, the package) is used verbatim.
+- **No user guide for the package exists** (Marc, 2026-11-05); the EVM user
+  guide is the document.
 
 ## 3. Pins (verified in Vivado 2022.2, `get_package_pins`, and UG1366)
 
@@ -72,11 +94,9 @@ GTY204–GTY206: FMCP2"):
 
 So the package as shipped targets **FMCP1 (J51)**: lanes on GTY201/202, the
 ADC's SSO on GTY201 refclk1 = FMC1_GBTCLK0. Teledyne's e-mail of 2026-09-11
-said the validation was done "in the VCK190's FMCP2 slot". The two slots are
-electrically equivalent for this purpose; a bitstream is not — its
-constraints name one slot. **Open question to Teledyne (see §7).** Until
-answered: use the package's constraints as shipped and put the card in
-**J51**.
+had said FMCP2; **answered 2026-11-05: FMCP1 (J51)**, as the constraints
+say. Our two lanes are DP0/DP1 = GTY201 channels 0 and 1 (AB7/AB6, AB2/AB1,
+AA9/AA8, AA4/AA3), the same pins as the package's lanes 0 and 1.
 
 EVM ↔ FMC pin mapping (EV12AQ600-FMC-EVM user guide, June 2017): the eight
 lanes are `DP0..DP7_M2C` = B SL0, B SL1, A SL0, A SL1, D SL0, C SL1, C SL0,
@@ -85,32 +105,45 @@ D SL1 (two links per ADC core, link 0 = even samples, link 1 = odd); SSO on
 the card does not use VADJ.
 
 Board clock pins for tier 2 (quad 201 refclk0): **AB11 / AB10**
-(MGTREFCLKP0/N0_201).
+(MGTREFCLKP0/N0_201) — the user SI570 U205, on the Versal's PMC I2C0 behind
+switch U33 channel 6 at 0x5F, set to 156.25 MHz by the Linux device tree at
+every boot (§4.2; UG1366 "PMC MIO 46-47 I2C0 Bus").
 
-## 4. Tier 2 design (digital loopback)
+## 4. Tier 2 design (digital loopback) — as built
 
-- **Reference clock:** the board's, on GTY201 refclk0 (AB11/AB10), set to
-  156.25 MHz by the System Controller ("User1 FMC1 Si570" / 8A34001 block in
-  the Board User Interface; jumper selects which). Slot J51 stays **empty**.
-- **Loopback:** the transceivers' internal near-end loopback. No XM107 card
-  required (optional later, for a physical loop on the real pins).
-- **Data path:** replace the package's `tx_emulator` with our DMA source;
-  take `rx_esistream.data_out` into a **reassembler** that rebuilds 32-bit
-  I/Q beats for the pacer. Frame layout is ours on both ends: one 16-bit I,
-  one 16-bit Q, a valid flag and a sequence number per 56-bit lane slot
-  (4 frames × 14 bits), samples sent round-robin over the 8 lanes so a lane
-  order or alignment error scrambles the sample order and the receiver fails
-  loudly. Lossless: the receiver must produce the same grade table as tier 1.
-  Do **not** imitate the ADC's 12-bit format here — the ADC never quantizes
-  our baseband; the downconverter hands the receiver its samples (§5).
-- **Clock domains:** two async FIFOs, 100 MHz (DMA/pacer/receiver) ↔
-  156.25 MHz (ESIstream). The receiver is consume-on-arrival and never knows
-  the link exists.
-- **Control:** the package's UART/register-map/Python GUI replaced by a few
-  AXI-Lite registers on our control plane (lane enables, sync, `lanes_ready`,
-  error counters), as for everything else.
-- **Simulation first:** the package has xsim testbenches for the link; the
-  reassembler gets its own bench; then the system bench with the link in.
+- **Reference clock:** the board's user SI570 on GTY201 refclk0 (AB11/AB10),
+  programmed to 156.25 MHz **by the Linux kernel from the device tree** at
+  every boot (the oscillator is on the Versal's own I2C bus; the System
+  Controller, AMD's documented route, was never needed and is not running
+  on this board — its microSD slot J206 is empty). Slot J51 stays
+  **empty**. The fabric watches a copy of the reference and resets the
+  transceiver when the clock becomes good (§4.2).
+- **Loopback:** the transceivers' near-end PMA loopback, selected by a
+  register (default). Closed at 10 Gb/s with the bridge's default
+  equalization on the first try. No XM107 card.
+- **Lanes: two** (§2), on channels 0 and 1 of quad 201.
+- **Data path:** the pacer feeds a **packer** (one sample per link clock,
+  rotating over the lanes) → `tx_esistream` → GTY → `rx_esistream` → a
+  **reassembler** that rebuilds 32-bit I/Q beats for the receiver. Frame
+  layout is ours on both ends: one 16-bit I, one 16-bit Q, a valid flag, a
+  9-bit marker and a 14-bit sequence number per 56-bit lane slot (4 frames ×
+  14 bits), so a lane order or alignment error is counted and scrambles the
+  sample order. Lossless: the receiver produces the same grade table as
+  tier 1 (it does, to the bit). The ADC's 12-bit format is **not** imitated
+  here — the ADC never quantizes our baseband; the downconverter hands the
+  receiver its samples (§5).
+- **Clock domains:** 100 MHz (DMA/pacer/receiver/registers), the GT's TX
+  and RX user clocks (156.25 MHz each, unrelated phase), and the reference
+  copy; two async FIFOs for the samples, two-flop synchronizers and a
+  toggle handshake for everything else (§4.2 lists every crossing). The
+  receiver is consume-on-arrival and never knows the link exists.
+- **Control:** the package's UART/register-map/Python GUI replaced by one
+  AXI-Lite register block on our control plane (0xA403_0000: status,
+  scoreboard, loopback mode, resets, the clock monitor), read by dōgu's
+  `opv_play` and nothing else.
+- **Order of work, as it happened:** the package's own link bench under nvc
+  (and GHDL); the splice in the system bench, 3 and 25 frames, against tier
+  1; the hardware wrapper's unit test; the build; the board.
 
 ### 4.1 Tier 2 in simulation — PASS, and bit-identical to tier 1 (2026-11-08)
 
@@ -172,7 +205,7 @@ CIPS M_AXI_FPD --> smartconnect --> axi_dma 0xA400_0000, rx ctrl 0xA401_0000, rx
 | File | What it is |
 |---|---|
 | `rtl/esi/esi_link_loop.vhd` | As §4.1, now with **two link clock domains**: `tx_clk`/`tx_rstn` (packer link side, `tx_esistream`, the bring-up sequencer) and `rx_clk`/`rx_rstn` (`rx_esistream` as both `rx_usrclk` and `rx_frame_clk`, the reassembler). The three signals that cross (sync pulse TX→RX, `lanes_ready` and `release_data` RX→TX) go through Teledyne's `ff_synchronizer_array`. The sync pulse is 4 `tx_clk` wide — Teledyne's own `SYNCTRIG_PULSE_WIDTH` — and is sent 16 clocks after the transceiver reports ready (not 32 clocks after reset as before: in hardware the transceiver is not ready at reset). In simulation both clocks are tied to one; the benches were updated and pass. |
-| `rtl/esi/esi_link_hw.vhd` | The block-design module: `esi_link_loop(IDEAL_LINK => false, 2 lanes)` + GTY glue + AXI-Lite registers. Flat ports only (module references cannot take arrays). The bridge's data ports are 128 bits per channel; bits 63:0 carry the word, as in Teledyne's `tx_rx_xcvr_wrapper_64b`. `xcvr_ready = lcpll_lock and tx_resetdone and rx_resetdone` (Teledyne's `ip_ready`). One automatic `gtreset_in` pulse 32 clocks after reset, so the bridge starts without software. Register map in the file header and below. |
+| `rtl/esi/esi_link_hw.vhd` | The block-design module: `esi_link_loop(IDEAL_LINK => false, 2 lanes)` + GTY glue + AXI-Lite registers + the reference-clock monitor. Flat ports only (module references cannot take arrays). The bridge's data ports are 128 bits per channel; bits 63:0 carry the word, as in Teledyne's `tx_rx_xcvr_wrapper_64b`. `xcvr_ready = lcpll_lock and tx_resetdone and rx_resetdone` (Teledyne's `ip_ready`; the lock is the quad's `hsclk0_lcplllock`). The transceiver is reset once each time the reference clock becomes good ("the qualified reset", below). Register map in the file header and below. |
 | `sim/esi/tb_esi_link_hw.vhd`, `run_esi_link_hw_nvc.sh`, `run_esi_link_hw_ghdl.sh` | **Unit test** for the wrapper with a stand-in transceiver (4-cycle delay line in `tx_clk`, re-registered in an `rx_clk` of the same frequency and a different phase; GT status lines come up on a schedule after `gt_reset`). Three real clock domains. Checks: the automatic `gt_reset`; `link_ready` and both clock-alive bits; 2000 samples through at one per 5 `aclk`, identical and in order; SNAPSHOT counters (sent = rcvd = 2000, errors 0) and the measured `tx_clk/aclk` ratio (1.5625061 over 10231 `aclk`); a split-phase AXI-Lite write (W three cycles before AW) completes; SYNC_REQ brings the link back (`LINK_DROPS` = 1). **PASS** (nvc in the sandbox, 2026-11-09; not yet run on chococat). Run: `sim/esi/run_esi_link_hw_nvc.sh`, pass = `PASS: tb_esi_link_hw`. |
 | `syn/gt_scratch.tcl` | The derivation, reproducible: builds the two-lane GT pair **by hand** from Teledyne's `gty_txrx_8lanes_64b.bd` in a scratch block design (no block automation — the 2022.2 rule names for the bridge are not public), validates it, and dumps every pin of every cell to `gt_2lanes_pins.txt` and the design to `gt_2lanes_bd.tcl`. That dump is where `ch0_loopback`..`ch3_loopback` were found on the quad and where the bridge's `chN_txdata_ext`/`chN_rxdata_ext` names come from. `validate_bd_design: OK` on chococat, 2026-11-09 (third attempt: v1 used automation rules that do not exist; v2 left `ch2/ch3` user clocks unconnected and the quad insists on all four). |
 | `syn/vck190_playback_bd.tcl` §4t | The same cells and wires as `gt_scratch.tcl`, in the playback design, when `tier == 2`; the splice; `smartconnect` M03 → `esi/s_axi`; `assign_bd_address` 0xA403_0000; everything grouped into the `esi_link` hierarchy. |
@@ -307,11 +340,12 @@ System Controller's console dark (the device-tree route above replaced it);
 and the bridge's `lcpll_lock_out` never asserting in bypass mode (the quad's
 `hsclk0_lcplllock` is the signal, as in Teledyne's wrapper).
 
-**Still open:** the two unit tests have run in the sandbox only, not yet
-on chococat — but under two independent simulators there: nvc 1.24 and
-GHDL 4.1 (`run_esi_link_ghdl.sh`, `run_esi_link_hw_ghdl.sh`, 2026-11-11)
-agree on every reported event to the picosecond (link-up 348.4 ns, the
-qualified reset at 133.695 µs and 357.825 µs, 750 faulty-lane errors).
+**Unit Tests Passed** the two unit tests have run on chococat under two 
+independent simulators there: nvc 1.24 and GHDL 4.1 (`run_esi_link_ghdl.sh`, 
+`run_esi_link_hw_ghdl.sh`, 2026-11-11) and they agree on every reported 
+event to the picosecond (link-up 348.4 ns, the qualified reset at 
+133.695 µs and 357.825 µs, 750 faulty-lane errors).
+
 Ubuntu 22.04's `ghdl` package is 1.0 and too old for the 2008 features
 these benches use; the release tarball from github.com/ghdl/ghdl is the
 way on chococat. **Closed:** the qualified reset — built, booted and
@@ -332,7 +366,7 @@ Candidate, with sources:
 | Item | Value | Status |
 |---|---|---|
 | Mode | 4-channel (single core per input), **channel A only** | verified: datasheet §8 modes; chosen for no interleaving spurs, 2 lanes, 8 samples/clock |
-| f_CLK | **5 GHz** | verified: datasheet "Performance vs F_clock" (p. 119) covers 5 GHz, flat; LMX2592 VCO fundamental 3.55–7.1 GHz (TI datasheet) — direct output, no doubler/divider |
+| f_CLK | **5 GHz** | verified: datasheet "Performance vs F_clock" (p. 119) covers 5 GHz, flat; LMX2592 VCO fundamental 3.55–7.1 GHz (TI datasheet) — direct output, no doubler/divider; Teledyne ships the configuration (`external_pll_configuration_5000`, §7) |
 | Lanes | 2 (ASL0/ASL1 = DP2/DP3), 10 Gb/s, SSO 156.25 MHz | verified: lane rate = 2 × f_CLK, SSO = f_CLK/32 (EVM guide); = package's validated link config |
 | Core rate | 1.25 GSps | arithmetic |
 | Input band | 5.65–5.67 GHz, **extended bandwidth** (6.5 GHz option) | verified: datasheet §8 analog bandwidth |
@@ -346,8 +380,12 @@ Candidate, with sources:
 | First light | ADC **ramp** test mode + package `txrx_frame_checking` | verified: datasheet §8 test modes |
 | Later option | 4 cores in phase on one input, averaged in fabric: ~+6 dB SNR | verified: AN 60S 218492 |
 
-Physical: card in J51 (pending §7), SSO on GTY201 refclk1 (M15/M14); tier 2
-constraints change only the reference-clock pair.
+Physical: card in **J51** (confirmed, §7), SSO on GTY201 refclk1 (M15/M14);
+the tier-2 image changes only the reference-clock pair (the quad's
+`REFCLK_STRING` and two XDC lines) — and the clock monitor already handles a
+reference that arrives late, which the ADC's SSO will. Teledyne's 5 GHz
+LMX2592 configuration exists in the package's Python
+(`python/ev12AQ600.py`, `external_pll_configuration_5000`; §7).
 
 ## 6. VADJ / System Controller (verified, UG1366)
 
@@ -365,8 +403,17 @@ override persists across power cycles: ask Teledyne/AMD.
 
 Electrical question for Teledyne: the card's signals toward the FPGA are
 1.8 V into 1.5 V banks, and the FPGA drives 1.5 V swings into the card's 1.8 V
-inputs (SPI, reset, selects). Teledyne called the combination compatible;
-we want that in writing since the risk is the FPGA's banks.
+inputs (SPI, reset, selects). Teledyne called the combination compatible and
+**used 1.5 V on their VCK190** (2026-11-05); we still want the statement in
+writing since the risk is the FPGA's banks.
+
+**Found 2026-11-10: the System Controller is not running on this board.** It
+boots from a microSD card in its own slot, **J206**, and none is fitted; its
+console (`ttyUSB3`) is silent. Tier 2 never needed it (the device tree sets
+the clock). Tier 3 does: the VADJ override above is done through the
+System Controller's Board User Interface, so a card with AMD's "SC Update"
+image goes into J206 **before** the EVM goes into J51 — a prerequisite,
+not a nicety.
 
 ## 7. Open questions for Teledyne — and the answers (Marc, 2026-11-05)
 
@@ -379,13 +426,17 @@ we want that in writing since the risk is the FPGA's banks.
    `external_pll_configuration_5000`.
 4. VADJ — Teledyne **used 1.5 V** on the VCK190. The written compatibility
    statement for 1.5 V banks against the card's 1.8 V signals is still
-   open; so is whether the BUI override persists across power cycles.
-5. The EVM loan — with Todd Weckhurst; pending.
+   open; so is whether the BUI override persists across power cycles (and
+   the System Controller has to be running for any of it, §6).
+5. The EVM loan — with Todd Weckhurst; **to ask for now** (2026-11-11), with
+   the tier-2 result as the case: their package on a VCK190 at the ADC's
+   rate and encoding, two lanes, self-starting, bit-exact.
 
 ## 8. Next steps
 
-1. Port check: run `xm107/script_64b.tcl` under Vivado 2022.2 untouched
-   (scratch dir), log the IP-upgrade complaints. Measures the port cost.
+1. ~~Port check: run `xm107/script_64b.tcl` under Vivado 2022.2.~~
+   **Superseded**: the GT pair was rebuilt by hand under 2022.2 from the
+   block design's settings (§2, §4.2); Teledyne's scripts were never run.
 2. ~~Write the reassembler + its bench; frame layout per §4.~~ **Done.**
    Tier 2 in simulation passed and is bit-identical to tier 1 at 3 and 25
    frames (§4.1, 2026-11-08/09). The bench-tail items are in the tracker.
@@ -399,5 +450,20 @@ we want that in writing since the risk is the FPGA's banks.
    the transceiver when its reference clock becomes good (§4.2, "the
    qualified reset"): designed, benched, **built and passed on the board
    2026-11-11**. No manual step remains in tier 2.
-5. Downconverter design pass on paper (mode/clock per §5), then its bench,
-   then fabric — for tier 3, when the card arrives.
+5. **Tier 2½, part 1 — the card's reference clock.** Move the quad's
+   reference to refclk1 = FMC1 GBTCLK0 (M15/M14) and drive it from the
+   bench (the board's 8A34001 through the FMC clock path, or a signal
+   generator into the FMC); the loopback stays internal. Proves the
+   reference path the ADC's SSO will use, and the monitor's handling of a
+   clock that arrives whenever the source is switched on. Small change:
+   `REFCLK_STRING`, two XDC lines, the user guide.
+6. **Tier 2½, part 2 — the serial path off-chip.** Loopback mode 0 and a
+   physical TX→RX loop on the FMC pins (an XM107 card, or SMA cabling on a
+   breakout). Proves the equalization and the pins with a real channel.
+7. **Tier 3 prerequisites, no card needed:** a microSD with AMD's SC Update
+   image in J206 so the System Controller runs (VADJ, §6); the
+   downconverter design pass on paper (mode/clock per §5), then its bench.
+8. **The EVM loan** (§7 item 5): ask now.
+9. Tier 3: card in J51, VADJ 1.5 V, SPI bring-up with the package's
+   register map, ramp test mode first, then the downconverter, then
+   Opulent Voice.
