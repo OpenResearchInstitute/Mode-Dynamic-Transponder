@@ -1,6 +1,6 @@
 # ESIstream on the VCK190 — package review and plan
 
-_Status 2026-11-11. Tier 2 — Teledyne's ESIstream over a real GTY pair on
+_Status 2026-11-11 (Teledyne thread reconciled). Tier 2 — Teledyne's ESIstream over a real GTY pair on
 the VCK190, two lanes, 10 Gb/s — passes on hardware and starts itself from
 power-on (§4.2). Everything marked **verified** was read from the named
 document or measured (Vivado, the benches, the board); everything marked
@@ -54,7 +54,7 @@ package is the newer encoding for the next generation of converters
   alignment, comma `0x00FFFF00`, and descrambling). Fabric sees, per lane,
   **4 × 14-bit samples per 156.25 MHz clock** — 5 G samples/s over 8 lanes.
   **We run it at 2 lanes** (the tier-3 lane count: the ADC's 4-channel
-  mode, one core, is ASL0/ASL1 = two lanes, §5). `NB_LANES` is a generic
+  mode, one core, is two lanes — channel B's BSL0/BSL1 = DP0/DP1, §5). `NB_LANES` is a generic
   throughout Teledyne's IP and ours; the link bench ran at 8, 4 and 2 with
   the faulty-lane prediction holding at each (§4.1); the system simulation
   is 2.7 × faster at 2 lanes than at 8; the hardware GT pair is two
@@ -63,14 +63,22 @@ package is the newer encoding for the next generation of converters
   `valid_out` per lane, `lanes_ready`; `tx_esistream.data_in` of the same
   shape. The IP does not care what the 14 bits mean.
 - **Vivado 2021.1** scripts and block designs; VCK190 board file 2.2 (same as
-  ours). The port to 2022.2 did not go through an IP upgrade of Teledyne's
+  ours). Teledyne validated the AQ600 package against 2021.1 (and the DD700
+  package against 2019.2; Marc, 2026-09-11). The port to 2022.2 did not go through an IP upgrade of Teledyne's
   block design: the GT pair (`gt_bridge_ip` 1.1 in bypass mode,
   `gt_quad_base` 1.1) was rebuilt by hand from their block design's
   settings in a batch script (`syn/gt_scratch.tcl`, §4.2), two lanes
   instead of eight, and placed in our own playback design. Their VHDL
   (`src_rx`, `src_tx`, `src_common`, the package) is used verbatim.
-- **No user guide for the package exists** (Marc, 2026-11-05); the EVM user
-  guide is the document.
+- **No user guide for the package exists** (Marc, 2026-11-05: "no dedicated
+  User Guide for the VCK190 ESIstream package"); the EV12AQ600-FMC-EVM user
+  guide is the document (`https://flir.netx.net/file/asset/69316/original/`,
+  given 2026-09-11 and again 2026-11-05). Marc also sent download links on
+  2026-09-17 for "a package for the DD700 and VCK190" and "the User Guide of
+  the board", with a warning that the guide gets an update early next year
+  (typos; the images in its section 2.4.2.4 are wrong). Our package came
+  from esistream.com, not from those links; which guide the second link
+  holds is not stated in the mail.
 
 ## 3. Pins (verified in Vivado 2022.2, `get_package_pins`, and UG1366)
 
@@ -94,8 +102,10 @@ GTY204–GTY206: FMCP2"):
 
 So the package as shipped targets **FMCP1 (J51)**: lanes on GTY201/202, the
 ADC's SSO on GTY201 refclk1 = FMC1_GBTCLK0. Teledyne's e-mail of 2026-09-11
-had said FMCP2; **answered 2026-11-05: FMCP1 (J51)**, as the constraints
-say. Our two lanes are DP0/DP1 = GTY201 channels 0 and 1 (AB7/AB6, AB2/AB1,
+had said FMCP2; **answered 2026-11-05: "the package targets and was
+validated on FMCP1 (J51)"** — the September answer had been read off a
+photograph that showed the EVM in FMCP2 by mistake. The constraints were
+right all along. Our two lanes are DP0/DP1 = GTY201 channels 0 and 1 (AB7/AB6, AB2/AB1,
 AA9/AA8, AA4/AA3), the same pins as the package's lanes 0 and 1.
 
 EVM ↔ FMC pin mapping (EV12AQ600-FMC-EVM user guide, June 2017): the eight
@@ -362,16 +372,16 @@ Candidate, with sources:
 
 | Item | Value | Status |
 |---|---|---|
-| Mode | 4-channel (single core per input), **channel A only** | verified: datasheet §8 modes; chosen for no interleaving spurs, 2 lanes, 8 samples/clock |
+| Mode | 4-channel (single core per input), **channel B only** | verified: datasheet §8 modes; chosen for no interleaving spurs, 2 lanes, 8 samples/clock. Channel B, not A, because B's lanes are DP0/DP1 — the GTY201 channels tier 2 already runs (decided 2026-11-11; the EVM mapping table in §3 is the authority to re-read when the card is in hand) |
 | f_CLK | **5 GHz** | verified: datasheet "Performance vs F_clock" (p. 119) covers 5 GHz, flat; LMX2592 VCO fundamental 3.55–7.1 GHz (TI datasheet) — direct output, no doubler/divider; Teledyne ships the configuration (`external_pll_configuration_5000`, §7) |
-| Lanes | 2 (ASL0/ASL1 = DP2/DP3), 10 Gb/s, SSO 156.25 MHz | verified: lane rate = 2 × f_CLK, SSO = f_CLK/32 (EVM guide); = package's validated link config |
+| Lanes | 2 (BSL0/BSL1 = DP0/DP1 = GTY201 ch0/ch1, the tier-2 pair), 10 Gb/s, SSO 156.25 MHz | verified: lane rate = 2 × f_CLK, SSO = f_CLK/32 (EVM guide); = package's validated link config |
 | Core rate | 1.25 GSps | arithmetic |
 | Input band | 5.65–5.67 GHz, **extended bandwidth** (6.5 GHz option) | verified: datasheet §8 analog bandwidth |
 | IF after sampling | 660 MHz (5.66 GHz aliased, non-inverted) | estimate (arithmetic) |
 | Downconverter | mix at IF, decimate **÷125 → 10 MSps** straight into the channelizer (halfband not needed); 625 kSps channel = 1.25 G / 2000 exactly | estimate; the main new fabric block |
 | ADC ENOB at 5.58 GHz input, 4-channel mode | 7.0–7.5 (−1 dBFS), 7.4–7.7 (−3 dBFS); SNR 52.6 dBFS min | verified: datasheet dynamic-performance table, 4-channel mode |
 | Resolution after ÷125 | ~11 effective bits in-band | estimate (+3.5 bits decimation gain) |
-| EVM clock vs lab source | LMX2592 at 5–6 GHz: −112.6 dBc/Hz @100 kHz, −134 @1 MHz, −152.6 @10 MHz → ~50–80 fs jitter → jitter-limited SNR ≈ 52 dB at 5.66 GHz ≈ ADC's own; expect ~2–3 dB SNR cost vs a lab source; close-in noise negligible for 54 kbaud MSK | estimate |
+| EVM clock vs lab source | LMX2592 at 5–6 GHz: −112.6 dBc/Hz @100 kHz, −134 @1 MHz, −152.6 @10 MHz → ~50–80 fs jitter → jitter-limited SNR ≈ 52 dB at 5.66 GHz ≈ ADC's own; expect ~2–3 dB SNR cost vs a lab source; close-in noise negligible for 54 kbaud MSK | estimate — and it will stay one: Teledyne has **no characterization of the onboard LMX2592 against an external source** (Marc, 2026-09-11); the EV12AQ600 was characterized on a different board from laboratory sources (R&S SMA100A/B; 2026-09-17: SMA100B and Keysight E8257D). The one AQ600 spectrum Marc sent (2026-09-17): f_S = 6.4 GSps, f_IN = 5978 MHz at −1 dBFS, "avec filtre pilotable, cal set0" — a plot, not a table; the largest spurs read about 40 dB down. |
 | IMD3 at 5.5 GHz | 38 dB at −7 dBFS | verified; RF front-end filtering/gain-plan question |
 | Control bits CB1/CB2 | timestamp (127-bit PRBS, reset on SYNC) or parity | verified: datasheet §8 |
 | First light | ADC **ramp** test mode + package `txrx_frame_checking` | verified: datasheet §8 test modes |
@@ -382,7 +392,21 @@ the tier-2 image changes only the reference-clock pair (the quad's
 `REFCLK_STRING` and two XDC lines) — and the clock monitor already handles a
 reference that arrives late, which the ADC's SSO will. Teledyne's 5 GHz
 LMX2592 configuration exists in the package's Python
-(`python/ev12AQ600.py`, `external_pll_configuration_5000`; §7).
+(`python/ev12AQ600.py`, `external_pll_configuration_5000`; §7): fifty
+24-bit words (register address in the top byte, R0 first and last) that
+the script preloads into the **SPI master in the package's fabric** and
+sends with one `spi_start_pulse`. The EVM's own reference input accepts
+100, 20 or 10 MHz (Marc, 2026-09-11).
+
+**Decided 2026-11-11 — stay on channel B.** Reconciling this table with §3
+showed the earlier choice of channel A would have meant ASL0/ASL1 =
+DP2/DP3 = GTY201 channels 2 and 3 — a lane move (pins, XDC, the loopback
+and data connections in `vck190_playback_bd.tcl`). Channel B's lanes are
+DP0/DP1, the two channels tier 2 runs now, so the image changes only the
+reference-clock pair as stated above. Change as little as possible, unless
+and until forced. (Assumption, to check in the datasheet's 4-channel-mode
+table when the card is chosen: that core B's specifications match core
+A's, so nothing is given up by the swap.)
 
 ## 6. VADJ / System Controller (UG1366; measured 2026-11-11)
 
@@ -397,8 +421,12 @@ Teledyne's "you must force VADJ to 1.5 V from the carrier".
 not 0 V. BEAM's VADJ_FMC control offers 0.0 / 1.2 / 1.5 V, each as
 "current" and as "set on boot"; **"set on boot" did not do what its name
 says**: set to 1.5 and then to 1.2, a power cycle brought "current" back
-to 1.5 V and "set on boot" back to 0.0 each time. With empty slots the
-controller puts the rail at 1.5 V at every power-up regardless. So, for
+to 1.5 V and "set on boot" back to 0.0 each time. **"Current" does work**:
+set 1.2 → reads 1.2 V, set 1.5 → reads 1.5 V (2026-11-11). With empty
+slots the controller puts the rail at 1.5 V at every power-up regardless.
+This is the same BEAM page Marc pointed us to on 2026-11-05 (UG1573, "FMC:
+Current / Boot-up", Get and Set `VADJ_FMC`) as the way Teledyne set 1.5 V
+for their validation. So, for
 tier 3: card in J51, power on, read `VADJ_FMC` on BEAM; if it is not 1.5 V
 (the controller may act on the card's EEPROM), set 1.5 V as "current" and
 read again — and if that has to be repeated after every power cycle, it
@@ -407,13 +435,16 @@ that belongs in dōgu's tier-3 bring-up next to the ADC configuration. A
 measurement each time, not an act of faith. The EVM guide's §3.2 order
 (carrier on → card power on) still applies.
 
+“current” setter verified 2026-11-11 (set 1.2 then read 1.2, set 1.5 then read 1.5)
+
 **The System Controller itself** (the board's separate Zynq UltraScale+,
 its own Linux on the microSD card in its own slot, boot-mode switch SW11
 as UG1573's setup figure shows — both as shipped): it was running all
 along; only its serial console never answered. Reached 2026-11-11 over
 Ethernet: first back-to-back with chococat (UG1573's procedure), then on
-the lab network by DHCP (10.73.1.103 that evening; a static address is
-being set, Paul). **BEAM** is the web page at `http://<its address>:50002`
+the lab network by DHCP (10.73.1.103 that evening), then on a static
+address (set 2026-11-11, Paul; survives a power cycle — verified the same
+evening). **BEAM** is the web page at `http://<its address>:50002`
 — clocks, power rails (every INA226 on the board, VADJ_FMC among them),
 FMC settings; **`ssh`** to the same address works (login: the image's
 `petalinux` user; password as Paul set it). The serial console on the
@@ -425,32 +456,83 @@ network — J-number to be read off the board (TODO).
 
 Electrical question for Teledyne: the card's signals toward the FPGA are
 1.8 V into 1.5 V banks, and the FPGA drives 1.5 V swings into the card's 1.8 V
-inputs (SPI, reset, selects). Teledyne called the combination compatible and
-**used 1.5 V on their VCK190** (2026-11-05); we still want the statement in
-writing since the risk is the FPGA's banks.
+inputs (SPI, reset, selects). Teledyne called the combination "electrically
+compatible ... but not by default; you must force the VADJ to 1.5 V from
+the carrier" (2026-09-11) and, asked the DS957 question in full on
+2026-11-01 (1.8 V CMOS into a 1.5 V bank is above the recommended V_IN of
+VCCO + 0.2 V and below the absolute maximum; are there series resistors on
+the card?), answered that **"during our validation of the EV12AQ600-FMC-EVM
+with the VCK190, the FMC VADJ voltage was set to 1.5 V and the board
+operated successfully in this configuration"** (2026-11-05). That is a
+report of what worked, not an answer to the margin question: the series
+resistor / approved-combination part is **still open**, and the risk is
+the FPGA's banks.
 
 (2026-11-10's note here said the controller was not running and its card
 slot empty. That was an inference from a silent console, stated as fact,
 and wrong: the card that shipped with the board is in the slot and boots.
 Corrected 2026-11-11.)
 
-## 7. Open questions for Teledyne — and the answers (Marc, 2026-11-05)
+## 7. Questions to Teledyne — and the answers (checked against the thread, 2026-11-11)
 
-1. Which slot was the VCK190 package validated in? — **FMCP1 (J51)**, as the
-   package's constraints say (GTY201/202, SSO on M15/M14).
-2. The user guide for the VCK190 ESIstream package — **there is none**; the
-   EVM user guide is the document.
-3. f_CLK = 5 GHz (4-channel mode) and the LMX2592 configuration — the
-   configuration is in the package's Python: `python/ev12AQ600.py`,
-   `external_pll_configuration_5000`.
-4. VADJ — Teledyne **used 1.5 V** on the VCK190. The written compatibility
-   statement for 1.5 V banks against the card's 1.8 V signals is still
-   open. Persistence: BEAM's "set on boot" does not persist (measured
-   2026-11-11, §6); the power-up default is 1.5 V with the slots empty,
-   and the card-in reading decides.
-5. The EVM loan — with Todd Weckhurst; **to ask for now** (2026-11-11), with
-   the tier-2 result as the case: their package on a VCK190 at the ADC's
-   rate and encoding, two lanes, self-starting, bit-exact.
+Thread: Marc Stackler (Teledyne e2v business development / FAE, North
+America; Todd Weckhurst is the regional sales manager), nine messages,
+2026-08-25 to 2026-11-05. Two rounds of questions, three rounds of
+answers (2026-09-11, additions 2026-09-17, 2026-11-05). Everything below
+is what the mail says; the slides in it are marked "not allowed for release
+into the public domain" and are **not** reproduced in this repository.
+
+**Round 1 (asked 2026-08-27, answered 2026-09-11 / 09-17):**
+
+1. Slot and VADJ — validated "in the VCK190's FMCP2 slot" (**corrected to
+   FMCP1 on 2026-11-05**, item 6 below); both EVMs electrically compatible
+   with the fixed 1.5 V VADJ_FMC "but not by default" (§6); the VCK190
+   cannot host the AQ600 and DD700 EVMs at once (not enough FMC+
+   connections).
+2. Clocks — EVM user guide link (§2); the EVM's reference input takes 100,
+   20 or 10 MHz; no onboard-LMX2592-versus-external characterization (§5);
+   their bench sources are R&S SMA100A/B, SMA100B and Keysight E8257D; the
+   DD700 EVM has no onboard PLL (external clock at f_S, or 2 f_S in 2RF
+   mode).
+3. Package and Vivado — "there is a package", validated against Vivado
+   2019.2 (DD700) and **2021.1 (AQ600)**; download links 2026-09-17 (§2).
+4. Export — the EVMs are EAR99; the component classifications are in the
+   thread; "none of the documentation you are asking for now is subject to
+   export control".
+5. Qualification — EV12AQ600 **fully qualified and certified QML-Y, SMD
+   5962-2121401YXF**; EV12DD700 under development, schedule on a slide (in
+   the thread; not public).
+6. Spectra — DD700 plots (10 and 12 GSps, RF mode); the one AQ600 plot
+   2026-09-17 (§5).
+7. EVM loan — "we can either sell or loan the EVM for a few months"; which
+   kind (FMC-only card, or with FPGA and software, or the two-converter
+   synchronization kit)? Marc also asked when we would need prototype and
+   flight parts. **Answered 2026-11-01:** the FMC-only EV12AQ600 card; the
+   schedule follows the payload's futureGEO phases, not ours.
+
+**Round 2 (asked 2026-11-01 with the tier-1 result; answered 2026-11-05):**
+
+1. Which slot — **FMCP1 (J51)**: "the package targets and was validated on
+   FMCP1"; the September answer came from a photograph that wrongly showed
+   the EVM in FMCP2 (§3).
+2. The package user guide — **there is none**; the EV12AQ600-FMC-EVM user
+   guide is the documentation (§2).
+3. f_CLK = 5 GHz and the LMX2592 — the package's Python directory
+   "controls and configures the complete evaluation setup, including the
+   EV12AQ600 and the clock generation circuitry"; the validated settings
+   are in `ev12AQ600.py`; `external_pll_configuration_5000` configures
+   "external PLL LMX2592 RFOUT A to generate a 5 GHz ADC Master CLK" (the
+   fifty words, in the mail and in the file; §5).
+4. VADJ — 1.5 V, "operated successfully"; how to set it: UG1573's BEAM FMC
+   page. The electrical-margin question was **not** answered (§6).
+5. The EVM loan — **asked 2026-11-01** ("when could one ship?"); 2026-11-02
+   Marc handed availability of the EV12AQ60x-FMC-EVM to Todd; 2026-11-05
+   "Todd is working on question 5". **With Teledyne**; the tier-2 result
+   (their package on a VCK190 at the ADC's rate and encoding, two lanes,
+   self-starting, bit-exact) is the follow-up if it goes quiet.
+
+(This section said until 2026-11-11 that the loan was "to ask for now".
+It had been asked ten days earlier; the thread is the record.)
 
 ## 8. Next steps
 
@@ -484,7 +566,9 @@ Corrected 2026-11-11.)
    running~~ (it is; BEAM and `ssh`, §6), a fixed address for it (Paul,
    in hand — a static address, 2026-11-11); the
    downconverter design pass on paper (mode/clock per §5), then its bench.
-8. **The EVM loan** (§7 item 5): ask now.
+8. **The EVM loan** (§7 round 2, item 5): asked 2026-11-01, with Todd
+   Weckhurst for availability since 2026-11-02. Follow up with the tier-2
+   result if nothing comes back.
 9. Tier 3: card in J51, VADJ 1.5 V, SPI bring-up with the package's
    register map, ramp test mode first, then the downconverter, then
    Opulent Voice.
