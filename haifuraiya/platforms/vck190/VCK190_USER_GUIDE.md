@@ -349,8 +349,9 @@ stimulus go over again every time.
 The board's USB cable (J207) presents four FTDI channels; channel A is JTAG
 and has no tty (Vivado's hardware server takes it), so on chococat they are
 `ttyUSB1` = Versal UART0 (the Linux console, 115200), `ttyUSB2` = Versal
-UART1, `ttyUSB3` = the System Controller's console (silent on this board: no
-microSD card in its slot J206, see T4 — not needed). The libreSDR on the same host shows up the same
+UART1, `ttyUSB3` = the System Controller's console by the channel order —
+silent on this board even with the controller running; reach it by
+Ethernet instead (BEAM on port 50002, or `ssh`; T4). The libreSDR on the same host shows up the same
 way as "Xilinx Debugger DebugChannel" on `ttyUSB5–7`.
 `udevadm info -q property /dev/ttyUSBn | grep ID_SERIAL` tells them apart.
 
@@ -541,12 +542,19 @@ si570 9-005f: registered, current frequency 156250000 Hz
 ```
 
 (The System Controller — the board's separate management processor, a
-Zynq UltraScale+ with its own Linux and I2C access to the same oscillator
-— is AMD's documented way to set this clock, through its BEAM web page or
-`sc_app`. It is not needed here. Its console on `ttyUSB3` is silent on
-this board because the VCK190's System Controller boots from a microSD
-card in **its own slot, J206** — not the Versal's J302 — and none has been
-fitted; AMD's "SC Update" image would go on it.)
+Zynq UltraScale+ with its own Linux on the microSD card in its own slot,
+and I2C access to the same oscillator — is AMD's documented way to set
+this clock, through its BEAM web page. It is not needed for the clock. It
+*is* the way to read the board's power rails and to set VADJ for tier 3,
+and it is reachable: on the lab network (static address being set; it was
+10.73.1.103 by DHCP on 2026-11-11), BEAM at `http://<address>:50002` and
+`ssh` with the `petalinux` user. Its serial console on `ttyUSB3` has never
+answered; don't spend time on it. `VADJ_FMC` reads 1.5 V with the slots
+empty at every power-up — what the Teledyne card wants; BEAM's "set on
+boot" control does not persist anything (measured), so for tier 3 read
+the rail with the card in and set "current" if needed.
+Note for anyone reading `ifconfig` on the Versal: `eth0` *and* `eth1`
+there are both the Versal's own MACs, not the System Controller.)
 
 One consequence, and how it is handled: Linux programs the oscillator
 long after the PL came out of reset, so a transceiver reset at a fixed time
@@ -733,6 +741,11 @@ haifuraiya/platforms/vck190/sim/esi/run_esi_link_hw_ghdl.sh     # the same under
   image `/dev/uio0` is the link (the kernel numbers UIO devices in
   device-tree order, alphabetical from the generator). Both are found by
   name now.
+- 2026-11-11: the System Controller "not running / no card in its slot"
+  was an inference from a silent serial console, written as fact. The
+  card was there and it was running; Ethernet (UG1573's back-to-back
+  procedure) reached BEAM and `ssh` in minutes. A silent port is evidence
+  about the port.
 - 2026-11-10: the GT reference clock (user SI570) powers up at 100 MHz, the
   System Controller that normally sets it was dark on its console, and
   nothing in the kernel's VCK190 board file describes the I2C clock tree.

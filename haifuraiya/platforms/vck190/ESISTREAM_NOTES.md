@@ -114,8 +114,7 @@ every boot (§4.2; UG1366 "PMC MIO 46-47 I2C0 Bus").
 - **Reference clock:** the board's user SI570 on GTY201 refclk0 (AB11/AB10),
   programmed to 156.25 MHz **by the Linux kernel from the device tree** at
   every boot (the oscillator is on the Versal's own I2C bus; the System
-  Controller, AMD's documented route, was never needed and is not running
-  on this board — its microSD slot J206 is empty). Slot J51 stays
+  Controller, AMD's documented route, was never needed for it). Slot J51 stays
   **empty**. The fabric watches a copy of the reference and resets the
   transceiver when the clock becomes good (§4.2).
 - **Loopback:** the transceivers' near-end PMA loopback, selected by a
@@ -352,12 +351,10 @@ way on chococat. **Closed:** the qualified reset — built, booted and
 measured 2026-11-11 (above); `i2cdetect` — it is in the image at
 `/usr/sbin/i2cdetect`, the "not found" was a non-interactive `ssh` PATH.
 **Decided:** `system.xsa` stays in git, so a clone can
-reproduce the board without rebuilding the design. **Explained:** the
-System Controller's console was dark because the VCK190's System
-Controller boots from a microSD card in **its own slot, J206** (not the
-Versal's J302), and no card has been in it; the image is AMD's "SC Update"
-release. Not needed for anything here — the device tree sets the clock —
-but that is why.
+reproduce the board without rebuilding the design. **The System
+Controller** (its console was dark on 2026-11-10): running after all —
+reached over Ethernet on 2026-11-11, §6. Not needed for tier 2; needed for
+tier 3's VADJ, and now in hand.
 
 ## 5. Tier 3 operating point (ADC)
 
@@ -387,19 +384,44 @@ reference that arrives late, which the ADC's SSO will. Teledyne's 5 GHz
 LMX2592 configuration exists in the package's Python
 (`python/ev12AQ600.py`, `external_pll_configuration_5000`; §7).
 
-## 6. VADJ / System Controller (verified, UG1366)
+## 6. VADJ / System Controller (UG1366; measured 2026-11-11)
 
 The VADJ_FMC rail (0 / 1.2 / 1.5 V) powers the FPGA's FMCP banks 706–708 and
-both slots' VADJ pins; the System Controller sets it from the card's IPMI
-EEPROM at power-on and sets **0 V** if it finds no value it can supply. The
-EVM's logic is 1.8 V and it does not use VADJ, so expect 0 V by default —
-which is Teledyne's "you must force VADJ to 1.5 V from the carrier". The
-override is in the Board User Interface: **FMC → Set VADJ → explicit 1.5 V**
-(the UI's "Use FMC EEPROM Voltage" is the default). The BUI talks to the
-System Controller over **USB-UART J207** — the same USB cable as JTAG and the
-Versal console; no Ethernet needed. Sequence: carrier on → set VADJ → card
-power on (EVM guide §3.2 order, with the override inserted). Whether the
-override persists across power cycles: ask Teledyne/AMD.
+both slots' VADJ pins; the System Controller sets it. UG1366 says it reads
+the card's IPMI EEPROM at power-on and sets **0 V** if it finds no value it
+can supply; the EVM's logic is 1.8 V and does not use VADJ — hence
+Teledyne's "you must force VADJ to 1.5 V from the carrier".
+
+**Measured 2026-11-11, both FMC slots empty:** BEAM's power page reads
+`VADJ_FMC 1.5075 V, 0.0012 A` — **1.5 V is this board's power-up default**,
+not 0 V. BEAM's VADJ_FMC control offers 0.0 / 1.2 / 1.5 V, each as
+"current" and as "set on boot"; **"set on boot" did not do what its name
+says**: set to 1.5 and then to 1.2, a power cycle brought "current" back
+to 1.5 V and "set on boot" back to 0.0 each time. With empty slots the
+controller puts the rail at 1.5 V at every power-up regardless. So, for
+tier 3: card in J51, power on, read `VADJ_FMC` on BEAM; if it is not 1.5 V
+(the controller may act on the card's EEPROM), set 1.5 V as "current" and
+read again — and if that has to be repeated after every power cycle, it
+is one `sc_app` command over `ssh` (`sc_app -h` lists the VADJ command)
+that belongs in dōgu's tier-3 bring-up next to the ADC configuration. A
+measurement each time, not an act of faith. The EVM guide's §3.2 order
+(carrier on → card power on) still applies.
+
+**The System Controller itself** (the board's separate Zynq UltraScale+,
+its own Linux on the microSD card in its own slot, boot-mode switch SW11
+as UG1573's setup figure shows — both as shipped): it was running all
+along; only its serial console never answered. Reached 2026-11-11 over
+Ethernet: first back-to-back with chococat (UG1573's procedure), then on
+the lab network by DHCP (10.73.1.103 that evening; a static address is
+being set, Paul). **BEAM** is the web page at `http://<its address>:50002`
+— clocks, power rails (every INA226 on the board, VADJ_FMC among them),
+FMC settings; **`ssh`** to the same address works (login: the image's
+`petalinux` user; password as Paul set it). The serial console on the
+USB-UART (`ttyUSB3` by the channel order) stayed silent with the
+controller demonstrably running — unexplained, and no longer needed.
+Which RJ45 jack carries it: the one in UG1573's setup photo; with that one
+cable both the Versal (10.73.1.17) and the controller are on the lab
+network — J-number to be read off the board (TODO).
 
 Electrical question for Teledyne: the card's signals toward the FPGA are
 1.8 V into 1.5 V banks, and the FPGA drives 1.5 V swings into the card's 1.8 V
@@ -407,13 +429,10 @@ inputs (SPI, reset, selects). Teledyne called the combination compatible and
 **used 1.5 V on their VCK190** (2026-11-05); we still want the statement in
 writing since the risk is the FPGA's banks.
 
-**Found 2026-11-10: the System Controller is not running on this board.** It
-boots from a microSD card in its own slot, **J206**, and none is fitted; its
-console (`ttyUSB3`) is silent. Tier 2 never needed it (the device tree sets
-the clock). Tier 3 does: the VADJ override above is done through the
-System Controller's Board User Interface, so a card with AMD's "SC Update"
-image goes into J206 **before** the EVM goes into J51 — a prerequisite,
-not a nicety.
+(2026-11-10's note here said the controller was not running and its card
+slot empty. That was an inference from a silent console, stated as fact,
+and wrong: the card that shipped with the board is in the slot and boots.
+Corrected 2026-11-11.)
 
 ## 7. Open questions for Teledyne — and the answers (Marc, 2026-11-05)
 
@@ -426,8 +445,9 @@ not a nicety.
    `external_pll_configuration_5000`.
 4. VADJ — Teledyne **used 1.5 V** on the VCK190. The written compatibility
    statement for 1.5 V banks against the card's 1.8 V signals is still
-   open; so is whether the BUI override persists across power cycles (and
-   the System Controller has to be running for any of it, §6).
+   open. Persistence: BEAM's "set on boot" does not persist (measured
+   2026-11-11, §6); the power-up default is 1.5 V with the slots empty,
+   and the card-in reading decides.
 5. The EVM loan — with Todd Weckhurst; **to ask for now** (2026-11-11), with
    the tier-2 result as the case: their package on a VCK190 at the ADC's
    rate and encoding, two lanes, self-starting, bit-exact.
@@ -460,8 +480,9 @@ not a nicety.
 6. **Tier 2½, part 2 — the serial path off-chip.** Loopback mode 0 and a
    physical TX→RX loop on the FMC pins (an XM107 card, or SMA cabling on a
    breakout). Proves the equalization and the pins with a real channel.
-7. **Tier 3 prerequisites, no card needed:** a microSD with AMD's SC Update
-   image in J206 so the System Controller runs (VADJ, §6); the
+7. **Tier 3 prerequisites, no card needed:** ~~the System Controller
+   running~~ (it is; BEAM and `ssh`, §6), a fixed address for it (Paul,
+   in hand — a static address, 2026-11-11); the
    downconverter design pass on paper (mode/clock per §5), then its bench.
 8. **The EVM loan** (§7 item 5): ask now.
 9. Tier 3: card in J51, VADJ 1.5 V, SPI bring-up with the package's
