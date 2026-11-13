@@ -36,9 +36,17 @@ interface in front of the receiver:
 `Package_ESIstream_Xilinx_xcvc1902-vsva2197-2mp-e-s-main.zip` from
 esistream.com ("esistream-14b16b-packages", VCK190). The 14b/16b package is
 the right one: the EV12AQ600 speaks ESIstream 14b/16b (14 payload bits per
-16-bit frame + 1 disparity bit + 1 clock bit; 87.5 % efficient). The 62b/64b
-package is the newer encoding for the next generation of converters
-(EV12DD700, transmit side, later).
+16-bit frame + 1 disparity bit + 1 clock bit; 87.5 % efficient). Which
+encoding the **EV12DD700** (the transmit side, later) speaks is **open**:
+its preliminary datasheet (DS 60S 218408 A.1, June 2020, §10.2) says
+14b/16b — 16-bit frames of disparity bit, clock bit, two DAC control bits
+CB1/CB2 and a 12-bit sample — while the "package for the DD700 and VCK190"
+Marc sent on 2026-09-17 is the **62b/64b** package, which turns out to be
+loopback-only (no converter example: 11 lanes on J51, DP0–DP10, reference
+on FMC1 GBTCLK0 M15/M14, a Samtec FMC+ loopback card; its getting-started
+guide, 2026-11-12). The EVM in Teledyne's photographs is an EV12DD700**X**,
+which may be newer silicon than the A.1 datasheet. Question for Marc; the
+receive side does not depend on the answer.
 
 - **License: public domain** (Unlicense-style dedication in every source
   file; "this disclaimer must be retained"). Can go in the open repo verbatim.
@@ -486,9 +494,27 @@ into the public domain" and are **not** reproduced in this repository.
 
 1. Slot and VADJ — validated "in the VCK190's FMCP2 slot" (**corrected to
    FMCP1 on 2026-11-05**, item 6 below); both EVMs electrically compatible
-   with the fixed 1.5 V VADJ_FMC "but not by default" (§6); the VCK190
-   cannot host the AQ600 and DD700 EVMs at once (not enough FMC+
-   connections).
+   with the fixed 1.5 V VADJ_FMC "but not by default" (§6); on both cards
+   at once: "The VCK190 would not be able to host both AQ600-EVM and
+   DD700-EVM simultaneously (not enough FMC+ connections). Depending on
+   your use case for the DD700, it could reduce the number of serial lanes
+   needed and may make it possible, though FMC+ extender and adapter would
+   probably be needed for it to work mechanically." Read with the DD700
+   datasheet (2026-11-12): the DD700 has **16 lanes per channel** at full
+   rate (Table 1, p. 5; Table 17, p. 36), so the two-DAC EVM
+   (EV12DD700X-2DAC-EVM, a carrier-sized board with its own FMC+
+   connector, clock daughterboards and two fans) wants 32 lanes against a
+   12-lane slot (UG1366: J51 and J53 each route 12 DPs and 3 GBTCLKs; J53
+   also has the REFCLK and SYNC C2M pairs). The way down is interpolation
+   with the DAC's own digital upconverter, complex input: ×4 → 8 lanes
+   (+1), ×8 → 4 (+1), ×16 → 2 (+1), the +1 being xSL0 for frequency-hop
+   commands; instantaneous bandwidth 0.85 × 6 GHz / (ratio/2), i.e. about
+   640 MHz at ×16, with the fabric handing the DAC I/Q at 12 G / 16 =
+   750 MSps. **One channel at ×8 or ×16 fits J53 with lanes to spare**;
+   the DVB-S2 modulator stays at baseband and the DAC puts it at
+   10.45 GHz. The mechanical part (an extender for a board that size)
+   stands. Lane rate 12 Gb/s (the text; Table 1's "Fs/2" column reads as
+   a slip in a preliminary datasheet).
 2. Clocks — EVM user guide link (§2); the EVM's reference input takes 100,
    20 or 10 MHz; no onboard-LMX2592-versus-external characterization (§5);
    their bench sources are R&S SMA100A/B, SMA100B and Keysight E8257D; the
@@ -560,14 +586,20 @@ It had been asked ten days earlier; the thread is the record.)
    clock that arrives whenever the source is switched on. Small change:
    `REFCLK_STRING`, two XDC lines, the user guide.
 6. **Tier 2½, part 2 — the serial path off-chip.** Loopback mode 0 and a
-   physical TX→RX loop on the FMC pins (an XM107 card, or SMA cabling on a
-   breakout). Proves the equalization and the pins with a real channel.
+   physical TX→RX loop on the FMC pins. The card: the XM107 is
+   discontinued; Teledyne's 62b/64b getting-started guide names its
+   replacement, the **Samtec VITA 57.4 FMC+ HSPC loopback card,
+   REF-197618-01** (Avnet, Mouser), in J51 — and that package takes its
+   GT reference from FMC1 GBTCLK0, so the card evidently supplies a clock
+   there, which would cover part 1 as well (verify on Samtec's product
+   page before ordering: onboard oscillator, or a loop from a carrier
+   pin?). Proves the equalization and the pins with a real channel.
 7. **Tier 3 prerequisites, no card needed:** ~~the System Controller
    running~~ (it is; BEAM and `ssh`, §6), a fixed address for it (Paul,
    in hand — a static address, 2026-11-11); ~~the downconverter design
    pass on paper~~ (DOWNCONVERTER_DESIGN.md, 2026-11-12), then its golden
-   model and bench (that file, §8); the XM107 is discontinued — an FMC
-   loopback card or SMA breakout is being sourced (item 6).
+   model and bench (that file, §8); the loopback card (item 6, Samtec
+   REF-197618-01) to order.
 8. **The EVM loan** (§7 round 2, item 5): asked 2026-11-01, with Todd
    Weckhurst for availability since 2026-11-02. Follow-up with the tier-2
    result and the downconverter plan drafted 2026-11-12 — record the date
