@@ -1,4 +1,4 @@
-# The tier-3 digital downconverter — paper study
+# The tier-3 digital downconverter white paper
 
 _Status 2026-11-12: paper only. Nothing in this document has been simulated
 or built. Every number is arithmetic from the stated inputs and is labelled;
@@ -7,15 +7,16 @@ bench comes next (§8), then the VHDL._
 
 ## 0. Why this block exists, in one paragraph
 
-Tier 2 proved the serial link: the receiver gets its 20 MSps I/Q stream
+Tier 2 proved out the serial link. The receiver gets its 20 MSps I/Q stream
 through Teledyne's ESIstream (the converter serial-interface standard) and
-the GTY transceivers, bit-exact to tier 1. Tier 3 puts the real analog to
+the GTY transceivers, bit-exact to tier 1. Tier 3 puts in the real analog to
 digital converter (ADC), the EV12AQ600 on its FMC evaluation module, at the
 far end of that link. The ADC does not produce 20 MSps I/Q; it produces
 1.25 G real samples per second of a 580–600 MHz intermediate frequency
-(IF). The digital downconverter (DDC) is the block that turns one into the
-other. It replaces the tier-2 reassembler at the same splice point, and
-**the receiver never learns the ADC exists**: everything upstream of its
+(IF). The digital downconverter (DDC) is the block that turns the 1.25 Gsps
+of real samples into 20 MSps I/Q data (complex). It replaces the tier-2 
+reassembler at the same point in the design. Importantly, 
+**the receiver never learns the ADC exists**. Everything upstream of its
 20 MSps input is the tier under test.
 
 ```
