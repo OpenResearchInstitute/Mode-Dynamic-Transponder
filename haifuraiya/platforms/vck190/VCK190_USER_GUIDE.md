@@ -624,12 +624,28 @@ SYM_CLK_OFFSET −11.39 ppm, 24 frames, 0 dropped; 20,799,760 sent =
 `ESISTREAM_NOTES.md` §4.2 and the tier table in `VCK190_PLAYBACK_PLAN.md`;
 do the same for the next run that changes anything.
 
+Commands that worked (after a power cycle and `make vck190-boot`)
+
+```
+ssh-keygen -R 10.73.1.17
+scp ~/dogu/tools/opv_play/opv_play root@10.73.1.17:/home/root/
+ssh root@10.73.1.17 'dmesg | grep si570; /home/root/opv_play -l'
+```
+
+and then
+
+```
+scp /tmp/opv_chan_stim.bin root@10.73.1.17:/home/root/
+ssh root@10.73.1.17 '/home/root/opv_play -i /home/root/opv_chan_stim.bin -o /home/root/soft.bin -q'
+scp root@10.73.1.17:/home/root/soft.bin /tmp/ && python3 haifuraiya/platforms/vck190/tools/opv_soft_bin2txt.py /tmp/soft.bin /tmp/soft.txt && python3 haifuraiya/sim/grade_payload_ber.py /tmp/soft.txt --stim-dir haifuraiya/sim
+```
+
+
 ### T7. The link's unit test, on chococat
 
 The wrapper (`esi_link_hw`: registers, snapshot, two link clocks against the
 PL clock) has a bench of its own under nvc, alongside the link bench of
-step "How to Simulate". It has passed in the sandbox only; run it once on
-chococat so the record says so:
+step "How to Simulate".
 
 ```
 haifuraiya/platforms/vck190/sim/esi/run_esi_link_hw_nvc.sh      # pass = PASS: tb_esi_link_hw, about a minute
